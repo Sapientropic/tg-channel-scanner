@@ -46,7 +46,7 @@ class ReportResult:
     markdown: str
     stats: dict
     warnings: list[str]
-    jobs: list[dict] = None
+    jobs: list[dict] | None = None
 
 
 def load_jsonl(path: Path) -> list[dict]:
@@ -99,7 +99,12 @@ def merge_unique(existing: list, incoming: Iterable) -> list:
 
 
 def source_channels_for_job(job: dict, message_by_id: dict[int, dict]) -> list[str]:
-    sources = as_list(job.get("source"))
+    # Prefer pre-split sources list; fall back to splitting raw source string by " / "
+    if job.get("sources"):
+        sources = list(job["sources"])
+    else:
+        raw = str(job.get("source") or "")
+        sources = [s.strip() for s in raw.split(" / ") if s.strip()]
     for message_id in as_list(job.get("source_message_ids")):
         try:
             message = message_by_id.get(int(message_id))
@@ -215,7 +220,7 @@ def render_job(job: dict, index: int) -> str:
     title = f"{job.get('role') or 'Unknown role'} -- {job.get('company') or 'Unknown company'}"
     contacts = merge_unique(job.get("contacts", []), as_list(job.get("contact")))
     links = merge_unique(job.get("links", []), as_list(job.get("link")))
-    contact_value = contacts or links or [job.get("contact") or job.get("link") or "Not available"]
+    contact_value = contacts or links or [job.get("contact") or job.get("link") or "Not specified"]
     sources = job.get("sources") or as_list(job.get("source"))
     action = job.get("action") or {
         "high": "Apply",
@@ -389,67 +394,26 @@ def _channel_id_from_peer(peer_str: str) -> int | None:
 def resolve_sources(messages: list[dict]) -> list[dict]:
     """Resolve aggregator posts to their original sources.
 
-    For messages with a 'forward' field:
-    1. Try to find the original message in the same JSONL by channel_id + post_id
-    2. If found, append origin_text and origin_url
-    3. If not found, construct origin_url from forward metadata
-
-    Also scans message text for t.me/channel/123 deep links.
+    For messages with a 'forward' field, construct origin_url from forward
+    metadata. Also scans message text for t.me/channel/123 deep links.
     """
-    # Build index: (channel_name → channel_id) and (channel_id, msg_id → message)
-    name_to_id: dict[str, int] = {}
-    id_index: dict[tuple[int, int], dict] = {}
-
-    for msg in messages:
-        ch = msg.get("channel", "")
-        mid = msg.get("id")
-        sid = msg.get("sender_id")
-        if isinstance(sid, int) and sid < 0:
-            # sender_id for channels is -100xxxxxxxx
-            cid = -sid // 1000000000 * -1  # rough, but we also build from forward data
-            name_to_id[ch] = sid
-        if mid is not None:
-            key = (ch, mid)
-            id_index[key] = msg
-
-    # Also extract t.me deep links from text and add origin_url
     for msg in messages:
         text = msg.get("text", "")
         fwd = msg.get("forward")
 
         # Method 1: forward metadata
         if fwd:
-            origin_url = None
-            origin_text = None
-
             channel_post = fwd.get("channel_post")
             from_id_str = fwd.get("from_id", "")
 
             if channel_post:
-                # Try to find by channel_post in the same JSONL
-                # We need the source channel name — check name_to_id reverse
                 from_cid = _channel_id_from_peer(from_id_str)
                 if from_cid:
-                    # Build URL
-                    # channel_id to username is hard without API, so use numeric URL
-                    origin_url = f"https://t.me/c/{abs(from_cid) % 1000000000}/{channel_post}"
-
-                    # Try to find original message in our data
-                    # sender_id for channels is negative: -100xxxxxxxx
-                    # from_cid from PeerChannel is the raw channel_id
-                    for m2 in messages:
-                        m2_fwd = m2.get("forward")
-                        if not m2_fwd and m2.get("id") == channel_post:
-                            # Could be the original if channel matches
-                            pass
-                        # Check if this message IS the original (same channel_post, no forward of its own)
-                        if m2.get("channel") and m2.get("id") == channel_post:
-                            # Can't verify channel match without channel_id mapping
-                            pass
+                    # t.me/c/ links use the raw channel_id (no -100 prefix)
+                    origin_url = f"https://t.me/c/{from_cid}/{channel_post}"
+                    msg["origin_url"] = origin_url
 
             from_name = fwd.get("from_name")
-            if origin_url:
-                msg["origin_url"] = origin_url
             if from_name:
                 msg["origin_channel"] = from_name
 
@@ -462,6 +426,152 @@ def resolve_sources(messages: list[dict]) -> list[dict]:
             msg["origin_channel"] = channel_name
 
     return messages
+
+
+def parse_markdown_report(md_text: str) -> list[dict]:
+    """Parse a rendered Markdown report back into structured job dicts.
+
+    Designed for --html-only: re-render HTML from an existing Markdown report
+    without calling the LLM again.
+    """
+    jobs: list[dict] = []
+    # Split on job headings: "### N. Role -- Company"
+    job_blocks = re.split(r"\n(?=### \d+\.\s)", md_text)
+    for block in job_blocks:
+        header = re.match(r"### (\d+)\.\s+(.+)", block)
+        if not header:
+            continue
+        title = header.group(2).strip()
+        # Split "Role -- Company"
+        if " -- " in title:
+            role, company = title.split(" -- ", 1)
+        else:
+            role, company = title, "Unknown"
+        job: dict = {"role": role.strip(), "company": company.strip()}
+
+        # Table rows: | **Key** | value |
+        for m in re.finditer(r"\|\s*\*\*(\w[\w\s]*?)\*\*\s*\|\s*(.+?)\s*\|", block):
+            key = m.group(1).strip().lower()
+            val = m.group(2).strip().replace("\\|", "|")
+            if key == "company":
+                job["company"] = val
+            elif key == "role":
+                job["role"] = val
+            elif key == "location":
+                job["location"] = val
+            elif key == "salary":
+                job["salary"] = val
+            elif key == "contact":
+                job["contact"] = val
+                job["contacts"] = [c.strip() for c in val.split(" / ") if c.strip()]
+            elif key == "source":
+                job["source"] = val
+                job["sources"] = [s.strip() for s in val.split(" / ") if s.strip()]
+
+        # Why it matches
+        why_m = re.search(r"\*\*Why it matches\*\*:\s*(.+?)(?=\n\n|\n\*\*|\Z)", block, re.DOTALL)
+        if why_m:
+            job["why"] = why_m.group(1).strip()
+
+        # Stack
+        stack_m = re.search(r"\*\*Stack required\*\*:\s*\n((?:- .+\n?)+)", block)
+        if stack_m:
+            job["stack"] = [l.strip("- ").strip() for l in stack_m.group(1).strip().splitlines() if l.strip().startswith("-")]
+
+        # Concerns
+        concerns_m = re.search(r"\*\*Concerns\*\*:\s*\n((?:- .+\n?)+)", block)
+        if concerns_m:
+            job["concerns"] = [l.strip("- ").strip() for l in concerns_m.group(1).strip().splitlines() if l.strip().startswith("-")]
+
+        # Action
+        action_m = re.search(r"\*\*Action\*\*:\s*\*\*(.+?)\*\*", block)
+        if action_m:
+            job["action"] = action_m.group(1).strip()
+
+        # Infer rating from action or section context
+        action_text = job.get("action", "").lower()
+        if "apply" in action_text:
+            job["rating"] = "high"
+        elif "skip" in action_text:
+            job["rating"] = "low"
+        elif "inspect" in action_text:
+            job["rating"] = "medium"
+        else:
+            # Fallback: check which section this block is in
+            job["rating"] = "medium"
+
+        # Extract origin_url from source text (e.g. "hot_itjobs (origin_url: https://t.me/...)")
+        source_text = job.get("source", "")
+        origin_m = re.search(r"origin_url:\s*(https?://t\.me/[^\s\)]+)", source_text)
+        if origin_m:
+            job["origin_url"] = origin_m.group(1)
+            # Clean source: remove parenthetical origin info
+            job["source"] = re.sub(r"\s*\(originally from[^)]*\)", "", job["source"])
+            job["sources"] = [s.strip() for s in job["source"].split(" / ") if s.strip()]
+
+        # Ensure required keys
+        for k in ("location", "salary", "contact", "why", "stack", "concerns"):
+            job.setdefault(k, "" if k in ("why",) else ([] if k in ("stack", "concerns") else "Not specified"))
+        job.setdefault("sources", [])
+        job.setdefault("contacts", [])
+
+        jobs.append(job)
+    return jobs
+
+
+def match_jobs_to_messages(jobs: list[dict], messages: list[dict]) -> list[dict]:
+    """Fuzzy-match parsed jobs back to raw messages for --html-only mode.
+
+    Uses source channel name + role/company keywords to find matching messages
+    and populate source_message_ids so the HTML renderer can show "View original".
+    """
+    # Index: channel → [messages]
+    by_channel: dict[str, list[dict]] = {}
+    for m in messages:
+        ch = m.get("channel", "")
+        if ch:
+            by_channel.setdefault(ch, []).append(m)
+
+    for job in jobs:
+        sources = job.get("sources", [])
+        company = job.get("company", "").strip()
+        role = job.get("role", "").strip()
+        matched_ids: list[int] = []
+
+        # Search in source channels first
+        candidates = []
+        for src in sources:
+            src_clean = re.sub(r"\s*\(originally.*?\)", "", src).strip()
+            candidates.extend(by_channel.get(src_clean, []))
+
+        # Fallback: all messages if no source channel matched
+        if not candidates:
+            candidates = messages
+
+        # Score each candidate by keyword overlap
+        keywords = set()
+        for word in re.split(r"[^\w一-鿿Ѐ-ӿ]+", company + " " + role):
+            w = word.strip().lower()
+            if len(w) >= 3 and w not in {"the", "and", "for", "inc", "ltd", "llc", "gmbh", "ooo"}:
+                keywords.add(w)
+
+        best_score = 0
+        best_ids: list[int] = []
+        for m in candidates:
+            text = (m.get("text") or "").lower()
+            score = sum(1 for kw in keywords if kw in text)
+            if score > best_score:
+                best_score = score
+                best_ids = [m["id"]]
+            elif score == best_score and score > 0 and len(best_ids) < 3:
+                mid = m["id"]
+                if mid not in best_ids:
+                    best_ids.append(mid)
+
+        if best_ids and best_score >= max(1, int(len(keywords) * 0.6)):
+            job["source_message_ids"] = best_ids
+
+    return jobs
 
 
 def build_extraction_prompts(
@@ -500,6 +610,14 @@ Rules:
 - Extract only roles that plausibly match the candidate profile or are useful low-priority boundary examples.
 - Use high for apply-now matches, medium for inspect-first matches, low for conditional matches.
 - Do not invent company, salary, location, contact, or stack details; use Unknown or Not specified when missing.
+
+Location hard filter:
+- Treat the candidate's location constraints as absolute exclusion rules, not soft preferences.
+- Exclude any job requiring on-site presence in locations the candidate explicitly rejects (e.g. "Russia office-only NOT OK" means exclude Moscow/SPb office-only roles entirely, not even as low).
+- If the job offers fully-remote work from anywhere, include it but flag the office location as a concern.
+
+Seniority filter:
+- Exclude junior-level roles when the candidate is mid/senior, unless the role is unusually compelling.
 
 Contact extraction rules (CRITICAL):
 - Extract EVERY @handle (e.g. @rocket_hr_ai_bot), email, phone, and "Отклик:" / "Контакт:" / "Apply:" lines verbatim into the contact field.
@@ -611,6 +729,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--redact-contact-info", action="store_true")
     parser.add_argument("--output", help="Save report to file (default: print to stdout)")
     parser.add_argument("--html", action="store_true", help="Output HTML instead of Markdown")
+    parser.add_argument("--html-only", type=Path, metavar="REPORT.md",
+                        help="Render HTML from an existing Markdown report (no LLM call). "
+                        "Requires --input for raw messages.")
     parser.add_argument("--dry-run-prompt", help="Write extraction prompt and do not call the LLM")
     parser.add_argument("--next-scan-note", help="Optional footer note, e.g. 'Next scan scheduled for tomorrow.'")
     return parser
@@ -645,23 +766,35 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Prompt saved to {args.dry_run_prompt}", file=sys.stderr)
         return 0
 
-    try:
-        raw_jobs = extract_jobs(
-            messages=messages,
-            profile=profile,
-            meta=meta,
-            base_url=args.base_url,
-            model=args.model,
-            max_messages=args.max_messages,
-            max_tokens=args.max_tokens,
-        )
-    except ReportError as exc:
-        print(f"Error: {exc}", file=sys.stderr)
-        if exc.raw_response is not None:
-            debug_path = debug_response_path(args.output, args.input)
-            debug_path.write_text(exc.raw_response, encoding="utf-8")
-            print(f"Raw LLM response saved to {debug_path}", file=sys.stderr)
-        return 1
+    # --html-only: skip LLM, parse existing Markdown report
+    if args.html_only:
+        if not args.html_only.exists():
+            print(f"Error: Markdown report not found: {args.html_only}", file=sys.stderr)
+            return 1
+        args.html = True  # html-only implies html output
+        md_text = args.html_only.read_text(encoding="utf-8")
+        raw_jobs = parse_markdown_report(md_text)
+        raw_jobs = match_jobs_to_messages(raw_jobs, messages)
+        matched = sum(1 for j in raw_jobs if j.get("source_message_ids"))
+        print(f"Parsed {len(raw_jobs)} jobs from {args.html_only} ({matched} with original text)", file=sys.stderr)
+    else:
+        try:
+            raw_jobs = extract_jobs(
+                messages=messages,
+                profile=profile,
+                meta=meta,
+                base_url=args.base_url,
+                model=args.model,
+                max_messages=args.max_messages,
+                max_tokens=args.max_tokens,
+            )
+        except ReportError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            if exc.raw_response is not None:
+                debug_path = debug_response_path(args.output, args.input)
+                debug_path.write_text(exc.raw_response, encoding="utf-8")
+                print(f"Raw LLM response saved to {debug_path}", file=sys.stderr)
+            return 1
 
     result = build_report(
         messages=messages,
@@ -836,17 +969,29 @@ def _render_job_card(job: dict, index: int, message_by_id: dict[int, dict] | Non
         for ch, text in raw_texts:
             parts.append(f'<span class="channel-label">{_esc(ch)}</span>' + _tg_md_to_html(text))
         raw_html = '<hr style="border:none;border-top:1px solid var(--c-border-light);margin:0.8em 0">'.join(parts)
+
+        # Embed origin info inside the expandable panel
+        origin_footer = ""
+        if origin_url or origin_channel:
+            origin_bits = []
+            if origin_channel:
+                origin_bits.append(f'Forwarded from <strong>{_esc(origin_channel)}</strong>')
+            if origin_url:
+                origin_bits.append(f'<a href="{origin_url}" target="_blank">Open in Telegram</a>')
+            origin_footer = f'<div style="margin-top:0.6em;font-size:0.78rem;color:var(--c-text-tertiary)">{" &middot; ".join(origin_bits)}</div>'
+
         raw_section = f"""
       <button class="raw-toggle" type="button"><span class="arrow">&#9654;</span> <span class="label">View original</span></button>
-      <div class="raw-content"><div class="raw-content-inner"><div class="raw-content-body">{raw_html}</div></div></div>"""
+      <div class="raw-content"><div class="raw-content-inner"><div class="raw-content-body">{raw_html}{origin_footer}</div></div></div>"""
 
+    # Fallback: no raw text matched, show origin link standalone
     origin_line = ""
-    if origin_url or origin_channel:
+    if not raw_section and (origin_url or origin_channel):
         origin_parts = []
         if origin_channel:
-            origin_parts.append(f'转发自 <strong>{_esc(origin_channel)}</strong>')
+            origin_parts.append(f'Forwarded from <strong>{_esc(origin_channel)}</strong>')
         if origin_url:
-            origin_parts.append(f'<a href="{origin_url}" target="_blank">查看原帖</a>')
+            origin_parts.append(f'<a href="{origin_url}" target="_blank">Open in Telegram</a>')
         origin_line = f'<div class="job-origin">{" &middot; ".join(origin_parts)}</div>'
 
     tags = "\n".join(f'<li class="tag">{_esc(t)}</li>' for t in stack)
@@ -869,7 +1014,7 @@ def _render_job_card(job: dict, index: int, message_by_id: dict[int, dict] | Non
       <div class="job-extras"><strong>Why:</strong> {_esc(why)}</div>
       <ul class="tag-list">{tags}</ul>
       <ul class="concern-list">{concern_items}</ul>
-      {origin_line}{raw_section}
+      {raw_section}{origin_line}
     </article>"""
 
 
@@ -895,10 +1040,10 @@ def render_html(
             if isinstance(mid, int):
                 message_by_id[mid] = m
 
-    date = meta.get("scan_date") if meta else datetime.now(UTC).date().isoformat()
-    scan_window = meta.get("scan_window") if meta else "Unknown"
-    channel_count = meta.get("channel_count") if meta else "?"
-    total_messages = meta.get("total_messages_collected") if meta else "?"
+    date = (meta.get("scan_date") if meta else None) or datetime.now(UTC).date().isoformat()
+    scan_window = (meta.get("scan_window") if meta else None) or "Unknown"
+    channel_count = (meta.get("channel_count") if meta else None) or "?"
+    total_messages = (meta.get("total_messages_collected") if meta else None) or "?"
 
     stats = result.stats
 
