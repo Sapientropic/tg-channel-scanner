@@ -31,6 +31,11 @@ try:
 except ImportError:
     openai = None  # type: ignore[assignment]
 
+# Ensure project root is importable for scripts.media_ocr
+_PROJECT_ROOT = str(Path(__file__).resolve().parent.parent)
+if _PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, _PROJECT_ROOT)
+
 from scripts.media_ocr import OcrConfig, process_message
 
 try:
@@ -46,6 +51,7 @@ DEFAULT_DELAY_SECONDS = 1.0
 DEFAULT_OCR_BASE_URL = "https://api.x.ai/v1"
 DEFAULT_OCR_MODEL = "grok-4.1-fast"
 DEFAULT_STT_MODEL = "whisper-1"
+DEFAULT_VIDEO_FRAMES = 3
 
 CONFIG_DIR = Path(
     os.environ.get(
@@ -272,6 +278,7 @@ def _make_ocr_config(args) -> OcrConfig | None:
         stt_client=stt_client,
         stt_model=args.ocr_stt_model,
         language=args.ocr_language,
+        full_video=args.ocr_full_video,
         video_frames=args.ocr_video_frames,
         prompt=args.ocr_prompt,
     )
@@ -319,6 +326,23 @@ async def resolve_entity(client: TelegramClient, name: str):
 # Message conversion & reading
 # ---------------------------------------------------------------------------
 
+def _extract_video_meta(msg) -> dict | None:
+    """Extract video metadata (duration, size, dimensions) from a message."""
+    doc = getattr(msg.media, "document", None)
+    if not doc:
+        return None
+    from telethon.tl.types import DocumentAttributeVideo
+    for attr in (doc.attributes or []):
+        if isinstance(attr, DocumentAttributeVideo):
+            return {
+                "video_duration": round(attr.duration, 1),
+                "video_width": attr.w,
+                "video_height": attr.h,
+                "video_file_size": doc.size,
+            }
+    return None
+
+
 def message_to_dict(msg, channel_name: str) -> dict:
     media_type = None
     has_photo = False
@@ -337,7 +361,7 @@ def message_to_dict(msg, channel_name: str) -> dict:
     if msg.reply_to:
         reply_to_msg_id = msg.reply_to.reply_to_msg_id
 
-    return {
+    result = {
         "id": msg.id,
         "date": msg.date.isoformat() if msg.date else None,
         "text": msg.text or "",
@@ -348,6 +372,14 @@ def message_to_dict(msg, channel_name: str) -> dict:
         "media_type": media_type,
         "media_group": media_group,
     }
+
+    # Attach video metadata for "is this worth watching?" decisions
+    if media_group == "video":
+        video_meta = _extract_video_meta(msg)
+        if video_meta:
+            result.update(video_meta)
+
+    return result
 
 
 async def _fetch_with_retry(
@@ -461,8 +493,12 @@ def build_parser() -> argparse.ArgumentParser:
     ocr_group.add_argument("--ocr-stt-base-url", default=None)
     ocr_group.add_argument("--ocr-stt-model", default=DEFAULT_STT_MODEL)
     ocr_group.add_argument("--ocr-language", default=None, help="Language hint for voice STT (e.g. 'ru', 'en')")
+    ocr_group.add_argument("--ocr-full-video", action="store_true", help="Download full video for audio STT (default: thumbnail only)")
     ocr_group.add_argument("--ocr-video-frames", type=int, default=DEFAULT_VIDEO_FRAMES)
-    ocr_group.add_argument("--ocr-prompt", default=OCR_PROMPT)
+    ocr_group.add_argument("--ocr-prompt", default=(
+        "Extract all text from this image exactly as written. "
+        "Output only the extracted text, nothing else."
+    ))
 
     return parser
 

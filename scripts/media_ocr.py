@@ -43,6 +43,7 @@ class OcrConfig:
     language: str | None = None
     video_frames: int = 3
     prompt: str = OCR_PROMPT
+    full_video: bool = False  # True = download full video for audio STT
 
 
 def classify_media(msg) -> str | None:
@@ -63,10 +64,25 @@ def classify_media(msg) -> str | None:
 # ---------------------------------------------------------------------------
 
 async def download_to_temp(
-    client: TelegramClient, msg, ext: str
+    client: TelegramClient, msg, ext: str, *, thumbnail: bool = False,
 ) -> Path | None:
-    """Download media to a temp file. Caller should unlink when done."""
-    # Size check
+    """Download media (or its thumbnail) to a temp file. Caller should unlink when done."""
+    if thumbnail:
+        # Download the largest thumbnail (tiny, instant)
+        fd, path = tempfile.mkstemp(suffix=".jpg")
+        os.close(fd)
+        try:
+            await client.download_media(msg, file=path, thumb=-1)
+            if os.path.getsize(path) == 0:
+                os.unlink(path)
+                return None
+            return Path(path)
+        except Exception:
+            if os.path.exists(path):
+                os.unlink(path)
+            return None
+
+    # Full media download
     doc = getattr(msg.media, "document", None)
     if doc:
         size = getattr(doc, "size", 0) or 0
@@ -172,13 +188,29 @@ async def process_message(
 ) -> str | None:
     """Download, OCR/STT one media message. Returns ocr_text or None.
 
-    Temp file is created and deleted within this call.
-    Errors are caught and logged to stderr; returns None on failure.
+    Videos: downloads thumbnail by default (fast). Use ocr.full_video=True
+    to download the full video for audio transcription.
+    Temp files are created and deleted within this call.
     """
     group = classify_media(msg)
     if not group:
         return None
 
+    if group == "video" and not ocr.full_video:
+        # Default: download thumbnail only (fast, tiny)
+        path = await download_to_temp(tg_client, msg, "", thumbnail=True)
+        if not path:
+            return None
+        try:
+            return await asyncio.to_thread(
+                ocr_image, ocr.client, ocr.model, path, ocr.prompt
+            )
+        except Exception:
+            return None
+        finally:
+            path.unlink(missing_ok=True)
+
+    # Full download for photo, voice, or video with full_video=True
     ext = {"voice": ".ogg", "video": ".mp4", "photo": ".jpg"}[group]
     path = await download_to_temp(tg_client, msg, ext)
     if not path:
@@ -186,21 +218,21 @@ async def process_message(
 
     try:
         if group == "photo":
-            text = await asyncio.to_thread(
+            return await asyncio.to_thread(
                 ocr_image, ocr.client, ocr.model, path, ocr.prompt
             )
         elif group == "video":
+            # full_video=True: extract frames + OCR, or audio STT
             text = await asyncio.to_thread(
                 ocr_video, ocr.client, ocr.model, path, ocr.video_frames
             )
+            return text
         elif group == "voice":
-            text = await asyncio.to_thread(
+            return await asyncio.to_thread(
                 transcribe_audio, ocr.stt_client, path, ocr.stt_model, ocr.language
             )
-        else:
-            return None
-        return text
     except Exception:
         return None
     finally:
         path.unlink(missing_ok=True)
+    return None
