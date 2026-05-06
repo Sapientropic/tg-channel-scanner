@@ -18,6 +18,10 @@ __pycache__/
 # Output
 output/
 
+# Personal config (not for remote)
+channel_lists/jobs.txt
+profiles/aleksei-frontend.md
+
 # OS
 .DS_Store
 Thumbs.db
