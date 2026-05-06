@@ -26,7 +26,7 @@ except ImportError:
     print("Install openai package: pip install openai", file=sys.stderr)
     sys.exit(1)
 
-MAX_MESSAGES = 200
+DEFAULT_MAX_MESSAGES = 200
 
 
 def load_messages(filepath: str) -> list[dict]:
@@ -51,6 +51,7 @@ def summarize(
     profile: str,
     base_url: str | None,
     model: str,
+    max_messages: int = DEFAULT_MAX_MESSAGES,
 ) -> str:
     api_key = os.environ.get("OPENAI_API_KEY") or os.environ.get("DEEPSEEK_API_KEY")
     if not api_key:
@@ -72,9 +73,9 @@ Output a structured report in Markdown.
 """
 
     # Truncate by message count, keeping JSON structure intact
-    if len(messages) > MAX_MESSAGES:
-        truncated = messages[:MAX_MESSAGES]
-        note = f"\n\n[Note: Showing {MAX_MESSAGES} of {len(messages)} messages. {len(messages) - MAX_MESSAGES} older messages omitted.]"
+    if len(messages) > max_messages:
+        truncated = messages[:max_messages]
+        note = f"\n\n[Note: Showing {max_messages} of {len(messages)} messages. {len(messages) - max_messages} older messages omitted.]"
         data_text = json.dumps(truncated, ensure_ascii=False)
     else:
         note = ""
@@ -107,6 +108,7 @@ def main():
     parser.add_argument("--profile", required=True, help="Path to candidate profile MD")
     parser.add_argument("--base-url", help="Custom API base URL (for DeepSeek, Ollama, etc.)")
     parser.add_argument("--model", default="gpt-4o-mini", help="Model name (default: gpt-4o-mini)")
+    parser.add_argument("--max-messages", type=int, default=DEFAULT_MAX_MESSAGES, help=f"Max messages to send to LLM (default: {DEFAULT_MAX_MESSAGES})")
     parser.add_argument("--output", help="Save report to file (default: print to stdout)")
     args = parser.parse_args()
 
@@ -128,6 +130,7 @@ def main():
         profile=profile,
         base_url=args.base_url,
         model=args.model,
+        max_messages=args.max_messages,
     )
 
     if args.output:

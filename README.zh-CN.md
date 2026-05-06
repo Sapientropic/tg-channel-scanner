@@ -104,7 +104,8 @@ tg-channel-scanner/
 ├── channel_lists/           # 频道名称列表（每行一个）
 │   └── example.txt          # 示例频道列表
 ├── scripts/
-│   ├── scan.sh              # 批量频道读取
+│   ├── scan.sh              # 批量频道读取（Mac/Linux）
+│   ├── scan.bat             # 批量频道读取（Windows）
 │   └── summarize.py         # 可选 LLM 摘要
 ├── output/                  # 扫描结果（已 gitignore）
 └── docs/
@@ -151,18 +152,23 @@ React Job | JavaScript | Вакансии
 
 本工具读取你已订阅频道的消息——等同于手动滚动浏览。
 
-**重要限制：**
-- 自动化扫描频率：**最多每天一次**
-- 手动/按需扫描：不限
-- 单频道每次读取：**最多 100 条消息**
-- 每次扫描总频道数：**最多 25 个**
+**要点：**
+- 没有频道数量硬限制——50+ 个频道配合 1 秒间隔完全没问题
+- 按需扫描：不限次数
+- 自动化扫描：每天一次很安全，更频繁也可以
+- 使用真实账号（非新建/虚拟手机号账号）
 
-完整分析见 [docs/tos-risk-analysis.md](docs/tos-risk-analysis.md)。
+主要约束是 Telegram 的 **FloodWaitError**（速率限制），不是封号。详见 [docs/tos-risk-analysis.md](docs/tos-risk-analysis.md)。
 
 ## Windows
 
 ```bat
 setup.bat
+```
+
+配置文件位于 `%USERPROFILE%\.config\tgcli\config.toml`——编辑填入 API 凭证后：
+
+```bat
 call .venv\Scripts\activate.bat
 tg auth login
 scripts\scan.bat channel_lists\example.txt

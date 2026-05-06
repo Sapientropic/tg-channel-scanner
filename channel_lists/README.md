@@ -25,6 +25,6 @@ scripts\scan.bat channel_lists\my-jobs.txt 24
 
 ## Tips
 
-- Keep lists under 25 channels to stay within safe usage limits
+- Keep lists under 50 channels per scan for smooth operation (no hard limit — just rate limiting)
 - Group channels by topic into separate files (e.g., `frontend.txt`, `devops.txt`)
 - The number after the list file is the time window in hours (default: 24)

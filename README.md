@@ -104,7 +104,8 @@ tg-channel-scanner/
 ├── channel_lists/           # Channel name lists (one per line)
 │   └── example.txt          # Example channel list
 ├── scripts/
-│   ├── scan.sh              # Batch channel reader
+│   ├── scan.sh              # Batch channel reader (Mac/Linux)
+│   ├── scan.bat             # Batch channel reader (Windows)
 │   └── summarize.py         # Optional LLM summarizer
 ├── output/                  # Scan results (gitignored)
 └── docs/
@@ -151,18 +152,23 @@ Lines starting with `#` are comments.
 
 This tool reads messages from channels you've already subscribed to — equivalent to scrolling through them manually.
 
-**Important limits:**
-- Scan frequency: **max once per day** for automated runs
-- Manual/on-demand scans: no limit
-- Single channel: **max 100 messages** per read
-- Total channels per scan: **max 25**
+**Key points:**
+- No hard limit on channels — 50+ is fine with 1-second delays between reads
+- On-demand scans: no limit
+- Automated scans: daily is safe, more frequent is fine too
+- Use your real account (not a new/virtual number account)
 
-See [docs/tos-risk-analysis.md](docs/tos-risk-analysis.md) for full analysis.
+The main constraint is Telegram's **FloodWaitError** (rate limiting), not account bans. See [docs/tos-risk-analysis.md](docs/tos-risk-analysis.md) for full details.
 
 ## Windows
 
 ```bat
 setup.bat
+```
+
+This creates config at `%USERPROFILE%\.config\tgcli\config.toml` — edit it with your API credentials, then:
+
+```bat
 call .venv\Scripts\activate.bat
 tg auth login
 scripts\scan.bat channel_lists\example.txt
