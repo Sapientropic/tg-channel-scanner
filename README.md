@@ -14,50 +14,67 @@ Designed for job seekers monitoring multiple Telegram job channels, but works fo
 
 - Python 3.12+
 - Telegram account (phone number)
-- Telegram API credentials (`api_id` + `api_hash`)
+- Telegram API credentials (`api_id` + `api_hash` from [my.telegram.org/apps](https://my.telegram.org/apps))
 
 ### Install
 
 ```bash
 git clone https://github.com/Sapientropic/tg-channel-scanner.git
 cd tg-channel-scanner
+chmod +x setup.sh scripts/scan.sh
 ./setup.sh
 ```
+
+> `setup.sh` installs [pytgcli](https://github.com/tksohishi/tgcli) (provides the `tg` command) and writes config to `~/.config/tgcli/config.toml`.
 
 ### Configure
 
 ```bash
-# 1. Copy config template and fill in your credentials
-cp config.example.toml config.toml
-# Edit config.toml with your api_id and api_hash
+# 1. Edit config with your Telegram API credentials
+#    (setup.sh created it at ~/.config/tgcli/config.toml)
+nano ~/.config/tgcli/config.toml
 
-# 2. Login to Telegram
+# 2. Activate venv and login to Telegram
+source .venv/bin/activate
 tg auth login
+
+# 3. Verify
+tg auth status
 ```
 
 ### Run a scan
 
 ```bash
+# Activate venv first
+source .venv/bin/activate
+
 # Scan all channels in a list, past 24 hours
 ./scripts/scan.sh channel_lists/example.txt
 
 # Scan past 7 days
-./scripts/scan.sh channel_lists/example.txt 7
+./scripts/scan.sh channel_lists/example.txt 168
 
-# Output goes to output/scan_YYYYMMDD_HHMM.jsonl
+# Output goes to output/scan_YYYYMMDD_HHMMSS.jsonl
+# Errors go to output/scan_YYYYMMDD_HHMMSS.errors.log
 ```
 
 ### Summarize with AI
 
 ```bash
-# Option 1: DeepSeek CLI
-deepseek exec --auto "Read file output/scan_XXXX.jsonl, summarize job matches for this candidate profile: $(cat profiles/example.md)"
+# Option 1: Python script (OpenAI-compatible API)
+export OPENAI_API_KEY=sk-your-key
+python scripts/summarize.py --input output/scan_XXXX.jsonl --profile profiles/example.md
+
+# Works with DeepSeek, Ollama, etc:
+python scripts/summarize.py --input output/scan_XXXX.jsonl --profile profiles/example.md \
+  --base-url https://api.deepseek.com/v1 --model deepseek-chat
 
 # Option 2: Feed output directly to Codex / Claude / any AI agent
-# Just point your agent at the output/ files and the profile
-
-# Option 3: Python script (OpenAI-compatible API)
-python scripts/summarize.py --input output/scan_XXXX.jsonl --profile profiles/example.md
+#   Point your agent at:
+#   - The JSONL scan file in output/
+#   - Your profile in profiles/
+#   Example Codex prompt:
+#     "Read output/scan_XXXX.jsonl and filter jobs matching profiles/my-profile.md"
 ```
 
 ---
@@ -80,13 +97,12 @@ Telegram Channels
 
 ```
 tg-channel-scanner/
-├── config.toml              # Your credentials (gitignored)
-├── config.example.toml      # Template
+├── config.example.toml      # Template (actual config at ~/.config/tgcli/)
 ├── setup.sh                 # One-command installer
 ├── profiles/                # Candidate/filter profiles
 │   └── example.md           # Example: Frontend Developer job search
 ├── channel_lists/           # Channel name lists (one per line)
-│   └── example.txt          # Example: Russian IT job channels
+│   └── example.txt          # Example channel list
 ├── scripts/
 │   ├── scan.sh              # Batch channel reader
 │   └── summarize.py         # Optional LLM summarizer
@@ -102,9 +118,8 @@ Copy `profiles/example.md` and edit the matching criteria. The profile tells the
 
 ```markdown
 ## Candidate
-- Name: Your Name
-- Role: Target Role
-- Stack: React, TypeScript, ...
+- Role: Frontend Developer
+- Stack: React, TypeScript, Next.js
 - Level: Middle/Senior
 - Location: Remote preferred
 
@@ -116,13 +131,19 @@ Copy `profiles/example.md` and edit the matching criteria. The profile tells the
 
 ## Creating Your Own Channel List
 
-Create a `.txt` file in `channel_lists/`, one channel name per line:
+Create a `.txt` file in `channel_lists/`. Use **Telegram channel usernames** (not display names), one per line:
 
 ```
+# Good — these are Telegram usernames
+remote_italic
+dev_jobs_remote
+react_jobs
+
+# BAD — these are display names, won't work
 React Job | JavaScript | Вакансии
-Frontend | Удаленка
-TypeScript Job Offers
 ```
+
+> How to find a channel's username: open the channel in Telegram → tap the name → look for @username.
 
 Lines starting with `#` are comments.
 
@@ -142,8 +163,19 @@ See [docs/tos-risk-analysis.md](docs/tos-risk-analysis.md) for full analysis.
 
 ```bat
 setup.bat
+call .venv\Scripts\activate.bat
+tg auth login
 scripts\scan.bat channel_lists\example.txt
 ```
+
+## Troubleshooting
+
+| Problem | Fix |
+|---------|-----|
+| `tg: command not found` | Activate venv first: `source .venv/bin/activate` |
+| `Permission denied` on `.sh` | `chmod +x setup.sh scripts/scan.sh` |
+| my.telegram.org shows ERROR | See [docs/getting-api-credentials.md](docs/getting-api-credentials.md) |
+| 0 messages collected | Check `output/*.errors.log` for failures |
 
 ## License
 

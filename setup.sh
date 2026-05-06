@@ -16,7 +16,7 @@ for cmd in python3 python; do
         VER=$($cmd -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
         MAJOR=$(echo "$VER" | cut -d. -f1)
         MINOR=$(echo "$VER" | cut -d. -f2)
-        if [ "$MAJOR" -ge 3 ] && [ "$MINOR" -ge 12 ]; then
+        if ([ "$MAJOR" -eq 3 ] && [ "$MINOR" -ge 12 ]) || [ "$MAJOR" -gt 3 ]; then
             PYTHON="$cmd"
             echo "Found Python $VER ($cmd)"
             break
@@ -35,32 +35,53 @@ if [ ! -d ".venv" ]; then
     $PYTHON -m venv .venv
 fi
 
+# Activate and verify
 source .venv/bin/activate 2>/dev/null || source .venv/Scripts/activate 2>/dev/null
+if [ -z "${VIRTUAL_ENV:-}" ]; then
+    echo "Error: Failed to activate virtual environment."
+    exit 1
+fi
 
-# Install tgcli
+# Install dependencies
 echo "Installing tgcli..."
 pip install --upgrade pip --quiet
 pip install pytgcli --quiet
 
-# Check config
-if [ ! -f "config.toml" ]; then
-    cp config.example.toml config.toml
+echo "Installing optional dependencies (openai for summarize.py)..."
+pip install openai --quiet 2>/dev/null || echo "  (openai not installed — summarize.py will need it later)"
+
+# Configure tgcli (writes to global config at ~/.config/tgcli/)
+TGCLI_CONFIG_DIR="$HOME/.config/tgcli"
+TGCLI_CONFIG="$TGCLI_CONFIG_DIR/config.toml"
+
+if [ ! -f "$TGCLI_CONFIG" ]; then
+    mkdir -p "$TGCLI_CONFIG_DIR"
+    cp config.example.toml "$TGCLI_CONFIG"
     echo ""
     echo "=== Next Steps ==="
-    echo "1. Edit config.toml with your Telegram api_id and api_hash"
-    echo "   Get them from: https://my.telegram.org/apps"
+    echo "1. Edit Telegram API credentials:"
+    echo "   $TGCLI_CONFIG"
+    echo "   Get your api_id and api_hash from: https://my.telegram.org/apps"
     echo "   (If the form shows ERROR, see docs/getting-api-credentials.md)"
     echo ""
-    echo "2. Login:"
+    echo "2. Login to Telegram:"
+    echo "   source .venv/bin/activate"
     echo "   tg auth login"
     echo ""
     echo "3. Run a scan:"
     echo "   ./scripts/scan.sh channel_lists/example.txt"
 else
-    echo "config.toml already exists, skipping."
+    echo "tgcli config already exists at $TGCLI_CONFIG — skipping."
+    echo "To reconfigure, edit: $TGCLI_CONFIG"
 fi
+
+# Make scripts executable (macOS/Linux)
+chmod +x scripts/scan.sh 2>/dev/null || true
 
 # Create output dir
 mkdir -p output
 
-echo "Setup complete."
+echo ""
+echo "Setup complete. Next: edit config and run 'tg auth login'"
+echo "  Config:  $TGCLI_CONFIG"
+echo "  Verify:  source .venv/bin/activate && tg auth status"

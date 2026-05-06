@@ -3,6 +3,13 @@ config.toml
 *.session
 *.session-journal
 
+# Environment / secrets
+.env
+.env.*
+
+# Logs
+*.log
+
 # Python
 .venv/
 __pycache__/

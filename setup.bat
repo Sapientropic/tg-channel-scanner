@@ -22,17 +22,37 @@ echo Installing tgcli...
 pip install --upgrade pip --quiet
 pip install pytgcli --quiet
 
-if not exist "config.toml" (
-    copy config.example.toml config.toml
+echo Installing optional dependencies (openai for summarize.py)...
+pip install openai --quiet 2>nul || echo   ^(openai not installed - summarize.py will need it later^)
+
+REM Configure tgcli (writes to %USERPROFILE%\.config\tgcli\)
+set TGCLI_DIR=%USERPROFILE%\.config\tgcli
+set TGCLI_CONFIG=%TGCLI_DIR%\config.toml
+
+if not exist "%TGCLI_CONFIG%" (
+    if not exist "%TGCLI_DIR%" mkdir "%TGCLI_DIR%"
+    copy config.example.toml "%TGCLI_CONFIG%" >nul
     echo.
     echo === Next Steps ===
-    echo 1. Edit config.toml with your api_id and api_hash
-    echo 2. Run: tg auth login
-    echo 3. Run: scripts\scan.bat channel_lists\example.txt
+    echo 1. Edit Telegram API credentials:
+    echo    %TGCLI_CONFIG%
+    echo    Get your api_id and api_hash from: https://my.telegram.org/apps
+    echo    ^(If the form shows ERROR, see docs\getting-api-credentials.md^)
+    echo.
+    echo 2. Login to Telegram:
+    echo    call .venv\Scripts\activate.bat
+    echo    tg auth login
+    echo.
+    echo 3. Run a scan:
+    echo    scripts\scan.bat channel_lists\example.txt
 ) else (
-    echo config.toml already exists.
+    echo tgcli config already exists at %TGCLI_CONFIG% - skipping.
+    echo To reconfigure, edit: %TGCLI_CONFIG%
 )
 
 if not exist "output" mkdir output
 
-echo Setup complete.
+echo.
+echo Setup complete. Next: edit config and run 'tg auth login'
+echo   Config:  %TGCLI_CONFIG%
+echo   Verify:  call .venv\Scripts\activate.bat ^&^& tg auth status
