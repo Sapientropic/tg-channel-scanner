@@ -1,0 +1,7 @@
+# Telegram API credentials
+# Get yours at https://my.telegram.org/apps
+# If the form shows ERROR, see docs/getting-api-credentials.md
+
+api_id = 0
+api_hash = "your_api_hash_here"
+session_store = "file"

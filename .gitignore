@@ -1,0 +1,20 @@
+# Credentials
+config.toml
+*.session
+*.session-journal
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Output
+output/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/

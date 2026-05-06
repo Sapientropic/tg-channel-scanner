@@ -1,0 +1,35 @@
+# Candidate Profile: Frontend Developer
+
+## Basic Info
+- **Role**: Frontend Developer (Middle/Senior)
+- **Experience**: 5 years
+- **Preferred format**: Remote
+- **Location constraint**: Russia office NOT acceptable
+- **Timezone**: Flexible (remote-first)
+
+## Tech Stack
+- **Core**: React, TypeScript, Next.js
+- **State management**: Redux Toolkit, RTK Query
+- **UI libraries**: Material UI (MUI), Ant Design, Tailwind CSS
+- **Tools**: Git, Figma, REST APIs
+
+## Preferences
+- Priority: Remote-first companies or fully distributed teams
+- Interested in: product companies, fintech, edtech, SaaS
+- Not interested in: outsourcing agencies, government projects
+- Salary expectation: Competitive market rate for Senior Frontend
+
+## Search Rules
+1. Only include jobs posted within the last 24 hours
+2. Remove duplicates (same company + same title)
+3. Rate each match: **high** / **medium** / **low**
+4. For high matches, include direct application link if available
+5. Output in structured Markdown with sections: High Match → Medium Match → Low Match
+
+---
+
+*Copy this file and customize for your own profile:*
+```bash
+cp profiles/example.md profiles/my-profile.md
+# Edit profiles/my-profile.md with your details
+```

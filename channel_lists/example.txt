@@ -1,0 +1,37 @@
+# IT Job Channels (Russian-speaking market)
+# One channel per line. Lines starting with # are ignored.
+# Empty lines are skipped.
+# Customize this list for your needs.
+
+# General IT jobs
+remote_italic
+rabota_italy
+italy_vacancy
+dev_jobs_remote
+remote_work_it
+
+# Frontend-specific
+frontend_jobs
+react_jobs
+
+# Russian IT community
+thedevs
+proghub
+python_jobs
+golang_jobs
+javascript_jobs
+javascript_channel
+
+# Startup / Product
+startup_jobs
+product_jobs
+
+# Relocation
+relocate_us
+relocate_eu
+relocate_uk
+dev_relocation
+
+# Remote-specific
+remote_dev
+remote_jobs_daily
