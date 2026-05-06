@@ -1,7 +1,9 @@
-"""Cross-platform Telegram channel scanner.
+"""Cross-platform Telegram channel scanner with automatic media OCR.
 
-Uses Telethon (MTProto user client) to read channel messages directly,
-with precise UTC cutoff filtering and completeness detection.
+Uses Telethon (MTProto user client) to read channel messages directly.
+When an OCR API key is configured, media messages (photos, videos, voice)
+are automatically downloaded to temp files, OCR'd, and cleaned up —
+all in one pass, no extra step needed.
 
 Reads config and session from ~/.config/tgcli/ for backward compatibility.
 """
@@ -24,10 +26,26 @@ from telethon.errors import FloodWaitError
 from telethon.sessions import StringSession
 from telethon.tl.types import MessageMediaPhoto
 
+try:
+    import openai
+except ImportError:
+    openai = None  # type: ignore[assignment]
+
+from scripts.media_ocr import OcrConfig, process_message
+
+try:
+    import openai
+except ImportError:
+    openai = None  # type: ignore[assignment]
+
 DEFAULT_HOURS = 24
 DEFAULT_INITIAL_LIMIT = 200
 DEFAULT_MAX_LIMIT = 5000
 DEFAULT_DELAY_SECONDS = 1.0
+
+DEFAULT_OCR_BASE_URL = "https://api.x.ai/v1"
+DEFAULT_OCR_MODEL = "grok-4.1-fast"
+DEFAULT_STT_MODEL = "whisper-1"
 
 CONFIG_DIR = Path(
     os.environ.get(
@@ -55,6 +73,7 @@ class ChannelResult:
     skipped_missing_date: int
     limit: int
     incomplete: bool
+    ocr_count: int = 0
     stderr: str = ""
 
 
@@ -63,6 +82,17 @@ class ScannerConfig:
     api_id: int
     api_hash: str
     session_string: str
+
+
+@dataclass
+class OcrConfig:
+    client: object  # openai.OpenAI
+    model: str
+    stt_client: object  # openai.OpenAI (may be same instance)
+    stt_model: str
+    language: str | None
+    video_frames: int
+    prompt: str
 
 
 # ---------------------------------------------------------------------------
@@ -158,6 +188,23 @@ def filter_messages(
     return kept, skipped_missing_date
 
 
+def _filter_raw_messages(
+    messages: list, cutoff: datetime
+) -> tuple[list, int]:
+    """Filter Telethon Message objects by cutoff."""
+    cutoff_utc = cutoff.astimezone(UTC)
+    kept: list = []
+    skipped = 0
+    for m in messages:
+        if m.date is None:
+            skipped += 1
+            continue
+        d = m.date if m.date.tzinfo else m.date.replace(tzinfo=UTC)
+        if d.astimezone(UTC) >= cutoff_utc:
+            kept.append(m)
+    return kept, skipped
+
+
 def write_jsonl(path: Path, messages: Iterable[dict]) -> int:
     count = 0
     with path.open("a", encoding="utf-8", newline="\n") as handle:
@@ -173,10 +220,6 @@ def write_jsonl(path: Path, messages: Iterable[dict]) -> int:
 # ---------------------------------------------------------------------------
 
 def load_config() -> ScannerConfig:
-    """Load Telegram API credentials from config.toml + session file.
-
-    Falls back to TELEGRAM_API_ID / TELEGRAM_API_HASH env vars.
-    """
     api_id: int | None = None
     api_hash: str | None = None
 
@@ -208,8 +251,33 @@ def load_config() -> ScannerConfig:
     )
 
 
+def _make_ocr_config(args) -> OcrConfig | None:
+    """Create OcrConfig if API key is available and --no-ocr not set."""
+    if args.no_ocr:
+        return None
+    if openai is None:
+        return None
+
+    api_key = os.environ.get("XAI_API_KEY") or os.environ.get("OPENAI_API_KEY")
+    if not api_key:
+        return None
+
+    vision_client = openai.OpenAI(base_url=args.ocr_base_url, api_key=api_key)
+    stt_client = openai.OpenAI(
+        base_url=args.ocr_stt_base_url or args.ocr_base_url, api_key=api_key,
+    )
+    return OcrConfig(
+        client=vision_client,
+        model=args.ocr_model,
+        stt_client=stt_client,
+        stt_model=args.ocr_stt_model,
+        language=args.ocr_language,
+        video_frames=args.ocr_video_frames,
+        prompt=args.ocr_prompt,
+    )
+
+
 async def interactive_login(client: TelegramClient) -> None:
-    """Interactive phone + code login. Saves StringSession on success."""
     print("No active Telegram session. Starting interactive login...")
     phone = input("Enter your phone number (with country code): ").strip()
     if not phone:
@@ -229,32 +297,21 @@ async def interactive_login(client: TelegramClient) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Entity resolution (ported from tgcli)
+# Entity resolution
 # ---------------------------------------------------------------------------
 
 async def resolve_entity(client: TelegramClient, name: str):
-    """Resolve a channel identifier to a Telethon entity.
-
-    Supports: @username, plain username, numeric ID, display name.
-    """
     name = name.strip()
-
-    # Numeric ID
     if name.lstrip("-").isdigit():
         return await client.get_entity(int(name))
-
-    # Username (with or without @)
     try:
         return await client.get_entity(name)
     except Exception:
         pass
-
-    # Display name — case-insensitive exact match via dialog scan
     name_lower = name.lower()
     async for dialog in client.iter_dialogs():
         if dialog.name.lower() == name_lower:
             return dialog.entity
-
     raise ScanError(f"Cannot resolve channel: {name}")
 
 
@@ -263,7 +320,6 @@ async def resolve_entity(client: TelegramClient, name: str):
 # ---------------------------------------------------------------------------
 
 def message_to_dict(msg, channel_name: str) -> dict:
-    """Convert a Telethon Message to a JSONL-compatible dict."""
     media_type = None
     has_photo = False
     media_group = None
@@ -295,13 +351,8 @@ def message_to_dict(msg, channel_name: str) -> dict:
 
 
 async def _fetch_with_retry(
-    client: TelegramClient,
-    entity,
-    channel_name: str,
-    limit: int,
-    max_retries: int = 5,
+    client: TelegramClient, entity, channel_name: str, limit: int, max_retries: int = 5,
 ) -> list:
-    """Fetch messages with FloodWait retry logic."""
     for attempt in range(1, max_retries + 1):
         try:
             return await client.get_messages(entity, limit=limit)
@@ -311,11 +362,13 @@ async def _fetch_with_retry(
                     f"FloodWait: {max_retries} retries exceeded for {channel_name}"
                 ) from exc
             wait = min(exc.seconds, 60)
-            print(
-                f"  FloodWait: sleeping {wait}s (retry {attempt}/{max_retries})..."
-            )
+            print(f"  FloodWait: sleeping {wait}s (retry {attempt}/{max_retries})...")
             await asyncio.sleep(wait)
 
+
+# ---------------------------------------------------------------------------
+# Channel reading (with integrated OCR)
+# ---------------------------------------------------------------------------
 
 async def read_channel(
     client: TelegramClient,
@@ -324,8 +377,8 @@ async def read_channel(
     cutoff: datetime,
     initial_limit: int,
     max_limit: int,
+    ocr: OcrConfig | None = None,
 ) -> ChannelResult:
-    """Read messages from a channel with completeness detection."""
     if initial_limit > max_limit:
         raise ValueError("initial_limit cannot exceed max_limit")
 
@@ -334,28 +387,35 @@ async def read_channel(
     while True:
         messages = await _fetch_with_retry(client, entity, channel_name, limit)
         raw_count = len(messages)
-        dicts = [message_to_dict(m, channel_name) for m in messages]
-        filtered, skipped_missing_date = filter_messages(dicts, cutoff)
+        kept_msgs, skipped_missing_date = _filter_raw_messages(messages, cutoff)
         saturated = raw_count >= limit
 
-        if not saturated:
-            return ChannelResult(
-                channel=channel_name,
-                messages=filtered,
-                raw_count=raw_count,
-                skipped_missing_date=skipped_missing_date,
-                limit=limit,
-                incomplete=False,
-            )
+        # OCR media on the final iteration only
+        if not saturated or limit >= max_limit:
+            ocr_texts: dict[int, str] = {}
+            ocr_count = 0
+            if ocr:
+                for m in kept_msgs:
+                    if m.media:
+                        text = await process_message(client, m, ocr)
+                        if text:
+                            ocr_texts[m.id] = text
+                            ocr_count += 1
+                            print(f"    OCR [{channel_name}:{m.id}] -> {len(text)} chars")
 
-        if limit >= max_limit:
+            dicts = [message_to_dict(m, channel_name) for m in kept_msgs]
+            for d in dicts:
+                if d["id"] in ocr_texts:
+                    d["ocr_text"] = ocr_texts[d["id"]]
+
             return ChannelResult(
                 channel=channel_name,
-                messages=filtered,
+                messages=dicts,
                 raw_count=raw_count,
                 skipped_missing_date=skipped_missing_date,
                 limit=limit,
-                incomplete=True,
+                incomplete=saturated,
+                ocr_count=ocr_count,
             )
 
         limit = min(limit * 2, max_limit)
@@ -367,65 +427,47 @@ async def read_channel(
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Scan Telegram channels via Telethon."
+        description="Scan Telegram channels via Telethon with automatic media OCR."
     )
     parser.add_argument(
-        "channel_list",
-        type=Path,
+        "channel_list", type=Path,
         help="Text file with one channel username per line",
     )
     parser.add_argument(
-        "hours",
-        nargs="?",
-        type=positive_int,
-        default=DEFAULT_HOURS,
+        "hours", nargs="?", type=positive_int, default=DEFAULT_HOURS,
         help=f"Look back this many hours (default: {DEFAULT_HOURS})",
     )
+    parser.add_argument("--since", type=parse_since, help="Precise ISO-8601 cutoff.")
     parser.add_argument(
-        "--since",
-        type=parse_since,
-        help="Precise UTC/local ISO-8601 cutoff. Overrides hours.",
+        "--initial-limit", type=positive_int,
+        default=positive_int(os.environ.get("SCAN_INITIAL_LIMIT", str(DEFAULT_INITIAL_LIMIT))),
     )
     parser.add_argument(
-        "--initial-limit",
-        type=positive_int,
-        default=positive_int(
-            os.environ.get("SCAN_INITIAL_LIMIT", str(DEFAULT_INITIAL_LIMIT))
-        ),
-        help=f"Initial message limit per channel (default: {DEFAULT_INITIAL_LIMIT})",
+        "--max-limit", type=positive_int,
+        default=positive_int(os.environ.get("SCAN_MAX_LIMIT", str(DEFAULT_MAX_LIMIT))),
     )
     parser.add_argument(
-        "--max-limit",
-        type=positive_int,
-        default=positive_int(
-            os.environ.get("SCAN_MAX_LIMIT", str(DEFAULT_MAX_LIMIT))
-        ),
-        help=f"Max message limit before reporting incomplete (default: {DEFAULT_MAX_LIMIT})",
+        "--delay", type=non_negative_float,
+        default=non_negative_float(os.environ.get("SCAN_DELAY", str(DEFAULT_DELAY_SECONDS))),
     )
-    parser.add_argument(
-        "--delay",
-        type=non_negative_float,
-        default=non_negative_float(
-            os.environ.get("SCAN_DELAY", str(DEFAULT_DELAY_SECONDS))
-        ),
-        help=f"Delay between channels in seconds (default: {DEFAULT_DELAY_SECONDS})",
-    )
-    parser.add_argument(
-        "--output-dir",
-        type=Path,
-        default=Path("output"),
-        help="Output directory",
-    )
-    parser.add_argument(
-        "--allow-incomplete",
-        action="store_true",
-        help="Exit 0 even if a channel reaches --max-limit and may be incomplete",
-    )
+    parser.add_argument("--output-dir", type=Path, default=Path("output"))
+    parser.add_argument("--allow-incomplete", action="store_true")
+
+    # OCR options
+    ocr_group = parser.add_argument_group("OCR", "Auto-OCR media messages (on by default if API key is set)")
+    ocr_group.add_argument("--no-ocr", action="store_true", help="Disable auto OCR")
+    ocr_group.add_argument("--ocr-base-url", default=os.environ.get("OPENAI_BASE_URL", DEFAULT_OCR_BASE_URL))
+    ocr_group.add_argument("--ocr-model", default=DEFAULT_OCR_MODEL)
+    ocr_group.add_argument("--ocr-stt-base-url", default=None)
+    ocr_group.add_argument("--ocr-stt-model", default=DEFAULT_STT_MODEL)
+    ocr_group.add_argument("--ocr-language", default=None, help="Language hint for voice STT (e.g. 'ru', 'en')")
+    ocr_group.add_argument("--ocr-video-frames", type=int, default=DEFAULT_VIDEO_FRAMES)
+    ocr_group.add_argument("--ocr-prompt", default=OCR_PROMPT)
+
     return parser
 
 
 async def _run_scan(args) -> int:
-    """Async scan core."""
     config = load_config()
 
     client = TelegramClient(
@@ -449,6 +491,16 @@ async def _run_scan(args) -> int:
         print(f"Error: Failed to read channel list: {exc}", file=sys.stderr)
         return 1
 
+    ocr = _make_ocr_config(args)
+    if ocr:
+        print(f"OCR enabled: {args.ocr_model} @ {args.ocr_base_url}")
+    elif not args.no_ocr:
+        api_key = os.environ.get("XAI_API_KEY") or os.environ.get("OPENAI_API_KEY")
+        if not api_key:
+            print("OCR disabled: set XAI_API_KEY or OPENAI_API_KEY to enable auto OCR")
+        elif openai is None:
+            print("OCR disabled: openai package not installed (pip install openai)")
+
     cutoff = cutoff_from_args(args.hours, args.since)
     args.output_dir.mkdir(parents=True, exist_ok=True)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -464,6 +516,7 @@ async def _run_scan(args) -> int:
     failures = 0
     incomplete = 0
     total_written = 0
+    total_ocr = 0
 
     with errors_path.open("w", encoding="utf-8", newline="\n") as errors:
         for index, channel_name in enumerate(channels, start=1):
@@ -477,24 +530,20 @@ async def _run_scan(args) -> int:
                     cutoff=cutoff,
                     initial_limit=args.initial_limit,
                     max_limit=args.max_limit,
+                    ocr=ocr,
                 )
             except ScanError as exc:
                 failures += 1
                 errors.write(f"[{channel_name}] ERROR: {exc}\n")
-                print(
-                    f"  Failed: {channel_name} (see {errors_path.name})",
-                    file=sys.stderr,
-                )
+                print(f"  Failed: {channel_name} (see {errors_path.name})", file=sys.stderr)
             except Exception as exc:
                 failures += 1
                 errors.write(f"[{channel_name}] ERROR: {exc}\n")
-                print(
-                    f"  Failed: {channel_name}: {exc} (see {errors_path.name})",
-                    file=sys.stderr,
-                )
+                print(f"  Failed: {channel_name}: {exc} (see {errors_path.name})", file=sys.stderr)
             else:
                 written = write_jsonl(output_path, result.messages)
                 total_written += written
+                total_ocr += result.ocr_count
                 if result.skipped_missing_date:
                     errors.write(
                         f"[{channel_name}] skipped {result.skipped_missing_date} "
@@ -506,13 +555,9 @@ async def _run_scan(args) -> int:
                         f"[{channel_name}] INCOMPLETE: read {result.raw_count} rows at "
                         f"max limit {result.limit}; raise SCAN_MAX_LIMIT or narrow the window.\n"
                     )
-                    print(
-                        f"  Incomplete at limit {result.limit}; see {errors_path.name}",
-                        file=sys.stderr,
-                    )
-                print(
-                    f"  {written} messages kept from {result.raw_count} rows (limit {result.limit})"
-                )
+                    print(f"  Incomplete at limit {result.limit}; see {errors_path.name}", file=sys.stderr)
+                ocr_info = f", {result.ocr_count} media OCR'd" if result.ocr_count else ""
+                print(f"  {written} messages kept from {result.raw_count} rows (limit {result.limit}){ocr_info}")
 
             if index < len(channels) and args.delay:
                 await asyncio.sleep(args.delay)
@@ -521,6 +566,8 @@ async def _run_scan(args) -> int:
 
     print("---")
     print(f"Done. {len(channels)} channels scanned, {total_written} messages collected.")
+    if total_ocr:
+        print(f"{total_ocr} media messages OCR'd.")
     if failures:
         print(f"{failures} channels failed. See: {errors_path}")
     if incomplete:
@@ -529,12 +576,8 @@ async def _run_scan(args) -> int:
     print("")
     print("Next: Summarize with your preferred AI:")
     print(
-        f"  OpenAI/DeepSeek: python scripts/summarize.py "
+        f"  python scripts/summarize.py "
         f"--input {output_path} --profile profiles/YOUR_PROFILE.md"
-    )
-    print(
-        f"  Codex/Claude:    Point your agent at {output_path} "
-        f"+ profiles/YOUR_PROFILE.md"
     )
 
     if failures:
@@ -549,14 +592,10 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     if not args.channel_list.exists():
-        print(
-            f"Error: Channel list not found: {args.channel_list}", file=sys.stderr
-        )
+        print(f"Error: Channel list not found: {args.channel_list}", file=sys.stderr)
         return 1
     if args.initial_limit > args.max_limit:
-        print(
-            "Error: --initial-limit cannot exceed --max-limit", file=sys.stderr
-        )
+        print("Error: --initial-limit cannot exceed --max-limit", file=sys.stderr)
         return 1
 
     return asyncio.run(_run_scan(args))
