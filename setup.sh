@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 # Install tg-channel-scanner dependencies
-# Requires: Python 3.12+
+# Requires: Python 3.12+ (system, or via uv/pipx)
+#
+# If your system Python is older than 3.12, install uv first:
+#   https://docs.astral.sh/uv/getting-started/installation/
+# setup.sh will then use uv to provision a managed Python automatically.
 
 set -e
 
@@ -9,30 +13,46 @@ cd "$SCRIPT_DIR"
 
 echo "=== TG Channel Scanner Setup ==="
 
-# Check Python version
-PYTHON=""
-for cmd in python3 python; do
-    if command -v "$cmd" &>/dev/null; then
-        VER=$($cmd -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
-        MAJOR=$(echo "$VER" | cut -d. -f1)
-        MINOR=$(echo "$VER" | cut -d. -f2)
-        if ([ "$MAJOR" -eq 3 ] && [ "$MINOR" -ge 12 ]) || [ "$MAJOR" -gt 3 ]; then
-            PYTHON="$cmd"
-            echo "Found Python $VER ($cmd)"
-            break
+# --- Find a suitable Python 3.12+ ---
+# Skip Windows Store stubs (python3.exe that exits non-zero without printing a version).
+find_python() {
+    for cmd in python3 python; do
+        if command -v "$cmd" &>/dev/null; then
+            VER=$($cmd -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')" 2>/dev/null) || continue
+            MAJOR=$(echo "$VER" | cut -d. -f1)
+            MINOR=$(echo "$VER" | cut -d. -f2)
+            if ([ "$MAJOR" -eq 3 ] && [ "$MINOR" -ge 12 ]) || [ "$MAJOR" -gt 3 ]; then
+                echo "$cmd"
+                return 0
+            fi
         fi
-    fi
-done
+    done
+    return 1
+}
 
-if [ -z "$PYTHON" ]; then
-    echo "Error: Python 3.12+ required. Install from https://python.org"
+PYTHON=""
+USE_UV=false
+
+if PYTHON=$(find_python); then
+    VER=$($PYTHON -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
+    echo "Found Python $VER ($PYTHON)"
+elif command -v uv &>/dev/null; then
+    echo "System Python < 3.12. Using uv to provision a managed Python..."
+    USE_UV=true
+else
+    echo "Error: Python 3.12+ required." >&2
+    echo "Install from https://python.org or install uv: https://docs.astral.sh/uv/" >&2
     exit 1
 fi
 
-# Create venv
+# --- Create venv ---
 if [ ! -d ".venv" ]; then
     echo "Creating virtual environment..."
-    $PYTHON -m venv .venv
+    if [ "$USE_UV" = true ]; then
+        uv venv .venv --python 3.13
+    else
+        $PYTHON -m venv .venv
+    fi
 fi
 
 # Activate and verify
@@ -42,13 +62,21 @@ if [ -z "${VIRTUAL_ENV:-}" ]; then
     exit 1
 fi
 
-# Install dependencies
+# --- Install dependencies ---
 echo "Installing pinned core dependencies..."
-pip install --upgrade pip --quiet
-pip install -r requirements.txt --quiet
+if [ "$USE_UV" = true ]; then
+    uv pip install -r requirements.txt
+else
+    pip install --upgrade pip --quiet
+    pip install -r requirements.txt --quiet
+fi
 
 echo "Installing optional pinned LLM dependencies (openai for summarize.py)..."
-pip install -r requirements-llm.txt --quiet 2>/dev/null || echo "  (openai not installed — summarize.py will need it later)"
+if [ "$USE_UV" = true ]; then
+    uv pip install -r requirements-llm.txt 2>/dev/null || echo "  (openai not installed — summarize.py will need it later)"
+else
+    pip install -r requirements-llm.txt --quiet 2>/dev/null || echo "  (openai not installed — summarize.py will need it later)"
+fi
 
 EXPECTED_TG_VERSION="0.9.0"
 TG_VERSION="$(tg --version 2>/dev/null || true)"
@@ -58,7 +86,7 @@ if [ "$TG_VERSION" != "$EXPECTED_TG_VERSION" ]; then
     exit 1
 fi
 
-# Configure tgcli (writes to global config at ~/.config/tgcli/)
+# --- Configure tgcli (writes to global config at ~/.config/tgcli/) ---
 TGCLI_CONFIG_DIR="$HOME/.config/tgcli"
 TGCLI_CONFIG="$TGCLI_CONFIG_DIR/config.toml"
 
