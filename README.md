@@ -1,10 +1,10 @@
 # TG Channel Scanner
 
-<!-- English -->
-
 Read Telegram channel messages on schedule, filter by keywords/profiles, and generate AI-powered digests.
 
 Designed for job seekers monitoring multiple Telegram job channels, but works for any channel monitoring use case.
+
+[**中文文档**](README.zh-CN.md)
 
 ---
 
@@ -148,29 +148,3 @@ scripts\scan.bat channel_lists\example.txt
 ## License
 
 MIT
-
----
-
-<!-- 中文 -->
-
-# TG 频道扫描器
-
-读取 Telegram 频道消息，按关键词/候选人 profile 过滤，生成 AI 摘要报告。
-
-最初为求职者监控多个 Telegram 招聘频道设计，但适用于任何频道监控场景。
-
-## 快速开始
-
-```bash
-git clone https://github.com/Sapientropic/tg-channel-scanner.git
-cd tg-channel-scanner
-./setup.sh                    # 安装依赖
-cp config.example.toml config.toml  # 填入 api_id/api_hash
-tg auth login                 # Telegram 登录
-./scripts/scan.sh channel_lists/example.txt  # 扫描
-```
-
-## 更多文档
-
-- [获取 Telegram API 凭证指南](docs/getting-api-credentials.md)
-- [Telegram ToS 风险分析](docs/tos-risk-analysis.md)
