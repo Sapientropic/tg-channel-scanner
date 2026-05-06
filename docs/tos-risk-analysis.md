@@ -2,7 +2,7 @@
 
 ## TL;DR
 
-Reading your own Telegram channels at a reasonable speed is safe. The main constraint is **FloodWaitError** (server-side rate limiting), not account bans.
+Reading your own subscribed Telegram channels at a modest speed is a lower-risk personal use case, but it is not risk-free. Telegram can rate-limit or restrict accounts, and Telegram API use is also subject to Telegram's API Terms of Service, including the separate content licensing and AI scraping restrictions.
 
 ## What's Allowed
 
@@ -14,6 +14,7 @@ Reading your own Telegram channels at a reasonable speed is safe. The main const
 ## What's NOT Allowed
 
 - **Bulk data collection** for AI training, resale, or redistribution
+- **Using Telegram data to train, fine-tune, enhance, or deploy AI/ML models**
 - **Aggressive polling** without respecting rate limits (FloodWaitError)
 - **Scraping channels you haven't joined** at scale
 - **Selling or redistributing** scraped message data
@@ -21,14 +22,14 @@ Reading your own Telegram channels at a reasonable speed is safe. The main const
 
 ## Real Risk Assessment
 
-### Low Risk (what this tool does)
+### Lower Risk (what this tool is designed for)
 
-Reading messages from your own subscribed channels at ~1 request/second. This is equivalent to scrolling through Telegram manually, just faster.
+Reading messages from your own subscribed channels for personal monitoring with delays between requests. Keep the scope narrow, avoid redistribution, and respect any `FloodWaitError` returned by Telegram.
 
-**Evidence from the community:**
-- Multiple open-source tools ([Telebrief](https://github.com/belaytzev/Telebrief), [tg-channel-digest](https://github.com/Lonky1995/tg-channel-digest)) read hundreds of channels continuously without issues
-- Telegram's rate limiter (FloodWaitError) is self-correcting — it tells you how long to wait
-- Old accounts with real phone numbers are almost never banned for reading
+**Evidence and caveats:**
+- Telethon documents `FloodWaitError.seconds` as the wait time Telegram returns for repeated requests
+- Telethon's own docs say exact limits are not public and depend on many factors
+- Telegram says accounts using unofficial API clients are monitored for ToS violations
 
 ### High Risk (avoid these)
 
@@ -41,15 +42,15 @@ Reading messages from your own subscribed channels at ~1 request/second. This is
 
 Telegram enforces rate limits per-account. When you hit them, you get a `FloodWaitError` with a wait time in seconds.
 
-| Action | Approximate Safe Rate |
+These are practical starting points, not official Telegram limits:
+
+| Action | Conservative starting point |
 |--------|----------------------|
 | Read messages (`get_messages`) | ~1 request/second |
-| Get channel info (`get_entity`) | ~1 request/minute |
-| General API calls | ~30 requests per 30 seconds |
+| Get channel info (`get_entity`) | Cache results; avoid repeatedly resolving the same channel |
+| General API calls | Keep bursts small and respect `FloodWaitError.seconds` |
 
-**For reading 50 channels at 1-2 seconds each: ~1-2 minutes total. This is well within safe limits.**
-
-Our scan scripts use a 1-second delay between channels (`SCAN_DELAY` env var, adjustable) which is sufficient for most use cases.
+The scanner defaults to a 1-second delay between channels (`SCAN_DELAY=1`). If Telegram asks for a wait longer than `SCAN_MAX_FLOOD_WAIT_SECONDS`, the channel fails instead of silently sleeping for a long time.
 
 ## Reading All Subscribed Channels
 
@@ -62,16 +63,13 @@ This is a legitimate use case. If you want to scan all your channels:
 
 To scan all your subscribed channels, export them first:
 
-```bash
-# List all your channels (tgcli)
-tg chats --limit 200 | grep "channel" > channel_lists/all.txt
-```
-
-Or manually add all channels to a list file in `channel_lists/`.
+1. Manually collect usernames from Telegram's channel info pages, or export your Telegram data and copy channel usernames from that local export.
+2. Put one username per line in `channel_lists/all.txt`.
+3. Keep `SCAN_DELAY` at 1 second or higher for large lists.
 
 ## What Happens If You Exceed Rate Limits
 
-1. **FloodWaitError**: Server returns a wait time (usually 5-60 seconds). Wait and retry.
+1. **FloodWaitError**: Server returns a wait time. Wait and retry if it is within your configured threshold.
 2. **Temporary restriction**: If you repeatedly ignore FloodWaitError, your account may be restricted for a few hours.
 3. **Account ban**: Only for severe abuse (spam, bulk data harvesting, using virtual numbers).
 
@@ -79,10 +77,12 @@ Our scan scripts redirect errors to `*.errors.log` — check this file if channe
 
 ## Legal Disclaimer
 
-This analysis is based on community reports, Telethon documentation, and open-source project experience as of 2026-05. Telegram may update their policies at any time. Use this tool responsibly.
+This analysis is based on Telegram API documentation, Telethon documentation, community reports, and open-source project experience as of 2026-05-06. Telegram may update their policies at any time. Use this tool responsibly and do not treat this document as legal advice.
 
 Sources:
-- [Telethon FAQ on account bans](https://docs.telethon.dev/en/v2/developing/faq.html)
+- [Telegram API Terms of Service](https://core.telegram.org/api/terms)
+- [Creating your Telegram Application](https://core.telegram.org/api/obtaining_api_id)
+- [Telethon RPC Errors / FloodWaitError](https://docs.telethon.dev/en/stable/concepts/errors.html)
 - [Telethon Issue #3955: Account bans](https://github.com/LonamiWebs/Telethon/issues/3955)
 - [Stack Overflow: Telethon rate limits](https://stackoverflow.com/questions/76198570)
 - [Telebrief: Multi-channel digest tool](https://github.com/belaytzev/Telebrief)

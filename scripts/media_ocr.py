@@ -133,39 +133,38 @@ def ocr_video(client, model: str, path: Path, video_frames: int) -> str:
     except (ValueError, subprocess.TimeoutExpired, FileNotFoundError):
         duration = 10.0
 
-    frames: list[Path] = []
-    tmp = tempfile.mkdtemp()
-    for i in range(video_frames):
-        t = duration * (i + 1) / (video_frames + 1)
-        out = Path(tmp) / f"frame_{i}.jpg"
-        try:
-            subprocess.run(
-                ["ffmpeg", "-ss", str(t), "-i", str(path),
-                 "-frames:v", "1", "-q:v", "2", str(out)],
-                capture_output=True, timeout=30,
-            )
-        except (subprocess.TimeoutExpired, FileNotFoundError):
-            continue
-        if out.exists() and out.stat().st_size > 0:
-            frames.append(out)
+    with tempfile.TemporaryDirectory() as tmp:
+        frames: list[Path] = []
+        for i in range(video_frames):
+            t = duration * (i + 1) / (video_frames + 1)
+            out = Path(tmp) / f"frame_{i}.jpg"
+            try:
+                subprocess.run(
+                    ["ffmpeg", "-ss", str(t), "-i", str(path),
+                     "-frames:v", "1", "-q:v", "2", str(out)],
+                    capture_output=True, timeout=30,
+                )
+            except (subprocess.TimeoutExpired, FileNotFoundError):
+                continue
+            if out.exists() and out.stat().st_size > 0:
+                frames.append(out)
 
-    if not frames:
-        return ""
+        if not frames:
+            return ""
 
-    content: list[dict] = [{"type": "text", "text": VIDEO_PROMPT}]
-    for fp in frames:
-        b64 = base64.b64encode(fp.read_bytes()).decode()
-        content.append({
-            "type": "image_url",
-            "image_url": {"url": f"data:image/jpeg;base64,{b64}"},
-        })
-        fp.unlink(missing_ok=True)
+        content: list[dict] = [{"type": "text", "text": VIDEO_PROMPT}]
+        for fp in frames:
+            b64 = base64.b64encode(fp.read_bytes()).decode()
+            content.append({
+                "type": "image_url",
+                "image_url": {"url": f"data:image/jpeg;base64,{b64}"},
+            })
 
-    resp = client.chat.completions.create(
-        model=model,
-        messages=[{"role": "user", "content": content}],
-    )
-    return resp.choices[0].message.content or ""
+        resp = client.chat.completions.create(
+            model=model,
+            messages=[{"role": "user", "content": content}],
+        )
+        return resp.choices[0].message.content or ""
 
 
 def transcribe_audio(
@@ -205,8 +204,6 @@ async def process_message(
             return await asyncio.to_thread(
                 ocr_image, ocr.client, ocr.model, path, ocr.prompt
             )
-        except Exception:
-            return None
         finally:
             path.unlink(missing_ok=True)
 
@@ -231,8 +228,6 @@ async def process_message(
             return await asyncio.to_thread(
                 transcribe_audio, ocr.stt_client, path, ocr.stt_model, ocr.language
             )
-    except Exception:
-        return None
     finally:
         path.unlink(missing_ok=True)
     return None

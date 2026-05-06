@@ -12,8 +12,8 @@ python --version 2>nul || (
     exit /b 1
 )
 
-for /f "tokens=2 delims= " %%v in ('python --version 2^>^&1') do set PYVER=%%v
-for /f "tokens=1,2 delims=." %%a in ("%PYVER%") do set PYMAJOR=%%a& set PYMINOR=%%b
+for /f "tokens=2 delims= " %%v in ('python --version 2^>^&1') do set "PYVER=%%v"
+for /f "tokens=1,2 delims=." %%a in ("%PYVER%") do set "PYMAJOR=%%a"& set "PYMINOR=%%b"
 
 if %PYMAJOR% lss 3 (
     echo Error: Python 3.12+ required. Found %PYVER%. Install from https://python.org
@@ -32,25 +32,47 @@ if not exist ".venv" (
 )
 
 call .venv\Scripts\activate.bat
+if errorlevel 1 (
+    echo Error: Failed to activate .venv.
+    exit /b 1
+)
+
+python -m pip --version >nul 2>nul
+if errorlevel 1 (
+    echo pip not found in venv; bootstrapping with ensurepip...
+    python -m ensurepip --upgrade >nul
+    if errorlevel 1 (
+        echo Error: failed to bootstrap pip with ensurepip.
+        exit /b 1
+    )
+)
 
 echo Installing pinned core dependencies...
-pip install --upgrade pip --quiet
-pip install -r requirements.txt --quiet
+python -m pip install --upgrade pip --quiet
+python -m pip install -r requirements.txt --quiet
 
 echo Installing optional pinned LLM dependencies (openai for summarize.py)...
-pip install -r requirements-llm.txt --quiet 2>nul || echo   ^(openai not installed - summarize.py will need it later^)
+python -m pip install -r requirements-llm.txt --quiet 2>nul || echo   ^(openai not installed - summarize.py will need it later^)
 
-set TELETHON_VERSION=
-for /f "delims=" %%v in ('python -c "import telethon; print(telethon.__version__)" 2^>nul') do set TELETHON_VERSION=%%v
+set "TELETHON_VERSION="
+for /f "delims=" %%v in ('python -c "import telethon; print(telethon.__version__)" 2^>nul') do set "TELETHON_VERSION=%%v"
 if "%TELETHON_VERSION%"=="" (
     echo Error: telethon not importable. Check requirements.txt and venv.
     exit /b 1
 )
 echo telethon %TELETHON_VERSION% OK
 
-REM Configure tgcli (writes to %USERPROFILE%\.config\tgcli\)
-set TGCLI_DIR=%USERPROFILE%\.config\tgcli
-set TGCLI_CONFIG=%TGCLI_DIR%\config.toml
+REM Configure scanner (default path kept for backward compatibility)
+if not "%TG_SCANNER_CONFIG_DIR%"=="" (
+    set "TGCLI_DIR=%TG_SCANNER_CONFIG_DIR%"
+) else (
+    if not "%TGCLI_CONFIG_DIR%"=="" (
+        set "TGCLI_DIR=%TGCLI_CONFIG_DIR%"
+    ) else (
+        set "TGCLI_DIR=%USERPROFILE%\.config\tgcli"
+    )
+)
+set "TGCLI_CONFIG=%TGCLI_DIR%\config.toml"
 
 if not exist "%TGCLI_CONFIG%" (
     if not exist "%TGCLI_DIR%" mkdir "%TGCLI_DIR%"
@@ -66,7 +88,7 @@ if not exist "%TGCLI_CONFIG%" (
     echo    call .venv\Scripts\activate.bat
     echo    scripts\scan.bat channel_lists\example.txt
 ) else (
-    echo tgcli config already exists at %TGCLI_CONFIG% - skipping.
+    echo Scanner config already exists at %TGCLI_CONFIG% - skipping.
     echo To reconfigure, edit: %TGCLI_CONFIG%
 )
 

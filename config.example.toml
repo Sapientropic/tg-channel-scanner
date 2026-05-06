@@ -4,4 +4,5 @@
 
 api_id = 0
 api_hash = "your_api_hash_here"
-session_store = "file"  # "file" stores session at ~/.config/tgcli/session; "keychain" uses the OS keychain. Keep session files secret.
+# scan.py stores the Telethon session at ~/.config/tgcli/session by default.
+# Set TG_SCANNER_CONFIG_DIR to keep config and session files somewhere else.

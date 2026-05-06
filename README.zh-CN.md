@@ -52,6 +52,7 @@ source .venv/bin/activate
 ./scripts/scan.sh channel_lists/example.txt --since 2026-05-06T07:30:00Z
 
 # 输出保存到 output/scan_YYYYMMDD_HHMMSS.jsonl
+# 元数据保存到 output/scan_YYYYMMDD_HHMMSS.meta.json
 # 错误日志在 output/scan_YYYYMMDD_HHMMSS.errors.log
 ```
 
@@ -63,24 +64,56 @@ source .venv/bin/activate
 SCAN_INITIAL_LIMIT=200   # 每个频道初始读取 limit
 SCAN_MAX_LIMIT=5000      # 达到该上限仍饱和则报 incomplete
 SCAN_DELAY=1             # 频道之间等待秒数
+SCAN_MAX_FLOOD_WAIT_SECONDS=300  # 超过该 FloodWait 秒数就让该频道失败
+TG_SCANNER_CONFIG_DIR=~/.config/tgcli  # 可选：配置和 session 目录
 ```
 
-### AI 摘要
+### 生成求职日报
 
 ```bash
-# 方式一：Python 脚本（兼容 OpenAI API）
+# 稳定日报：LLM 做职位语义判断，Python 负责统计和 Markdown 模板
 export OPENAI_API_KEY=sk-your-key
-python scripts/summarize.py --input output/scan_XXXX.jsonl --profile profiles/example.md
+python scripts/report.py --input output/scan_XXXX.jsonl --profile profiles/example.md \
+  --output output/job-scan-report-2026-05-06.md
 
 # 可选：发送给 LLM 前脱敏邮箱、手机号和 Telegram handle
-python scripts/summarize.py --input output/scan_XXXX.jsonl --profile profiles/example.md \
+python scripts/report.py --input output/scan_XXXX.jsonl --profile profiles/example.md \
   --redact-contact-info
 
+# 只预览将发送给 LLM 的抽取 prompt，不发起 API 请求
+python scripts/report.py --input output/scan_XXXX.jsonl --profile profiles/example.md \
+  --dry-run-prompt output/prompt-preview.md
+
 # 兼容 DeepSeek、Ollama 等：
-python scripts/summarize.py --input output/scan_XXXX.jsonl --profile profiles/example.md \
+python scripts/report.py --input output/scan_XXXX.jsonl --profile profiles/example.md \
   --base-url https://api.deepseek.com/v1 --model deepseek-chat
 
-# 方式二：直接把输出文件交给 Codex / Claude / 任何 AI agent
+# 一条命令：先扫描，再生成今天的日报
+python scripts/daily_report.py channel_lists/example.txt --profile profiles/example.md
+```
+
+`report.py` 会把选中的消息和 profile 发送到你配置的 OpenAI-compatible API。LLM 负责语义筛选、匹配理由、风险点和 action 建议；Python 负责去重、统计和固定 Markdown 版式。使用远程 LLM 时，推荐先用 `--dry-run-prompt` 审查 payload；除非申请职位确实需要保留联系人信息，否则可以加 `--redact-contact-info`。
+
+`daily_report.py` 只是本地便利入口，不会创建系统定时任务。需要每天自动运行时，请用 cron 或 Windows Task Scheduler 调用它。
+
+定时示例：
+
+```bash
+# cron：每天 09:00 运行
+0 9 * * * cd /path/to/tg-channel-scanner && .venv/bin/python scripts/daily_report.py channel_lists/example.txt --profile profiles/example.md
+```
+
+```bat
+REM Windows Task Scheduler 的 action
+cmd /c "cd /d C:\path\to\tg-channel-scanner && .venv\Scripts\python.exe scripts\daily_report.py channel_lists\example.txt --profile profiles\example.md"
+```
+
+### 自由格式 AI 摘要
+
+```bash
+python scripts/summarize.py --input output/scan_XXXX.jsonl --profile profiles/example.md
+
+# 也可以直接把输出文件交给 Codex / Claude / 任何 AI agent
 #   把以下两个文件路径给 agent：
 #   - output/ 中的 JSONL 扫描文件
 #   - profiles/ 中的 profile 文件
@@ -88,7 +121,28 @@ python scripts/summarize.py --input output/scan_XXXX.jsonl --profile profiles/ex
 #     "Read output/scan_XXXX.jsonl and filter jobs matching profiles/my-profile.md"
 ```
 
-`summarize.py` 会把选中的 JSONL 消息和 profile 发送到你配置的 OpenAI-compatible API。脚本会在 prompt 中把 Telegram 消息标记为不可信内容，但发送私密频道数据前仍应先确认 LLM 服务商的隐私和数据使用条款。
+`summarize.py` 继续保留，适合不需要固定日报结构和可复现统计的轻量自由摘要。
+
+### 可选 media OCR
+
+Media OCR/STT 默认关闭。开启后，脚本会把匹配消息中的图片、视频缩略图/帧或语音下载到临时文件，并发送到你配置的 OpenAI-compatible API。
+
+```bash
+# xAI vision 默认
+export XAI_API_KEY=your-key
+./scripts/scan.sh channel_lists/example.txt --ocr --ocr-provider xai
+
+# OpenAI vision 默认
+export OPENAI_API_KEY=sk-your-key
+./scripts/scan.sh channel_lists/example.txt --ocr --ocr-provider openai
+
+# 自定义 OpenAI-compatible endpoint
+export OPENAI_API_KEY=your-key
+./scripts/scan.sh channel_lists/example.txt --ocr --ocr-provider custom \
+  --ocr-base-url http://localhost:11434/v1 --ocr-model your-vision-model
+```
+
+默认视频 OCR 只使用缩略图。`--ocr-full-video` 会下载完整视频并抽帧，这个模式要求 `ffmpeg` 和 `ffprobe` 已在 `PATH` 中。
 
 ---
 
@@ -98,15 +152,15 @@ python scripts/summarize.py --input output/scan_XXXX.jsonl --profile profiles/ex
 Telegram 频道
   → Telethon 读取消息（MTProto，精确时间过滤，含 media 信息）
     → scanner 做饱和检测 + 完整性检查
-    → 保存到 output/（JSONL，含 has_photo / media_type 字段）
-      → AI 过滤 + 摘要
-        → 结构化报告
+    → 保存到 output/（JSONL + metadata sidecar）
+      → LLM 抽取匹配职位、理由、风险点和 action
+        → Python 去重、统计并渲染固定 Markdown 日报
 ```
 
 1. **读取**：Telethon（MTProto user client）读取你已订阅频道的消息，包括图片等 media 元数据
 2. **过滤**：`scripts/scan.py` 按精确时间过滤，并拒绝静默接受已打满的读取上限
-3. **保存**：消息保存为 JSONL，包含日期、发送者、文本、频道信息、media 字段
-4. **摘要**：你选择的 LLM 生成过滤后、去重的报告
+3. **保存**：消息保存为 JSONL，包含日期、发送者、文本、频道信息、media 字段，并同步写 `.meta.json`
+4. **日报**：LLM 做语义匹配，Python 生成可复现统计和固定 Markdown 分区
 
 ## 目录结构
 
@@ -115,6 +169,7 @@ tg-channel-scanner/
 ├── config.example.toml      # 配置模板（实际配置在 ~/.config/tgcli/）
 ├── requirements.txt         # 锁定 scanner 依赖（telethon）
 ├── requirements-llm.txt     # 锁定可选摘要依赖
+├── requirements-dev.txt     # 锁定测试依赖
 ├── setup.sh / setup.bat     # 一键安装脚本
 ├── profiles/                # 候选人/筛选 profile
 │   └── example.md           # 示例：前端工程师求职
@@ -124,6 +179,10 @@ tg-channel-scanner/
 │   ├── scan.sh              # 批量频道读取（Mac/Linux）
 │   ├── scan.bat             # 批量频道读取（Windows）
 │   ├── scan.py              # 跨平台扫描核心（Telethon）
+│   ├── media_ocr.py         # 共享 OCR/STT helper
+│   ├── ocr_media.py         # 独立 OCR 重新处理脚本
+│   ├── report.py            # 稳定求职日报生成器
+│   ├── daily_report.py      # 扫描 + 日报便利入口
 │   └── summarize.py         # 可选 LLM 摘要
 ├── output/                  # 扫描结果（已 gitignore）
 └── docs/
@@ -168,15 +227,15 @@ React Job | JavaScript | Вакансии
 
 ## 安全与 Telegram ToS
 
-本工具读取你已订阅频道的消息——等同于手动滚动浏览。
+本工具读取你已订阅频道的消息。建议只用于个人监控，并保持温和的扫描频率。
 
 **要点：**
-- 没有频道数量硬限制——50+ 个频道配合 1 秒间隔完全没问题
-- 按需扫描：不限次数
-- 自动化扫描：每天一次很安全，更频繁也可以
+- 项目本身没有频道数量硬限制，但 Telegram 仍可能对账号做速率限制
+- 按需或定时扫描都要尊重 `FloodWaitError`
 - 使用真实账号（非新建/虚拟手机号账号）
+- 不要把 Telegram 数据用于 AI 训练、转售、再分发或批量采集
 
-主要约束是 Telegram 的 **FloodWaitError**（速率限制），不是封号。详见 [docs/tos-risk-analysis.md](docs/tos-risk-analysis.md)。
+Telegram 的 **FloodWaitError** 是正常限流信号；如果滥用 API，账号限制仍然可能发生。详见 [docs/tos-risk-analysis.md](docs/tos-risk-analysis.md)。
 
 ## Windows
 
@@ -201,6 +260,7 @@ scripts\scan.bat channel_lists\example.txt
 | 扫描到 0 条消息 | 检查 `output/*.errors.log` 中的错误 |
 | 扫描提示 incomplete | 提高 `SCAN_MAX_LIMIT` 或缩小时间窗口 |
 | Session 过期/未授权 | 删除 `~/.config/tgcli/session` 后重新运行，scan.py 会引导登录 |
+| OCR 没有运行 | 需要显式传 `--ocr`，并设置 `XAI_API_KEY` 或 `OPENAI_API_KEY` |
 
 ## 许可证
 

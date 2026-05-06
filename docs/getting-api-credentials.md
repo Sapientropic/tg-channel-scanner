@@ -1,6 +1,6 @@
 # Getting Telegram API Credentials
 
-You need `api_id` and `api_hash` from Telegram to use tgcli. Here's how to get them.
+You need `api_id` and `api_hash` from Telegram to use this scanner. Here's how to get them.
 
 ## Normal Method
 
@@ -40,7 +40,8 @@ Do **not** use GitHub Codespaces, Colab, hosted browsers, or other remote cloud 
 
 ## After Getting Credentials
 
-Edit the tgcli config created by setup:
+Edit the scanner config created by setup. The default path remains under
+`tgcli` for backward compatibility with older local installs:
 
 - Mac/Linux: `~/.config/tgcli/config.toml`
 - Windows: `%USERPROFILE%\.config\tgcli\config.toml`
@@ -48,22 +49,25 @@ Edit the tgcli config created by setup:
 ```toml
 api_id = 12345678
 api_hash = "your_api_hash_here"
-session_store = "file"
 ```
 
-Then authenticate:
+Then run a scan. If no saved Telethon session exists, `scripts/scan.py` will
+prompt for your phone number and Telegram verification code:
 
 ```bash
 # Mac/Linux
 source .venv/bin/activate
-tg auth login
+./scripts/scan.sh channel_lists/example.txt
 
 # Windows
-.venv\Scripts\activate.bat
-tg auth login
+call .venv\Scripts\activate.bat
+scripts\scan.bat channel_lists\example.txt
 ```
 
-Telegram will send a verification code to your app. Enter it when prompted.
+If your Telegram account has two-factor authentication enabled, the scanner
+will also ask for your Telegram password. The saved session is written to
+`~/.config/tgcli/session` by default. Set `TG_SCANNER_CONFIG_DIR` if you want
+both config and session files in a different directory.
 
 ## Security Notes
 

@@ -52,6 +52,7 @@ source .venv/bin/activate
 ./scripts/scan.sh channel_lists/example.txt --since 2026-05-06T07:30:00Z
 
 # Output goes to output/scan_YYYYMMDD_HHMMSS.jsonl
+# Metadata goes to output/scan_YYYYMMDD_HHMMSS.meta.json
 # Errors go to output/scan_YYYYMMDD_HHMMSS.errors.log
 ```
 
@@ -63,24 +64,56 @@ Useful environment variables:
 SCAN_INITIAL_LIMIT=200   # initial read limit per channel
 SCAN_MAX_LIMIT=5000      # hard cap before reporting incomplete
 SCAN_DELAY=1             # seconds between channels
+SCAN_MAX_FLOOD_WAIT_SECONDS=300  # fail the channel instead of sleeping longer
+TG_SCANNER_CONFIG_DIR=~/.config/tgcli  # optional config/session directory override
 ```
 
-### Summarize with AI
+### Generate a daily job report
 
 ```bash
-# Option 1: Python script (OpenAI-compatible API)
+# Stable report pipeline: LLM extracts job reasoning; Python renders stats + Markdown
 export OPENAI_API_KEY=sk-your-key
-python scripts/summarize.py --input output/scan_XXXX.jsonl --profile profiles/example.md
+python scripts/report.py --input output/scan_XXXX.jsonl --profile profiles/example.md \
+  --output output/job-scan-report-2026-05-06.md
 
 # Optional: redact emails, phone numbers, and Telegram handles before sending
-python scripts/summarize.py --input output/scan_XXXX.jsonl --profile profiles/example.md \
+python scripts/report.py --input output/scan_XXXX.jsonl --profile profiles/example.md \
   --redact-contact-info
 
+# Preview the exact extraction prompt without calling the LLM
+python scripts/report.py --input output/scan_XXXX.jsonl --profile profiles/example.md \
+  --dry-run-prompt output/prompt-preview.md
+
 # Works with DeepSeek, Ollama, etc:
-python scripts/summarize.py --input output/scan_XXXX.jsonl --profile profiles/example.md \
+python scripts/report.py --input output/scan_XXXX.jsonl --profile profiles/example.md \
   --base-url https://api.deepseek.com/v1 --model deepseek-chat
 
-# Option 2: Feed output directly to Codex / Claude / any AI agent
+# One command: scan then generate today's report
+python scripts/daily_report.py channel_lists/example.txt --profile profiles/example.md
+```
+
+`report.py` sends selected messages and the profile to your configured OpenAI-compatible API. The LLM handles semantic matching, reasons, concerns, and action recommendations; Python handles deduplication, statistics, and the final Markdown template. For remote LLM providers, `--redact-contact-info` is recommended unless contact details are needed for applying. Use `--dry-run-prompt` to review the exact payload before sending.
+
+`daily_report.py` is a local convenience wrapper. It does not install a scheduler; use cron or Windows Task Scheduler if you want it to run daily.
+
+Daily scheduling examples:
+
+```bash
+# cron: run every day at 09:00
+0 9 * * * cd /path/to/tg-channel-scanner && .venv/bin/python scripts/daily_report.py channel_lists/example.txt --profile profiles/example.md
+```
+
+```bat
+REM Windows Task Scheduler action
+cmd /c "cd /d C:\path\to\tg-channel-scanner && .venv\Scripts\python.exe scripts\daily_report.py channel_lists\example.txt --profile profiles\example.md"
+```
+
+### Free-form AI summary
+
+```bash
+python scripts/summarize.py --input output/scan_XXXX.jsonl --profile profiles/example.md
+
+# Or feed output directly to Codex / Claude / any AI agent
 #   Point your agent at:
 #   - The JSONL scan file in output/
 #   - Your profile in profiles/
@@ -88,7 +121,28 @@ python scripts/summarize.py --input output/scan_XXXX.jsonl --profile profiles/ex
 #     "Read output/scan_XXXX.jsonl and filter jobs matching profiles/my-profile.md"
 ```
 
-`summarize.py` sends the selected JSONL messages and profile to your configured OpenAI-compatible API. Telegram messages are treated as untrusted content in the prompt, but you should still review your LLM provider's privacy/data-use terms before sending private channel data.
+`summarize.py` remains available for a lightweight free-form digest when you do not need deterministic statistics or a fixed daily-report layout.
+
+### Optional media OCR
+
+Media OCR/STT is **off by default**. Enabling it downloads matching media to temporary files and uploads images, video thumbnails/frames, or voice audio to your configured OpenAI-compatible API.
+
+```bash
+# xAI vision default
+export XAI_API_KEY=your-key
+./scripts/scan.sh channel_lists/example.txt --ocr --ocr-provider xai
+
+# OpenAI vision default
+export OPENAI_API_KEY=sk-your-key
+./scripts/scan.sh channel_lists/example.txt --ocr --ocr-provider openai
+
+# Custom OpenAI-compatible endpoint
+export OPENAI_API_KEY=your-key
+./scripts/scan.sh channel_lists/example.txt --ocr --ocr-provider custom \
+  --ocr-base-url http://localhost:11434/v1 --ocr-model your-vision-model
+```
+
+By default, video OCR uses the thumbnail only. `--ocr-full-video` downloads the full video and extracts frames; that mode requires `ffmpeg` and `ffprobe` on `PATH`.
 
 ---
 
@@ -98,15 +152,15 @@ python scripts/summarize.py --input output/scan_XXXX.jsonl --profile profiles/ex
 Telegram Channels
   → Telethon reads messages (MTProto, precise time filter)
     → scanner detects saturation + completeness
-    → saved to output/ (JSONL with media info)
-      → AI agent filters + summarizes
-        → structured report
+    → saved to output/ (JSONL + metadata sidecar)
+      → LLM extracts matching jobs with reasons/concerns/actions
+        → Python deduplicates, counts, and renders the daily Markdown report
 ```
 
 1. **Read**: Telethon (MTProto user client) reads messages from channels you've subscribed to, including media metadata
 2. **Filter**: `scripts/scan.py` filters by precise timestamp and refuses to silently accept saturated limits
-3. **Save**: Messages are saved as JSONL with date, sender, text, channel info, and media fields (`has_photo`, `media_type`)
-4. **Summarize**: Your preferred LLM generates a filtered, deduplicated report
+3. **Save**: Messages are saved as JSONL with date, sender, text, channel info, media fields, and a `.meta.json` scan sidecar
+4. **Report**: The LLM performs semantic job matching; Python renders deterministic stats and Markdown sections
 
 ## Directory Structure
 
@@ -115,6 +169,7 @@ tg-channel-scanner/
 ├── config.example.toml      # Template (actual config at ~/.config/tgcli/)
 ├── requirements.txt         # Pinned scanner dependency (telethon)
 ├── requirements-llm.txt     # Pinned optional summarizer dependency
+├── requirements-dev.txt     # Pinned test dependency
 ├── setup.sh / setup.bat     # One-command installer
 ├── profiles/                # Candidate/filter profiles
 │   └── example.md           # Example: Frontend Developer job search
@@ -124,6 +179,10 @@ tg-channel-scanner/
 │   ├── scan.sh              # Batch channel reader (Mac/Linux)
 │   ├── scan.bat             # Batch channel reader (Windows)
 │   ├── scan.py              # Cross-platform scanner core (Telethon)
+│   ├── media_ocr.py         # Shared OCR/STT helpers
+│   ├── ocr_media.py         # Standalone OCR re-processor
+│   ├── report.py            # Deterministic daily job report generator
+│   ├── daily_report.py      # Scan + report convenience pipeline
 │   └── summarize.py         # Optional LLM summarizer
 ├── output/                  # Scan results (gitignored)
 └── docs/
@@ -168,15 +227,15 @@ Lines starting with `#` are comments.
 
 ## Safety & Telegram ToS
 
-This tool reads messages from channels you've already subscribed to — equivalent to scrolling through them manually.
+This tool reads messages from channels you've already subscribed to. Use it for personal monitoring and keep the scan rate modest.
 
 **Key points:**
-- No hard limit on channels — 50+ is fine with 1-second delays between reads
-- On-demand scans: no limit
-- Automated scans: daily is safe, more frequent is fine too
+- There is no project-level hard limit on channel count, but Telegram can rate-limit accounts
+- On-demand and scheduled scans should respect `FloodWaitError`
 - Use your real account (not a new/virtual number account)
+- Do not use Telegram data for AI training, resale, redistribution, or bulk harvesting
 
-The main constraint is Telegram's **FloodWaitError** (rate limiting), not account bans. See [docs/tos-risk-analysis.md](docs/tos-risk-analysis.md) for full details.
+Telegram's **FloodWaitError** is the normal rate-limit signal; account restrictions can still happen if the API is abused. See [docs/tos-risk-analysis.md](docs/tos-risk-analysis.md) for full details.
 
 ## Windows
 
@@ -201,6 +260,7 @@ scripts\scan.bat channel_lists\example.txt
 | 0 messages collected | Check `output/*.errors.log` for failures |
 | Scan exits with incomplete channel | Raise `SCAN_MAX_LIMIT` or narrow the time window |
 | Session expired / not authorized | Delete `~/.config/tgcli/session` and re-run; scan.py will prompt for login |
+| OCR does not run | Pass `--ocr` explicitly and set `XAI_API_KEY` or `OPENAI_API_KEY` |
 
 ## License
 

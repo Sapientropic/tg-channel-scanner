@@ -62,21 +62,18 @@ if [ -z "${VIRTUAL_ENV:-}" ]; then
     exit 1
 fi
 
-# --- Install dependencies ---
-echo "Installing pinned core dependencies..."
-if [ "$USE_UV" = true ]; then
-    uv pip install -r requirements.txt
-else
-    pip install --upgrade pip --quiet
-    pip install -r requirements.txt --quiet
+if ! python -m pip --version >/dev/null 2>&1; then
+    echo "pip not found in venv; bootstrapping with ensurepip..."
+    python -m ensurepip --upgrade >/dev/null
 fi
 
+# --- Install dependencies ---
+echo "Installing pinned core dependencies..."
+python -m pip install --upgrade pip --quiet
+python -m pip install -r requirements.txt --quiet
+
 echo "Installing optional pinned LLM dependencies (openai for summarize.py)..."
-if [ "$USE_UV" = true ]; then
-    uv pip install -r requirements-llm.txt 2>/dev/null || echo "  (openai not installed — summarize.py will need it later)"
-else
-    pip install -r requirements-llm.txt --quiet 2>/dev/null || echo "  (openai not installed — summarize.py will need it later)"
-fi
+python -m pip install -r requirements-llm.txt --quiet 2>/dev/null || echo "  (openai not installed — summarize.py will need it later)"
 
 TELETHON_VERSION="$(python -c "import telethon; print(telethon.__version__)" 2>/dev/null || true)"
 if [ -z "$TELETHON_VERSION" ]; then
@@ -85,8 +82,8 @@ if [ -z "$TELETHON_VERSION" ]; then
 fi
 echo "telethon $TELETHON_VERSION OK"
 
-# --- Configure tgcli (writes to global config at ~/.config/tgcli/) ---
-TGCLI_CONFIG_DIR="$HOME/.config/tgcli"
+# --- Configure scanner (default path kept for backward compatibility) ---
+TGCLI_CONFIG_DIR="${TG_SCANNER_CONFIG_DIR:-${TGCLI_CONFIG_DIR:-$HOME/.config/tgcli}}"
 TGCLI_CONFIG="$TGCLI_CONFIG_DIR/config.toml"
 
 if [ ! -f "$TGCLI_CONFIG" ]; then
@@ -103,7 +100,7 @@ if [ ! -f "$TGCLI_CONFIG" ]; then
     echo "   source .venv/bin/activate"
     echo "   ./scripts/scan.sh channel_lists/example.txt"
 else
-    echo "tgcli config already exists at $TGCLI_CONFIG — skipping."
+    echo "Scanner config already exists at $TGCLI_CONFIG — skipping."
     echo "To reconfigure, edit: $TGCLI_CONFIG"
 fi
 

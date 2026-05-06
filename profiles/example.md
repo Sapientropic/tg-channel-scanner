@@ -26,6 +26,13 @@
 4. For high matches, include direct application link if available
 5. Output in structured Markdown with sections: High Match → Medium Match → Low Match
 
+## Report Preferences
+- Keep low-priority roles when they are useful boundary examples, such as Russia office-only or junior roles
+- Preserve contact details when they are needed for applying
+- Explain why each high match is worth applying to now
+- For medium matches, state exactly what needs to be verified before applying
+- For low matches, state which criterion would need to change
+
 ---
 
 *Copy this file and customize for your own profile:*
