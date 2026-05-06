@@ -61,40 +61,48 @@ class ScanTests(unittest.TestCase):
         self.assertEqual([row["id"] for row in kept], [2, 3])
         self.assertEqual(skipped, 0)
 
-    def test_channel_read_doubles_limit_until_result_is_not_saturated(self):
+    def test_channel_read_stops_at_cutoff(self):
         cutoff = datetime(2026, 5, 6, 7, 30, tzinfo=timezone.utc)
-        batch1 = [
-            _make_mock_message(3, "2026-05-06T08:00:00+00:00"),
-            _make_mock_message(2, "2026-05-06T07:30:00+00:00"),
-        ]
-        batch2 = [
+        msgs = [
             _make_mock_message(3, "2026-05-06T08:00:00+00:00"),
             _make_mock_message(2, "2026-05-06T07:30:00+00:00"),
             _make_mock_message(1, "2026-05-06T06:00:00+00:00"),
         ]
 
         client = MagicMock()
-        client.get_messages = AsyncMock(side_effect=[batch1, batch2])
+
+        async def _iter_msgs(*a, **kw):
+            for m in msgs:
+                yield m
+
+        client.iter_messages = _iter_msgs
 
         result = asyncio.run(
-            scan.read_channel(client, "entity", "jobs", cutoff, 2, 4)
+            scan.read_channel(client, "entity", "jobs", cutoff, 2, 5000)
         )
 
         self.assertFalse(result.incomplete)
         self.assertEqual(result.raw_count, 3)
         self.assertEqual([m["id"] for m in result.messages], [3, 2])
 
-    def test_channel_read_reports_incomplete_when_max_limit_is_still_saturated(self):
+    def test_channel_read_reports_incomplete_at_safety_cap(self):
         cutoff = datetime(2026, 5, 6, 7, 30, tzinfo=timezone.utc)
+        # All messages within window — iter_messages yields until safety cap
         msgs = [
-            _make_mock_message(4, "2026-05-06T09:00:00+00:00"),
-            _make_mock_message(3, "2026-05-06T08:00:00+00:00"),
-            _make_mock_message(2, "2026-05-06T07:30:00+00:00"),
-            _make_mock_message(1, "2026-05-06T06:00:00+00:00"),
+            _make_mock_message(i, "2026-05-06T09:00:00+00:00") for i in range(6)
         ]
 
         client = MagicMock()
-        client.get_messages = AsyncMock(side_effect=[msgs[:2], msgs])
+
+        async def _iter_msgs(*a, limit=None, **kw):
+            count = 0
+            for m in msgs:
+                if limit is not None and count >= limit:
+                    return
+                yield m
+                count += 1
+
+        client.iter_messages = _iter_msgs
 
         result = asyncio.run(
             scan.read_channel(client, "entity", "jobs", cutoff, 2, 4)

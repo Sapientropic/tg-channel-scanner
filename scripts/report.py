@@ -944,7 +944,7 @@ def render_html(
         stat_deduped=stats["duplicates_removed"],
         profile_items=profile_items,
         sections="\n\n".join(sections),
-        footer_note=_esc(footer_note),
+        footer_note=f" {_esc(footer_note)}" if footer_note else "",
     )
 
 
