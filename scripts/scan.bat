@@ -1,4 +1,5 @@
 @echo off
+setlocal enabledelayedexpansion
 REM Batch-read Telegram channels (Windows)
 REM Usage: scripts\scan.bat <channel_list.txt> [hours]
 
