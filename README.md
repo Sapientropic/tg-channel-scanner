@@ -25,7 +25,7 @@ chmod +x setup.sh scripts/scan.sh
 ./setup.sh
 ```
 
-> `setup.sh` installs pinned dependencies from `requirements.txt` / `requirements-llm.txt`, verifies [pytgcli](https://github.com/tksohishi/tgcli) provides the expected `tg` command, and writes config to `~/.config/tgcli/config.toml`.
+> `setup.sh` installs pinned dependencies from `requirements.txt` / `requirements-llm.txt` and verifies Telethon is available.
 
 ### Configure
 
@@ -34,12 +34,9 @@ chmod +x setup.sh scripts/scan.sh
 #    (setup.sh created it at ~/.config/tgcli/config.toml)
 nano ~/.config/tgcli/config.toml
 
-# 2. Activate venv and login to Telegram
+# 2. Run a scan (first run prompts for login if no session exists)
 source .venv/bin/activate
-tg auth login
-
-# 3. Verify
-tg auth status
+./scripts/scan.sh channel_lists/example.txt
 ```
 
 ### Run a scan
@@ -58,12 +55,12 @@ tg auth status
 # Errors go to output/scan_YYYYMMDD_HHMMSS.errors.log
 ```
 
-The scanner uses an exact UTC cutoff. Because `tgcli` currently accepts date-only `--after` values, the wrapper over-reads from that UTC date and filters JSONL locally. It increases `tg read --limit` until the result is no longer saturated; if a channel still reaches `SCAN_MAX_LIMIT`, the scan exits non-zero and marks that channel incomplete instead of silently dropping messages.
+The scanner reads messages via Telethon (MTProto user client) with a precise UTC cutoff. It increases the read limit until all messages in the time window are collected; if a channel still reaches `SCAN_MAX_LIMIT`, the scan exits non-zero and marks that channel incomplete instead of silently dropping messages.
 
 Useful environment variables:
 
 ```bash
-SCAN_INITIAL_LIMIT=200   # first tg read limit per channel
+SCAN_INITIAL_LIMIT=200   # initial read limit per channel
 SCAN_MAX_LIMIT=5000      # hard cap before reporting incomplete
 SCAN_DELAY=1             # seconds between channels
 ```
@@ -99,16 +96,16 @@ python scripts/summarize.py --input output/scan_XXXX.jsonl --profile profiles/ex
 
 ```
 Telegram Channels
-  → tgcli reads messages (JSONL, date floor)
-    → scanner filters exact cutoff + completeness
-    → saved to output/
+  → Telethon reads messages (MTProto, precise time filter)
+    → scanner detects saturation + completeness
+    → saved to output/ (JSONL with media info)
       → AI agent filters + summarizes
         → structured report
 ```
 
-1. **Read**: `tgcli` (Telethon-based CLI) reads messages from channels you've subscribed to
+1. **Read**: Telethon (MTProto user client) reads messages from channels you've subscribed to, including media metadata
 2. **Filter**: `scripts/scan.py` filters by precise timestamp and refuses to silently accept saturated limits
-3. **Save**: Messages are saved as JSONL with date, sender, text, channel info
+3. **Save**: Messages are saved as JSONL with date, sender, text, channel info, and media fields (`has_photo`, `media_type`)
 4. **Summarize**: Your preferred LLM generates a filtered, deduplicated report
 
 ## Directory Structure
@@ -116,9 +113,9 @@ Telegram Channels
 ```
 tg-channel-scanner/
 ├── config.example.toml      # Template (actual config at ~/.config/tgcli/)
-├── requirements.txt         # Pinned scanner dependency
+├── requirements.txt         # Pinned scanner dependency (telethon)
 ├── requirements-llm.txt     # Pinned optional summarizer dependency
-├── setup.sh                 # One-command installer
+├── setup.sh / setup.bat     # One-command installer
 ├── profiles/                # Candidate/filter profiles
 │   └── example.md           # Example: Frontend Developer job search
 ├── channel_lists/           # Channel name lists (one per line)
@@ -126,7 +123,7 @@ tg-channel-scanner/
 ├── scripts/
 │   ├── scan.sh              # Batch channel reader (Mac/Linux)
 │   ├── scan.bat             # Batch channel reader (Windows)
-│   ├── scan.py              # Cross-platform scanner core
+│   ├── scan.py              # Cross-platform scanner core (Telethon)
 │   └── summarize.py         # Optional LLM summarizer
 ├── output/                  # Scan results (gitignored)
 └── docs/
@@ -191,7 +188,6 @@ This creates config at `%USERPROFILE%\.config\tgcli\config.toml` — edit it wit
 
 ```bat
 call .venv\Scripts\activate.bat
-tg auth login
 scripts\scan.bat channel_lists\example.txt
 ```
 
@@ -199,12 +195,12 @@ scripts\scan.bat channel_lists\example.txt
 
 | Problem | Fix |
 |---------|-----|
-| `tg: command not found` | Activate venv first: `source .venv/bin/activate` |
-| `Permission denied` on `.sh` | `chmod +x setup.sh scripts/scan.sh` |
+| `ModuleNotFoundError: telethon` | Activate venv first: `source .venv/bin/activate` |
+| `.sh` scripts `Permission denied` | `chmod +x setup.sh scripts/scan.sh` |
 | my.telegram.org shows ERROR | See [docs/getting-api-credentials.md](docs/getting-api-credentials.md) |
 | 0 messages collected | Check `output/*.errors.log` for failures |
-| Scan exits with incomplete channel | Raise `SCAN_MAX_LIMIT` or narrow the time window; the script refused to claim completeness after reaching the cap |
-| tgcli version mismatch during setup | Re-run setup after checking `requirements.txt`; this repo is verified against pinned `pytgcli` |
+| Scan exits with incomplete channel | Raise `SCAN_MAX_LIMIT` or narrow the time window |
+| Session expired / not authorized | Delete `~/.config/tgcli/session` and re-run; scan.py will prompt for login |
 
 ## License
 

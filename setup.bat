@@ -40,14 +40,13 @@ pip install -r requirements.txt --quiet
 echo Installing optional pinned LLM dependencies (openai for summarize.py)...
 pip install -r requirements-llm.txt --quiet 2>nul || echo   ^(openai not installed - summarize.py will need it later^)
 
-set EXPECTED_TG_VERSION=0.9.0
-set TG_VERSION=
-for /f "delims=" %%v in ('tg --version 2^>nul') do set TG_VERSION=%%v
-if not "%TG_VERSION%"=="%EXPECTED_TG_VERSION%" (
-    echo Error: expected tgcli %EXPECTED_TG_VERSION%, got "%TG_VERSION%".
-    echo Check requirements.txt before continuing.
+set TELETHON_VERSION=
+for /f "delims=" %%v in ('python -c "import telethon; print(telethon.__version__)" 2^>nul') do set TELETHON_VERSION=%%v
+if "%TELETHON_VERSION%"=="" (
+    echo Error: telethon not importable. Check requirements.txt and venv.
     exit /b 1
 )
+echo telethon %TELETHON_VERSION% OK
 
 REM Configure tgcli (writes to %USERPROFILE%\.config\tgcli\)
 set TGCLI_DIR=%USERPROFILE%\.config\tgcli
@@ -63,11 +62,8 @@ if not exist "%TGCLI_CONFIG%" (
     echo    Get your api_id and api_hash from: https://my.telegram.org/apps
     echo    ^(If the form shows ERROR, see docs\getting-api-credentials.md^)
     echo.
-    echo 2. Login to Telegram:
+    echo 2. Run a scan (first run will prompt for login if no session):
     echo    call .venv\Scripts\activate.bat
-    echo    tg auth login
-    echo.
-    echo 3. Run a scan:
     echo    scripts\scan.bat channel_lists\example.txt
 ) else (
     echo tgcli config already exists at %TGCLI_CONFIG% - skipping.
@@ -77,6 +73,6 @@ if not exist "%TGCLI_CONFIG%" (
 if not exist "output" mkdir output
 
 echo.
-echo Setup complete. Next: edit config and run 'tg auth login'
+echo Setup complete. Next: edit config and run a scan
 echo   Config:  %TGCLI_CONFIG%
-echo   Verify:  call .venv\Scripts\activate.bat ^&^& tg auth status
+echo   Scan:    call .venv\Scripts\activate.bat ^&^& scripts\scan.bat channel_lists\example.txt

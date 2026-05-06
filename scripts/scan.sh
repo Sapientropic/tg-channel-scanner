@@ -22,10 +22,5 @@ if [ -z "${VIRTUAL_ENV:-}" ]; then
     exit 1
 fi
 
-if ! command -v tg &>/dev/null; then
-    echo "Error: tg command not found in venv. Run setup.sh first." >&2
-    exit 1
-fi
-
 cd "$SCRIPT_DIR"
 python scripts/scan.py "$@"

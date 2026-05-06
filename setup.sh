@@ -78,13 +78,12 @@ else
     pip install -r requirements-llm.txt --quiet 2>/dev/null || echo "  (openai not installed — summarize.py will need it later)"
 fi
 
-EXPECTED_TG_VERSION="0.9.0"
-TG_VERSION="$(tg --version 2>/dev/null || true)"
-if [ "$TG_VERSION" != "$EXPECTED_TG_VERSION" ]; then
-    echo "Error: expected tgcli $EXPECTED_TG_VERSION, got '${TG_VERSION:-not found}'." >&2
-    echo "Check requirements.txt before continuing." >&2
+TELETHON_VERSION="$(python -c "import telethon; print(telethon.__version__)" 2>/dev/null || true)"
+if [ -z "$TELETHON_VERSION" ]; then
+    echo "Error: telethon not importable. Check requirements.txt and venv." >&2
     exit 1
 fi
+echo "telethon $TELETHON_VERSION OK"
 
 # --- Configure tgcli (writes to global config at ~/.config/tgcli/) ---
 TGCLI_CONFIG_DIR="$HOME/.config/tgcli"
@@ -100,11 +99,8 @@ if [ ! -f "$TGCLI_CONFIG" ]; then
     echo "   Get your api_id and api_hash from: https://my.telegram.org/apps"
     echo "   (If the form shows ERROR, see docs/getting-api-credentials.md)"
     echo ""
-    echo "2. Login to Telegram:"
+    echo "2. Run a scan (first run will prompt for login if no session):"
     echo "   source .venv/bin/activate"
-    echo "   tg auth login"
-    echo ""
-    echo "3. Run a scan:"
     echo "   ./scripts/scan.sh channel_lists/example.txt"
 else
     echo "tgcli config already exists at $TGCLI_CONFIG — skipping."
@@ -118,6 +114,6 @@ chmod +x scripts/scan.sh 2>/dev/null || true
 mkdir -p output
 
 echo ""
-echo "Setup complete. Next: edit config and run 'tg auth login'"
+echo "Setup complete. Next: edit config and run a scan"
 echo "  Config:  $TGCLI_CONFIG"
-echo "  Verify:  source .venv/bin/activate && tg auth status"
+echo "  Scan:    source .venv/bin/activate && ./scripts/scan.sh channel_lists/example.txt"

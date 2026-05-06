@@ -22,11 +22,5 @@ if errorlevel 1 (
     exit /b 1
 )
 
-where tg >nul 2>nul
-if errorlevel 1 (
-    echo Error: tg command not found in venv. Run setup.bat first.
-    exit /b 1
-)
-
 python "scripts\scan.py" %*
 exit /b %ERRORLEVEL%

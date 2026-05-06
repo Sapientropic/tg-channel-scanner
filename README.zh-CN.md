@@ -25,7 +25,7 @@ chmod +x setup.sh scripts/scan.sh
 ./setup.sh
 ```
 
-> `setup.sh` 会从 `requirements.txt` / `requirements-llm.txt` 安装锁定依赖，校验 [pytgcli](https://github.com/tksohishi/tgcli) 提供预期版本的 `tg` 命令，并把配置写入 `~/.config/tgcli/config.toml`。
+> `setup.sh` 会从 `requirements.txt` / `requirements-llm.txt` 安装锁定依赖，并验证 Telethon 可用。
 
 ### 配置
 
@@ -34,12 +34,9 @@ chmod +x setup.sh scripts/scan.sh
 #    （setup.sh 已创建 ~/.config/tgcli/config.toml）
 nano ~/.config/tgcli/config.toml
 
-# 2. 激活 venv 并登录 Telegram
+# 2. 运行扫描（首次运行如无 session 会自动引导登录）
 source .venv/bin/activate
-tg auth login
-
-# 3. 验证
-tg auth status
+./scripts/scan.sh channel_lists/example.txt
 ```
 
 ### 运行扫描
@@ -58,12 +55,12 @@ tg auth status
 # 错误日志在 output/scan_YYYYMMDD_HHMMSS.errors.log
 ```
 
-扫描器使用精确 UTC cutoff。由于 `tgcli` 当前只接受日期级 `--after`，本仓包装层会先从该 UTC 日期开始多读，再在本地按精确时间过滤 JSONL。若 `tg read --limit` 结果被打满，脚本会自动扩大 limit；如果频道达到 `SCAN_MAX_LIMIT` 仍可能不完整，脚本会非零退出并在日志里标记 incomplete，不会静默漏消息。
+扫描器通过 Telethon（MTProto user client）读取消息，使用精确 UTC cutoff。若读取结果达到 limit 上限，脚本会自动扩大 limit；如果频道达到 `SCAN_MAX_LIMIT` 仍可能不完整，脚本会非零退出并在日志里标记 incomplete，不会静默漏消息。
 
 常用环境变量：
 
 ```bash
-SCAN_INITIAL_LIMIT=200   # 每个频道初始 tg read limit
+SCAN_INITIAL_LIMIT=200   # 每个频道初始读取 limit
 SCAN_MAX_LIMIT=5000      # 达到该上限仍饱和则报 incomplete
 SCAN_DELAY=1             # 频道之间等待秒数
 ```
@@ -99,16 +96,16 @@ python scripts/summarize.py --input output/scan_XXXX.jsonl --profile profiles/ex
 
 ```
 Telegram 频道
-  → tgcli 读取消息（JSONL，日期下界）
-    → scanner 做精确 cutoff 过滤 + 完整性检查
-    → 保存到 output/
+  → Telethon 读取消息（MTProto，精确时间过滤，含 media 信息）
+    → scanner 做饱和检测 + 完整性检查
+    → 保存到 output/（JSONL，含 has_photo / media_type 字段）
       → AI 过滤 + 摘要
         → 结构化报告
 ```
 
-1. **读取**：`tgcli`（基于 Telethon 的命令行工具）读取你已订阅频道的消息
+1. **读取**：Telethon（MTProto user client）读取你已订阅频道的消息，包括图片等 media 元数据
 2. **过滤**：`scripts/scan.py` 按精确时间过滤，并拒绝静默接受已打满的读取上限
-3. **保存**：消息保存为 JSONL，包含日期、发送者、文本、频道信息
+3. **保存**：消息保存为 JSONL，包含日期、发送者、文本、频道信息、media 字段
 4. **摘要**：你选择的 LLM 生成过滤后、去重的报告
 
 ## 目录结构
@@ -116,9 +113,9 @@ Telegram 频道
 ```
 tg-channel-scanner/
 ├── config.example.toml      # 配置模板（实际配置在 ~/.config/tgcli/）
-├── requirements.txt         # 锁定 scanner 依赖
+├── requirements.txt         # 锁定 scanner 依赖（telethon）
 ├── requirements-llm.txt     # 锁定可选摘要依赖
-├── setup.sh                 # 一键安装脚本
+├── setup.sh / setup.bat     # 一键安装脚本
 ├── profiles/                # 候选人/筛选 profile
 │   └── example.md           # 示例：前端工程师求职
 ├── channel_lists/           # 频道名称列表（每行一个）
@@ -126,7 +123,7 @@ tg-channel-scanner/
 ├── scripts/
 │   ├── scan.sh              # 批量频道读取（Mac/Linux）
 │   ├── scan.bat             # 批量频道读取（Windows）
-│   ├── scan.py              # 跨平台扫描核心
+│   ├── scan.py              # 跨平台扫描核心（Telethon）
 │   └── summarize.py         # 可选 LLM 摘要
 ├── output/                  # 扫描结果（已 gitignore）
 └── docs/
@@ -191,7 +188,6 @@ setup.bat
 
 ```bat
 call .venv\Scripts\activate.bat
-tg auth login
 scripts\scan.bat channel_lists\example.txt
 ```
 
@@ -199,12 +195,12 @@ scripts\scan.bat channel_lists\example.txt
 
 | 问题 | 解决 |
 |------|------|
-| `tg: command not found` | 先激活 venv：`source .venv/bin/activate` |
+| `ModuleNotFoundError: telethon` | 先激活 venv：`source .venv/bin/activate` |
 | `.sh` 脚本 `Permission denied` | `chmod +x setup.sh scripts/scan.sh` |
 | my.telegram.org 显示 ERROR | 见 [获取凭证指南](docs/getting-api-credentials.md) |
 | 扫描到 0 条消息 | 检查 `output/*.errors.log` 中的错误 |
-| 扫描提示 incomplete | 提高 `SCAN_MAX_LIMIT` 或缩小时间窗口；脚本达到上限后拒绝声称结果完整 |
-| setup 提示 tgcli 版本不匹配 | 检查 `requirements.txt` 后重新运行 setup；本仓按锁定版本验证 |
+| 扫描提示 incomplete | 提高 `SCAN_MAX_LIMIT` 或缩小时间窗口 |
+| Session 过期/未授权 | 删除 `~/.config/tgcli/session` 后重新运行，scan.py 会引导登录 |
 
 ## 许可证
 
