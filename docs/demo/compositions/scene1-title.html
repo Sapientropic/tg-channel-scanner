@@ -1,7 +1,7 @@
 <template id="scene1-template">
   <div data-composition-id="scene1" data-width="1920" data-height="1080">
     <style>
-      @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&family=Space+Grotesk:wght@400;500;700&family=Press+Start+2P&display=swap');
+      @import url('https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Space+Grotesk:wght@400;500;700&family=Press+Start+2P&display=swap');
 
       #scene1 {
         background: oklch(0.10 0.01 75);
@@ -53,13 +53,13 @@
         z-index: 2;
       }
       .hook-line {
-        font-family: 'Syne', sans-serif;
+        font-family: 'Chakra Petch', sans-serif;
         font-size: 64px;
         font-weight: 800;
         color: oklch(0.96 0.01 75);
         text-align: center;
         line-height: 1.15;
-        letter-spacing: -0.03em;
+        letter-spacing: 0;
         text-shadow:
           0 2px 30px rgba(0, 0, 0, 0.35),
           0 0 80px rgba(0, 0, 0, 0.12),
@@ -70,19 +70,22 @@
         margin: 0 0.08em;
       }
       .product-name {
+        position: relative;
+        display: inline-block;
         font-family: 'Press Start 2P', 'Courier New', monospace;
-        font-size: 84px;
+        font-size: 76px;
         font-weight: 400;
         color: oklch(0.55 0.16 155);
         text-align: center;
-        letter-spacing: 0.06em;
-        line-height: 1.5;
+        letter-spacing: 0.04em;
+        line-height: 1.45;
         text-transform: uppercase;
         text-shadow:
           4px 4px 0 oklch(0.30 0.10 155),
           8px 8px 0 oklch(0.20 0.06 155),
           0 0 60px oklch(0.55 0.16 155 / 0.25);
         opacity: 0;
+        will-change: transform, opacity, filter;
       }
       .accent-bar {
         width: 0px;
@@ -90,6 +93,28 @@
         background: oklch(0.55 0.16 155);
         border-radius: 2px;
         opacity: 0;
+      }
+      .product-line {
+        display: block;
+        opacity: 0;
+        transform: translateY(14px);
+        clip-path: inset(0 100% 0 0);
+        will-change: transform, opacity, clip-path;
+      }
+      .logo-scan {
+        position: absolute;
+        left: -88px;
+        right: -88px;
+        top: -12px;
+        height: 18px;
+        background:
+          linear-gradient(90deg, transparent, oklch(0.78 0.14 155 / 0.74), transparent);
+        opacity: 0;
+        pointer-events: none;
+        mix-blend-mode: screen;
+        box-shadow:
+          0 0 28px oklch(0.67 0.16 155 / 0.52),
+          0 10px 0 oklch(0.55 0.16 155 / 0.16);
       }
     </style>
 
@@ -110,7 +135,11 @@
         <span class="word w-6">you?</span>
       </div>
       <div class="accent-bar" id="accent-bar"></div>
-      <div class="product-name" id="product-name">TG CHANNEL SCANNER</div>
+      <div class="product-name" id="product-name">
+        <span class="product-line">TG CHANNEL</span>
+        <span class="product-line">SCANNER</span>
+        <span class="logo-scan" id="logo-scan"></span>
+      </div>
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
@@ -146,12 +175,30 @@
         2.2
       );
 
-      // Product name entrance — pixel logo punch
+      // Product name entrance — pixel scan reveal
       tl.fromTo(
         "#product-name",
-        { opacity: 0, y: 36, scale: 0.92 },
-        { opacity: 1, y: 0, scale: 1, duration: 0.8, ease: "back.out(1.2)" },
-        2.5
+        { opacity: 0, y: 24, scale: 0.98, filter: "brightness(0.78)" },
+        { opacity: 1, y: 0, scale: 1, filter: "brightness(1)", duration: 0.32, ease: "power3.out" },
+        2.42
+      );
+      tl.fromTo(
+        ".product-line",
+        { opacity: 0, y: 14, clipPath: "inset(0 100% 0 0)" },
+        { opacity: 1, y: 0, clipPath: "inset(0 0% 0 0)", duration: 0.42, stagger: 0.16, ease: "steps(8)" },
+        2.52
+      );
+      tl.fromTo(
+        "#logo-scan",
+        { opacity: 0, y: -18 },
+        { opacity: 1, y: 164, duration: 0.58, ease: "steps(9)" },
+        2.56
+      );
+      tl.to("#logo-scan", { opacity: 0, duration: 0.12, ease: "power2.out" }, 3.14);
+      tl.to(
+        "#product-name",
+        { x: -5, filter: "brightness(1.18)", duration: 0.045, repeat: 3, yoyo: true, ease: "steps(1)" },
+        3.22
       );
 
       // Subtle glow pulse at end

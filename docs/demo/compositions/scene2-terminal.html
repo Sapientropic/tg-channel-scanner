@@ -8,25 +8,29 @@
         overflow: hidden;
       }
       .scene-content {
+        position: relative;
         display: flex;
         flex-direction: column;
         justify-content: center;
         align-items: center;
         width: 100%;
         height: 100%;
-        padding: 60px 80px;
+        padding: 60px 160px;
         box-sizing: border-box;
       }
       .terminal-window {
-        width: 100%;
+        width: 1280px;
         border-radius: 0;
         overflow: hidden;
-        box-shadow: none;
-        border: none;
+        box-shadow:
+          8px 8px 0 oklch(0.55 0.16 155 / 0.58),
+          20px 20px 0 oklch(0.02 0.006 75 / 0.72);
+        border: 2px solid oklch(0.55 0.16 155 / 0.88);
       }
       .terminal-body {
-        background: oklch(0.13 0.01 75);
-        padding: 60px 80px;
+        background:
+          linear-gradient(180deg, oklch(0.16 0.016 150), oklch(0.115 0.014 150));
+        padding: 56px 64px;
         font-family: 'JetBrains Mono', monospace;
         font-size: 40px;
         line-height: 1.7;
@@ -46,7 +50,7 @@
       #typed-cmd {
         color: oklch(0.95 0.005 75);
         white-space: pre-wrap;
-        word-break: break-all;
+        word-break: normal;
       }
       .cursor {
         display: inline-block;
@@ -67,6 +71,81 @@
         color: oklch(0.55 0.16 155);
         font-weight: 700;
       }
+      .process-panel {
+        position: absolute;
+        right: 160px;
+        top: 244px;
+        width: 500px;
+        padding: 28px;
+        border: 2px solid oklch(0.55 0.16 155 / 0.88);
+        background:
+          linear-gradient(180deg, oklch(0.15 0.018 150 / 0.96), oklch(0.10 0.014 150 / 0.96)),
+          repeating-linear-gradient(90deg, transparent 0 18px, oklch(0.55 0.16 155 / 0.06) 18px 30px);
+        box-shadow:
+          8px 8px 0 oklch(0.55 0.16 155 / 0.42),
+          20px 20px 0 oklch(0.02 0.006 75 / 0.72);
+        font-family: 'JetBrains Mono', monospace;
+        color: oklch(0.88 0.01 75);
+        opacity: 0;
+      }
+      .panel-kicker {
+        color: oklch(0.55 0.16 155);
+        font-size: 22px;
+        font-weight: 700;
+        text-transform: uppercase;
+        margin-bottom: 22px;
+      }
+      .process-step {
+        display: grid;
+        grid-template-columns: 42px minmax(0, 1fr);
+        gap: 16px;
+        align-items: center;
+        padding: 17px 0;
+        border-top: 2px dashed oklch(0.38 0.05 155 / 0.64);
+        opacity: 0;
+      }
+      .step-index {
+        display: grid;
+        place-items: center;
+        width: 34px;
+        height: 34px;
+        border: 2px solid oklch(0.55 0.16 155);
+        color: oklch(0.55 0.16 155);
+        font-size: 18px;
+        font-weight: 700;
+      }
+      .step-text {
+        font-size: 25px;
+        font-weight: 700;
+        line-height: 1.25;
+      }
+      .step-meter {
+        grid-column: 2;
+        height: 12px;
+        margin-top: 10px;
+        border: 2px solid oklch(0.38 0.05 155);
+        background: oklch(0.07 0.01 150);
+        overflow: hidden;
+      }
+      .step-fill {
+        display: block;
+        width: 100%;
+        height: 100%;
+        background: oklch(0.55 0.16 155);
+        transform: scaleX(0);
+        transform-origin: left center;
+      }
+      .export-badge {
+        margin-top: 20px;
+        padding: 16px 18px;
+        border: 2px solid oklch(0.75 0.14 155);
+        color: oklch(0.16 0.06 155);
+        background: oklch(0.80 0.13 155);
+        font-size: 24px;
+        font-weight: 700;
+        text-align: center;
+        opacity: 0;
+      }
     </style>
 
     <div class="scene-content">
@@ -77,10 +156,35 @@
             <span id="typed-cmd"></span>
             <span class="cursor" id="cmd-cursor"></span>
           </div>
-          <div class="output-line info" id="out-1" style="opacity:0">Scanning <span class="hl-num">68</span> channels...</div>
-          <div class="output-line info" id="out-2" style="opacity:0"><span class="hl-num">1,247</span> messages collected</div>
-          <div class="output-line success" id="out-3" style="opacity:0"><span class="hl-num">22</span> matches found</div>
+          <div class="output-line info" id="out-1" style="opacity:0">Scanning <span class="hl-num">36</span> channels...</div>
+          <div class="output-line info" id="out-2" style="opacity:0"><span class="hl-num">489</span> messages collected</div>
+          <div class="output-line success" id="out-3" style="opacity:0"><span class="hl-num">8</span> ranked matches saved to HTML</div>
         </div>
+      </div>
+      <div class="process-panel" id="process-panel">
+        <div class="panel-kicker">live pipeline</div>
+        <div class="process-step">
+          <div class="step-index">01</div>
+          <div>
+            <div class="step-text">collect channel posts</div>
+            <div class="step-meter"><span class="step-fill"></span></div>
+          </div>
+        </div>
+        <div class="process-step">
+          <div class="step-index">02</div>
+          <div>
+            <div class="step-text">rank high-signal matches</div>
+            <div class="step-meter"><span class="step-fill"></span></div>
+          </div>
+        </div>
+        <div class="process-step">
+          <div class="step-index">03</div>
+          <div>
+            <div class="step-text">export dark HTML report</div>
+            <div class="step-meter"><span class="step-fill"></span></div>
+          </div>
+        </div>
+        <div class="export-badge" id="export-badge">report.html ready</div>
       </div>
     </div>
 
@@ -89,7 +193,7 @@
       window.__timelines = window.__timelines || {};
       var tl = gsap.timeline({ paused: true });
 
-      var CMD = 'python daily_report.py';
+      var CMD = 'tgcs scan jobs --html';
       var typedEl = document.getElementById("typed-cmd");
 
       // Terminal body entrance
@@ -101,7 +205,7 @@
       );
 
       // Cursor blink during typing
-      var typeDuration = 2.8;
+      var typeDuration = 1.2;
       var typeStart = 0.5;
       tl.to(".cursor", { opacity: 0, duration: 0.5, yoyo: true, repeat: 8, ease: "steps(1)" }, typeStart);
 
@@ -112,7 +216,7 @@
             function () {
               typedEl.textContent = CMD.substring(0, idx + 1);
             },
-            null,
+            [],
             typeStart + (idx / CMD.length) * typeDuration
           );
         })(i);
@@ -123,12 +227,22 @@
 
       tl.to("#cmd-cursor", { opacity: 0, duration: 0.01 }, outputStart);
 
-      tl.fromTo("#out-1", { opacity: 0, x: -16 }, { opacity: 1, x: 0, duration: 0.4 }, outputStart + 0.3);
-      tl.fromTo("#out-2", { opacity: 0, x: -16 }, { opacity: 1, x: 0, duration: 0.4 }, outputStart + 1.2);
-      tl.fromTo("#out-3", { opacity: 0, x: -16 }, { opacity: 1, x: 0, duration: 0.5 }, outputStart + 2.1);
+      tl.fromTo("#out-1", { opacity: 0, x: -16 }, { opacity: 1, x: 0, duration: 0.36, ease: "power3.out" }, outputStart + 0.2);
+      tl.fromTo("#out-2", { opacity: 0, x: -16 }, { opacity: 1, x: 0, duration: 0.36, ease: "power3.out" }, outputStart + 0.88);
+      tl.fromTo("#out-3", { opacity: 0, x: -16 }, { opacity: 1, x: 0, duration: 0.42, ease: "power3.out" }, outputStart + 1.56);
+
+      // Keep the 9-12s global beat active: the terminal becomes context while the pipeline resolves.
+      var pipelineStart = outputStart + 2.22;
+      tl.to(".terminal-window", { x: -300, scale: 0.84, duration: 0.58, ease: "power3.inOut" }, pipelineStart);
+      tl.to(".terminal-body", { filter: "brightness(0.82)", duration: 0.58, ease: "power2.inOut" }, pipelineStart);
+      tl.fromTo("#process-panel", { opacity: 0, x: 80, scale: 0.96 }, { opacity: 1, x: 0, scale: 1, duration: 0.46, ease: "power3.out" }, pipelineStart + 0.18);
+      tl.fromTo(".process-step", { opacity: 0, x: 26 }, { opacity: 1, x: 0, duration: 0.28, stagger: 0.32, ease: "power3.out" }, pipelineStart + 0.48);
+      tl.to(".step-fill", { scaleX: 1, duration: 0.52, stagger: 0.34, ease: "steps(8)" }, pipelineStart + 0.78);
+      tl.fromTo("#export-badge", { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: 0.32, ease: "power3.out" }, pipelineStart + 2.18);
+      tl.to("#process-panel", { y: -10, duration: 1.0, ease: "power1.inOut" }, pipelineStart + 2.72);
 
       // Keep-alive: ensure timeline lasts full clip duration
-      tl.to("#scene2", { opacity: 1, duration: 0.01 }, 7.99);
+      tl.to("#scene2", { opacity: 1, duration: 0.01 }, 8.99);
 
       window.__timelines["scene2"] = tl;
     </script>

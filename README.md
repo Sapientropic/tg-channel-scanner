@@ -44,17 +44,13 @@
 
 ## Demo
 
-<!--
-GitHub renders bare user-attachments asset URLs as inline video players.
-Do not replace this with a Release MP4 URL; those are served as downloads.
--->
 <div align="center">
-
-https://github.com/user-attachments/assets/4d63e490-8e9b-46d4-a65e-e94a65e1d7f8
-
+  <a href="docs/demo.mp4">
+    <img src="docs/demo.gif" alt="TG Channel Scanner 49-second product demo" width="900">
+  </a>
 </div>
 
-<p align="center"><em>56s walkthrough preview.</em></p>
+<p align="center"><em>49s walkthrough preview. Open the full MP4 at <a href="docs/demo.mp4">docs/demo.mp4</a>.</em></p>
 
 ---
 
@@ -154,17 +150,17 @@ The generated report is designed to be read as a decision surface: what matters,
 <table>
   <tr>
     <td align="center" width="50%">
-      <img src="docs/screenshots/report-header.png" alt="Report header with stats bar" width="100%"><br>
-      <sub>Run summary, profile metadata, and quality counters.</sub>
+      <img src="docs/screenshots/report-header.png" alt="Retro-pixel report masthead with dashboard counters" width="100%"><br>
+      <sub>Retro-pixel masthead, scan metadata, and dashboard counters.</sub>
     </td>
     <td align="center" width="50%">
-      <img src="docs/screenshots/report-cards.png" alt="Ranked cards with semantic color coding" width="100%"><br>
-      <sub>Ranked findings with labels, rationale, raw message access, and source links.</sub>
+      <img src="docs/screenshots/report-cards.png" alt="Ranked retro-pixel report cards with source chips" width="100%"><br>
+      <sub>Ranked cards with action labels, rationale, source chips, and raw message access.</sub>
     </td>
   </tr>
 </table>
 
-The HTML report is a single self-contained file: OKLCH color coding (green/amber/gray), animated cards, expandable raw messages, and Telegram deep links.
+The HTML report is a single portable file with inline CSS, JS, and icon assets: premium retro-pixel styling, light/dark themes, dashboard counters, scroll-parallax cards, expandable raw messages, and Telegram deep links. Web fonts are an optional enhancement; system fallbacks keep the report readable offline.
 
 <details>
 <summary>Scheduling examples</summary>
@@ -298,11 +294,17 @@ tg-channel-scanner/
 │   ├── daily_report.py      # Scan + report pipeline
 │   └── summarize.py         # Free-form LLM summary
 ├── templates/
-│   ├── report-job.html      # OKLCH palette template
-│   └── report-generic.html  # Custom mode template
+│   ├── report-job.html      # Job report HTML shell
+│   ├── report-generic.html  # Custom mode HTML shell
+│   ├── report-shared.css    # Shared inline report styling
+│   └── report-theme.js      # Shared inline theme/motion behavior
 ├── output/                  # gitignored
 └── docs/
+    ├── demo.gif             # README demo preview
+    ├── demo.mp4             # Full product demo video
+    ├── demo/                # HyperFrames demo source and maintenance notes
     ├── licensing.md         # AGPL + commercial licensing policy
+    ├── report-design-context.md  # Report UI design constraints
     └── screenshots/         # Report screenshots
 ```
 

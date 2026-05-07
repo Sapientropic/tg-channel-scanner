@@ -44,17 +44,13 @@
 
 ## 演示
 
-<!--
-GitHub renders bare user-attachments asset URLs as inline video players.
-Do not replace this with a Release MP4 URL; those are served as downloads.
--->
 <div align="center">
-
-https://github.com/user-attachments/assets/4d63e490-8e9b-46d4-a65e-e94a65e1d7f8
-
+  <a href="docs/demo.mp4">
+    <img src="docs/demo.gif" alt="TG Channel Scanner 49 秒产品演示" width="900">
+  </a>
 </div>
 
-<p align="center"><em>56 秒产品演示预览。</em></p>
+<p align="center"><em>49 秒产品演示预览。完整 MP4 见 <a href="docs/demo.mp4">docs/demo.mp4</a>。</em></p>
 
 ---
 
@@ -154,17 +150,17 @@ python scripts/report.py --input output/scan_XXXX.jsonl \
 <table>
   <tr>
     <td align="center" width="50%">
-      <img src="docs/screenshots/report-header.png" alt="报告头部与统计栏" width="100%"><br>
-      <sub>运行摘要、Profile 信息和质量统计。</sub>
+      <img src="docs/screenshots/report-header.png" alt="复古像素报告头部与仪表盘统计" width="100%"><br>
+      <sub>复古像素 Masthead、扫描元信息和仪表盘统计。</sub>
     </td>
     <td align="center" width="50%">
-      <img src="docs/screenshots/report-cards.png" alt="语义色标排序卡片" width="100%"><br>
-      <sub>排序结果、匹配理由、原文展开和 Telegram 来源链接。</sub>
+      <img src="docs/screenshots/report-cards.png" alt="带来源 chips 的复古像素排序卡片" width="100%"><br>
+      <sub>排序卡片、行动标签、匹配理由、来源 chips 和原文展开。</sub>
     </td>
   </tr>
 </table>
 
-HTML 报告为单文件自包含格式：OKLCH 色标（绿=申请、琥珀=调查、灰=跳过）、卡片入场动画、可展开原文、Telegram 深链接。
+HTML 报告是单个便携文件，内联 CSS、JS 和图标资产：高级复古像素风、日夜主题、仪表盘统计、滚动视差卡片、可展开原文和 Telegram 深链接。Web 字体只是增强项，离线时会回退到系统字体。
 
 <details>
 <summary>定时任务示例</summary>
@@ -295,11 +291,17 @@ tg-channel-scanner/
 │   ├── daily_report.py      # 扫描 + 报告流水线
 │   └── summarize.py         # 自由格式摘要
 ├── templates/
-│   ├── report-job.html      # OKLCH 色板模板
-│   └── report-generic.html  # 自定义模式模板
+│   ├── report-job.html      # 求职报告 HTML 壳
+│   ├── report-generic.html  # 自定义模式 HTML 壳
+│   ├── report-shared.css    # 内联共享样式
+│   └── report-theme.js      # 内联主题与动效逻辑
 ├── output/                  # 已 gitignore
 └── docs/
+    ├── demo.gif             # README 演示预览
+    ├── demo.mp4             # 完整产品演示视频
+    ├── demo/                # HyperFrames 演示源码和维护说明
     ├── licensing.md         # AGPL + 商业授权策略
+    ├── report-design-context.md  # 报告 UI 设计约束
     └── screenshots/         # 报告截图
 ```
 

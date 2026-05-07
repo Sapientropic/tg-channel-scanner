@@ -40,7 +40,7 @@
       id="root"
       data-composition-id="main"
       data-start="0"
-      data-duration="50"
+      data-duration="49"
       data-width="1920"
       data-height="1080"
     >
@@ -66,40 +66,49 @@
         data-track-index="2"
       ></div>
 
-      <!-- Scene 3: Report Reveal (14-17s) -->
+      <!-- Scene 3: Pixel scan bridge (14-18s) -->
       <div
         id="el-s3"
         class="scene-clip clip"
-        data-composition-id="scene3"
-        data-composition-src="compositions/scene3-report-reveal.html"
+        data-composition-id="scene3pixel"
+        data-composition-src="compositions/scene3-pixel-bridge.html"
         data-start="14"
-        data-duration="3.4"
+        data-duration="4.4"
         data-track-index="1"
       ></div>
 
-      <!-- Scene 4: Interaction Showcase (17-33s) -->
+      <!-- Scene 4: Report Reveal (18-23s) -->
       <div
         id="el-s4"
         class="scene-clip clip"
-        data-composition-id="scene4"
-        data-composition-src="compositions/scene4-interactions.html"
-        data-start="17"
-        data-duration="16.4"
+        data-composition-id="scene3"
+        data-composition-src="compositions/scene3-report-reveal.html"
+        data-start="18"
+        data-duration="5.4"
         data-track-index="2"
       ></div>
 
-      <!-- Scene 5: CTA + Logo (33-50s) -->
+      <!-- Scene 5: Interaction Showcase (23-35s) -->
       <div
         id="el-s5"
         class="scene-clip clip"
-        data-composition-id="scene5"
-        data-composition-src="compositions/scene5-cta.html"
-        data-start="33"
-        data-duration="17"
+        data-composition-id="scene4"
+        data-composition-src="compositions/scene4-interactions.html"
+        data-start="23"
+        data-duration="12"
         data-track-index="1"
       ></div>
 
-      <!-- Pixel animation inserted at 14s via FFmpeg concat, not HTML overlay -->
+      <!-- Scene 6: CTA + Logo (35-49s) -->
+      <div
+        id="el-s6"
+        class="scene-clip clip"
+        data-composition-id="scene5"
+        data-composition-src="compositions/scene5-cta.html"
+        data-start="35"
+        data-duration="14"
+        data-track-index="2"
+      ></div>
     </div>
 
     <script>
@@ -116,13 +125,17 @@
       tl.to("#el-s2", { opacity: 0, duration: cf, ease: "power2.inOut" }, 14.0);
       tl.fromTo("#el-s3", { opacity: 0 }, { opacity: 1, duration: cf, ease: "power2.inOut" }, 14.0);
 
-      // Scene 3 -> Scene 4 crossfade at 17s
-      tl.to("#el-s3", { opacity: 0, duration: cf, ease: "power2.inOut" }, 17.0);
-      tl.fromTo("#el-s4", { opacity: 0 }, { opacity: 1, duration: cf, ease: "power2.inOut" }, 17.0);
+      // Pixel bridge -> Report reveal at 18s
+      tl.to("#el-s3", { opacity: 0, duration: cf, ease: "power2.inOut" }, 18.0);
+      tl.fromTo("#el-s4", { opacity: 0 }, { opacity: 1, duration: cf, ease: "power2.inOut" }, 18.0);
 
-      // Scene 4 -> Scene 5 crossfade at 33s
-      tl.to("#el-s4", { opacity: 0, duration: cf, ease: "power2.inOut" }, 33.0);
-      tl.fromTo("#el-s5", { opacity: 0 }, { opacity: 1, duration: cf, ease: "power2.inOut" }, 33.0);
+      // Report reveal -> Interaction showcase at 23s
+      tl.to("#el-s4", { opacity: 0, duration: cf, ease: "power2.inOut" }, 23.0);
+      tl.fromTo("#el-s5", { opacity: 0 }, { opacity: 1, duration: cf, ease: "power2.inOut" }, 23.0);
+
+      // Interaction showcase -> CTA at 35s
+      tl.to("#el-s5", { opacity: 0, duration: cf, ease: "power2.inOut" }, 35.0);
+      tl.fromTo("#el-s6", { opacity: 0 }, { opacity: 1, duration: cf, ease: "power2.inOut" }, 35.0);
 
       window.__timelines["main"] = tl;
     </script>

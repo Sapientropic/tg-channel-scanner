@@ -46,18 +46,18 @@
         color: oklch(0.95 0.01 75);
         text-align: center;
         line-height: 1.2;
-        letter-spacing: -0.02em;
+        letter-spacing: 0;
       }
       .tagline .accent {
         color: oklch(0.55 0.16 155);
       }
       .url-line {
-        font-family: 'JetBrains Mono', 'Menlo', monospace;
+        font-family: 'JetBrains Mono', monospace;
         font-size: 44px;
         color: oklch(0.55 0.16 155);
         text-align: center;
         line-height: 1.5;
-        letter-spacing: -0.01em;
+        letter-spacing: 0;
       }
       .cursor-cta {
         display: inline-block;
@@ -170,7 +170,7 @@
             function () {
               typedUrl.textContent = URL.substring(0, idx + 1);
             },
-            null,
+            [],
             typeStart + (idx / URL.length) * typeDuration
           );
         })(i);
@@ -187,7 +187,7 @@
       tl.to("#glow-orb", { scale: 1.12, duration: 2.0, ease: "sine.inOut", yoyo: true, repeat: 4 }, ambientStart);
 
       // Pixel logo entrance at ~9s
-      tl.fromTo("#pixel-logo", { opacity: 0, y: 30, scale: 0.9 }, { opacity: 1, y: 0, scale: 1, duration: 0.7, ease: "back.out(1.1)" }, 9.0);
+      tl.fromTo("#pixel-logo", { opacity: 0, y: 24, scale: 0.94 }, { opacity: 1, y: 0, scale: 1, duration: 0.56, ease: "power3.out" }, 9.0);
 
       // Particles fade in and float
       document.querySelectorAll(".particle").forEach(function (pt, idx) {
@@ -200,16 +200,16 @@
       tl.to("#tagline-line1", { y: -6, duration: 2.5, ease: "sine.inOut", yoyo: true, repeat: 2 }, ambientStart);
       tl.to("#tagline-line3", { y: -6, duration: 2.8, ease: "sine.inOut", yoyo: true, repeat: 2 }, ambientStart + 0.3);
 
-      // Fade to black in last 2 seconds
-      tl.to(".scene-content", { opacity: 0, duration: 1.5, ease: "power2.in" }, 15.0);
-      tl.to("#glow-orb", { opacity: 0, duration: 1.5, ease: "power2.in" }, 15.0);
-      tl.to(".ambient-grid", { opacity: 0, duration: 1.5, ease: "power2.in" }, 15.0);
-      tl.to(".particle", { opacity: 0, duration: 1.0, ease: "power2.in" }, 15.0);
+      // Fade before the shortened 49s master ends, avoiding the looping tail in the soundtrack.
+      tl.to(".scene-content", { opacity: 0, duration: 1.2, ease: "power2.in" }, 12.2);
+      tl.to("#glow-orb", { opacity: 0, duration: 1.2, ease: "power2.in" }, 12.2);
+      tl.to(".ambient-grid", { opacity: 0, duration: 1.2, ease: "power2.in" }, 12.2);
+      tl.to(".particle", { opacity: 0, duration: 0.9, ease: "power2.in" }, 12.2);
       // Hard kill after fade
-      tl.set(".scene-content", { opacity: 0, visibility: "hidden" }, 16.6);
-      tl.set("#glow-orb", { opacity: 0, visibility: "hidden" }, 16.6);
-      tl.set(".ambient-grid", { opacity: 0, visibility: "hidden" }, 16.6);
-      tl.set(".particle", { opacity: 0, visibility: "hidden" }, 16.6);
+      tl.set(".scene-content", { opacity: 0, visibility: "hidden" }, 13.6);
+      tl.set("#glow-orb", { opacity: 0, visibility: "hidden" }, 13.6);
+      tl.set(".ambient-grid", { opacity: 0, visibility: "hidden" }, 13.6);
+      tl.set(".particle", { opacity: 0, visibility: "hidden" }, 13.6);
 
       window.__timelines["scene5"] = tl;
     </script>

@@ -3,6 +3,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 
@@ -337,6 +338,83 @@ system_prompt: |
         self.assertNotIn("javascript:", html.lower())
         self.assertIn("https://safe.example/path?x=1", html)
         self.assertIn('rel="noopener noreferrer"', html)
+
+    def test_html_detail_lists_do_not_use_slash_separators(self):
+        report = load_report_module(self)
+        job = sample_extracted_jobs()[0] | {
+            "contact": "Not specified / @rocket_hr_ai_bot",
+            "source": "jobs_in_it_remote / hot_itjobs",
+        }
+
+        html = report._render_job_card(job, 1, {})
+
+        self.assertIn("inline-ref-list", html)
+        self.assertNotIn("Not specified / @rocket_hr_ai_bot", html)
+        self.assertNotIn("jobs_in_it_remote / hot_itjobs", html)
+
+    def test_custom_html_render_uses_profile_action_mapping(self):
+        report = load_report_module(self)
+        profile = """# Custom watchlist
+
+## Basic Info
+- **Focus**: Airdrop signals
+
+## Extraction Schema
+mode: custom
+top_level_key: items
+dedup_fields: [project, event]
+fields:
+  - name: project
+    required: true
+  - name: event
+  - name: rating
+    values: [high, medium, low]
+  - name: action
+    values: ["Join now", "Review source", "Skip"]
+  - name: why
+
+## Extraction Prompt
+system_prompt: |
+  Extract useful watchlist items.
+
+## Report Labels
+report_title: "Airdrop Signal Brief"
+profile_section_title: "Watchlist Profile"
+methodology_label: "Telegram channels"
+section_high: "Act Now"
+section_medium: "Investigate"
+section_low: "Archive"
+"""
+        profile_config = report.parse_profile_config(profile)
+        result = report.ReportResult(
+            markdown="",
+            stats={"matches": 1, "high": 1, "medium": 0, "low": 0, "duplicates_removed": 0},
+            warnings=[],
+            jobs=[
+                {
+                    "project": "Example Protocol",
+                    "event": "Quest opens",
+                    "rating": "high",
+                    "why": "Fresh campaign with explicit source.",
+                }
+            ],
+        )
+
+        html = report.render_html(
+            result,
+            profile,
+            {"scan_date": "2026-05-07", "scan_window": "Last 24 hours",
+             "channel_count": 3, "total_messages_collected": 42},
+            SimpleNamespace(next_scan_note=""),
+            [],
+            profile_config,
+        )
+
+        self.assertIn("Airdrop Signal Brief", html)
+        self.assertIn("Join now", html)
+        self.assertIn("item-card high", html)
+        self.assertIn("data-theme-toggle", html)
+        self.assertNotIn("{shared_css}", html)
 
     def test_html_output_writes_markdown_and_html_from_one_extraction(self):
         report = load_report_module(self)

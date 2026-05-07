@@ -1,0 +1,162 @@
+<template id="scene3-pixel-template">
+  <div data-composition-id="scene3pixel" data-width="1920" data-height="1080">
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=JetBrains+Mono:wght@500;700&display=swap');
+
+      #scene3pixel {
+        position: relative;
+        overflow: hidden;
+        background: oklch(0.15 0.035 248);
+      }
+      .scan-grid {
+        position: absolute;
+        inset: 0;
+        opacity: 0.22;
+        background-image:
+          linear-gradient(oklch(0.72 0.103 188 / 0.16) 2px, transparent 2px),
+          linear-gradient(90deg, oklch(0.72 0.103 188 / 0.14) 2px, transparent 2px);
+        background-size: 72px 72px;
+      }
+      .video-shell {
+        position: absolute;
+        inset: 0;
+        overflow: hidden;
+        background: oklch(0.11 0.03 248);
+      }
+      #pixel-plane {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+        opacity: 0.92;
+      }
+      .scanline {
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: 0;
+        height: 4px;
+        background: oklch(0.72 0.103 188);
+        box-shadow: 0 0 34px oklch(0.72 0.103 188 / 0.58);
+        opacity: 0;
+      }
+      .hud {
+        position: absolute;
+        left: 112px;
+        right: 112px;
+        bottom: 86px;
+        display: flex;
+        align-items: end;
+        justify-content: space-between;
+        gap: 48px;
+      }
+      .hud-copy {
+        display: grid;
+        gap: 14px;
+      }
+      .kicker {
+        display: inline-flex;
+        align-items: center;
+        gap: 12px;
+        color: oklch(0.72 0.103 188);
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 26px;
+        font-weight: 700;
+        letter-spacing: 0;
+      }
+      .kicker::before {
+        content: "";
+        width: 16px;
+        height: 16px;
+        background: oklch(0.72 0.103 188);
+        box-shadow: 10px 10px 0 oklch(0.69 0.142 35);
+      }
+      .headline {
+        max-width: 900px;
+        color: oklch(0.91 0.026 92);
+        font-family: 'Chakra Petch', system-ui, sans-serif;
+        font-size: 72px;
+        font-weight: 700;
+        line-height: 0.98;
+        letter-spacing: 0;
+        text-shadow: 6px 6px 0 oklch(0.72 0.103 188 / 0.18);
+      }
+      .meter-stack {
+        display: grid;
+        width: 500px;
+        gap: 16px;
+        padding: 24px;
+        border: 3px solid oklch(0.72 0.103 188);
+        background: oklch(0.175 0.032 248 / 0.72);
+        box-shadow: 8px 8px 0 oklch(0.72 0.103 188 / 0.35);
+      }
+      .meter-row {
+        display: grid;
+        grid-template-columns: 118px 1fr;
+        gap: 18px;
+        align-items: center;
+        color: oklch(0.80 0.022 95);
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 22px;
+        font-weight: 700;
+      }
+      .meter {
+        height: 14px;
+        border: 2px solid oklch(0.72 0.103 188 / 0.62);
+        background: repeating-linear-gradient(90deg, oklch(0.36 0.028 230) 0 10px, transparent 10px 16px);
+        overflow: hidden;
+      }
+      .meter-fill {
+        width: 0%;
+        height: 100%;
+        background: repeating-linear-gradient(90deg, oklch(0.72 0.103 188) 0 10px, transparent 10px 16px);
+      }
+    </style>
+
+    <div class="scan-grid"></div>
+    <div class="video-shell">
+      <video
+        id="pixel-plane"
+        class="clip"
+        data-start="0"
+        data-duration="4.2"
+        data-track-index="0"
+        src="../assets/pixel-plane.mp4"
+        muted
+        playsinline
+      ></video>
+    </div>
+    <div class="scanline" id="scanline"></div>
+    <div class="hud">
+      <div class="hud-copy">
+        <div class="kicker" id="bridge-kicker">semantic scan online</div>
+        <div class="headline" id="bridge-title">Noise becomes a ranked signal deck.</div>
+      </div>
+      <div class="meter-stack" id="meter-stack">
+        <div class="meter-row"><span>channels</span><div class="meter"><div class="meter-fill fill-a"></div></div></div>
+        <div class="meter-row"><span>messages</span><div class="meter"><div class="meter-fill fill-b"></div></div></div>
+        <div class="meter-row"><span>matches</span><div class="meter"><div class="meter-fill fill-c"></div></div></div>
+      </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <script>
+      window.__timelines = window.__timelines || {};
+      var tl = gsap.timeline({ paused: true });
+
+      tl.fromTo(".video-shell", { opacity: 0, scale: 1.04 }, { opacity: 1, scale: 1, duration: 0.55, ease: "power3.out" }, 0.15);
+      tl.fromTo(".scan-grid", { opacity: 0, x: -40 }, { opacity: 0.22, x: 0, duration: 0.7, ease: "sine.out" }, 0.25);
+      tl.fromTo("#bridge-kicker", { opacity: 0, x: -48 }, { opacity: 1, x: 0, duration: 0.36, ease: "power4.out" }, 0.55);
+      tl.fromTo("#bridge-title", { opacity: 0, y: 34, scale: 0.98 }, { opacity: 1, y: 0, scale: 1, duration: 0.5, ease: "power3.out" }, 0.82);
+      tl.fromTo("#meter-stack", { opacity: 0, x: 56, scale: 0.96 }, { opacity: 1, x: 0, scale: 1, duration: 0.5, ease: "expo.out" }, 1.05);
+      tl.fromTo(".fill-a", { width: "0%" }, { width: "84%", duration: 0.62, ease: "steps(8)" }, 1.28);
+      tl.fromTo(".fill-b", { width: "0%" }, { width: "92%", duration: 0.7, ease: "steps(9)" }, 1.48);
+      tl.fromTo(".fill-c", { width: "0%" }, { width: "66%", duration: 0.5, ease: "steps(6)" }, 1.78);
+      tl.fromTo("#scanline", { opacity: 0, y: -20 }, { opacity: 1, y: 980, duration: 1.1, ease: "power2.inOut" }, 2.15);
+      tl.to("#scanline", { opacity: 0, duration: 0.18, ease: "power2.out" }, 3.28);
+      tl.to(".video-shell", { scale: 1.025, duration: 3.2, ease: "none" }, 0.8);
+
+      window.__timelines["scene3pixel"] = tl;
+    </script>
+  </div>
+</template>
