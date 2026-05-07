@@ -8,7 +8,7 @@
 
 <p>
   <a href="https://www.python.org/downloads/"><img alt="Python 3.12+" src="https://img.shields.io/badge/python-3.12%2B-3776AB?logo=python&logoColor=white"></a>
-  <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-green.svg"></a>
+  <a href="LICENSE"><img alt="License: AGPL-3.0 + Commercial" src="https://img.shields.io/badge/license-AGPL--3.0%20%2B%20Commercial-blue.svg"></a>
   <a href="https://core.telegram.org/mtproto"><img alt="Telegram MTProto" src="https://img.shields.io/badge/Telegram-MTProto-26A5E4?logo=telegram&logoColor=white"></a>
   <a href="https://github.com/Sapientropic/tg-channel-scanner"><img alt="LLM Powered" src="https://img.shields.io/badge/powered%20by-LLM-22C55E?logo=openai&logoColor=white"></a>
   <img alt="输出 HTML + Markdown" src="https://img.shields.io/badge/output-HTML%20%2B%20Markdown-F59E0B">
@@ -299,6 +299,7 @@ tg-channel-scanner/
 │   └── report-generic.html  # 自定义模式模板
 ├── output/                  # 已 gitignore
 └── docs/
+    ├── licensing.md         # AGPL + 商业授权策略
     └── screenshots/         # 报告截图
 ```
 
@@ -323,4 +324,9 @@ tg-channel-scanner/
 
 ## 许可证
 
-MIT
+TG Channel Scanner 采用双授权：
+
+- 社区版：`AGPL-3.0-only`
+- 商业授权：由 Sapientropic 单独授权
+
+社区版、商业版、托管服务和贡献规则见 [docs/licensing.md](docs/licensing.md)。

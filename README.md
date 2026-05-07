@@ -8,7 +8,7 @@
 
 <p>
   <a href="https://www.python.org/downloads/"><img alt="Python 3.12+" src="https://img.shields.io/badge/python-3.12%2B-3776AB?logo=python&logoColor=white"></a>
-  <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-green.svg"></a>
+  <a href="LICENSE"><img alt="License: AGPL-3.0 + Commercial" src="https://img.shields.io/badge/license-AGPL--3.0%20%2B%20Commercial-blue.svg"></a>
   <a href="https://core.telegram.org/mtproto"><img alt="Telegram MTProto" src="https://img.shields.io/badge/Telegram-MTProto-26A5E4?logo=telegram&logoColor=white"></a>
   <a href="https://github.com/Sapientropic/tg-channel-scanner"><img alt="LLM Powered" src="https://img.shields.io/badge/powered%20by-LLM-22C55E?logo=openai&logoColor=white"></a>
   <img alt="Output: HTML + Markdown" src="https://img.shields.io/badge/output-HTML%20%2B%20Markdown-F59E0B">
@@ -302,6 +302,7 @@ tg-channel-scanner/
 │   └── report-generic.html  # Custom mode template
 ├── output/                  # gitignored
 └── docs/
+    ├── licensing.md         # AGPL + commercial licensing policy
     └── screenshots/         # Report screenshots
 ```
 
@@ -326,4 +327,10 @@ See [docs/tos-risk-analysis.md](docs/tos-risk-analysis.md) for details.
 
 ## License
 
-MIT
+TG Channel Scanner is dual-licensed:
+
+- Community License: `AGPL-3.0-only`
+- Commercial License: available separately from Sapientropic
+
+See [docs/licensing.md](docs/licensing.md) for community, commercial, hosted
+service, and contribution rules.
