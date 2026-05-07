@@ -1,18 +1,8 @@
 <div align="center">
 
-<pre align="center">
-########  ######      ######  ##  ##  ####  ##  ## ##  ## ####### ##
-   ##    ##          ##       ##  ## ##  ## ### ## ### ## ##      ##
-   ##    ##  ####    ##       ###### ###### ###### ###### #####   ##
-   ##    ##    ##    ##       ##  ## ##  ## ## ### ## ### ##      ##
-   ##     ######      ######  ##  ## ##  ## ##  ## ##  ## ####### #######
-
- ######   ####   ####  ##  ## ##  ## ####### ######
-##       ##     ##  ## ### ## ### ## ##      ##   ##
- ######  ##     ###### ###### ###### #####   ######
-     ##  ##     ##  ## ## ### ## ### ##      ##  ##
- ######   ####  ##  ## ##  ## ##  ## ####### ##   ##
-</pre>
+<p>
+  <img src="docs/brand/wordmark.png" alt="TG Channel Scanner" width="900">
+</p>
 
 <h3>Turn Telegram channel noise into a ranked daily signal report.</h3>
 
@@ -53,13 +43,14 @@
 ## Demo
 
 <!--
-GitHub README video note:
-Inline playback is generated from GitHub Markdown attachments
-(user-images/user-attachments URLs). Release assets are served with
-Content-Disposition: attachment, so linking them from the README forces downloads.
-Keep the GIF preview as the stable fallback until an attachment URL is available.
+GitHub renders bare user-attachments asset URLs as inline video players.
+Do not replace this with a Release MP4 URL; those are served as downloads.
 -->
-<p align="center"><img src="docs/demo.gif" alt="Product demo" width="100%"></p>
+<div align="center">
+
+https://github.com/user-attachments/assets/4d63e490-8e9b-46d4-a65e-e94a65e1d7f8
+
+</div>
 
 <p align="center"><em>56s walkthrough preview.</em></p>
 
