@@ -27,6 +27,8 @@
   ·
   <a href="#report-output"><strong>Report Output</strong></a>
   ·
+  <a href="ROADMAP.md"><strong>Roadmap</strong></a>
+  ·
   <a href="#safety--telegram-tos"><strong>Safety</strong></a>
 </p>
 

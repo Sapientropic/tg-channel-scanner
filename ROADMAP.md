@@ -1,0 +1,336 @@
+# TG Channel Scanner Roadmap
+
+Last researched: 2026-05-07
+
+This roadmap is market-informed, but it is still a product plan, not a
+commitment log. Review note: product pages, Telegram platform rules, and
+competitor positioning can change after the research date. Re-check the source
+links before using this document for release notes, fundraising, pricing, or
+legal positioning.
+
+## Product Direction
+
+TG Channel Scanner should become a local-first Telegram intelligence loop:
+
+1. Read channels the user already subscribes to.
+2. Apply a plain Markdown profile that describes what counts as signal.
+3. Produce a ranked daily report with source evidence and raw context.
+4. Keep privacy, cost, and Telegram platform risk visible by default.
+
+The wedge is not "another Telegram feed." The wedge is "what should I act on
+today, and why can I trust that answer?"
+
+## Market Snapshot
+
+### Broad Intelligence And Feed Readers
+
+Examples: [Feedly](https://feedly.com/) and
+[Inoreader](https://www.inoreader.com/features).
+
+Strength: cross-source monitoring, RSS/newsletter/social aggregation, filtering,
+and enterprise intelligence workflows.
+
+Open gap: they are optimized for web-scale feeds and dashboards, not a local
+MTProto scan of the user's subscribed Telegram channels with raw message
+evidence.
+
+### Source Conversion And Workflow Automation
+
+Examples:
+[RSS.app Telegram RSS](https://help.rss.app/en/articles/11060974-how-to-create-rss-feeds-from-telegram),
+[Zapier Telegram integrations](https://zapier.com/apps/telegram/integrations),
+and [Make Telegram Bot integrations](https://www.make.com/en/integrations/telegram).
+
+Strength: convert public Telegram sources to RSS, route updates to
+Slack/Discord/Telegram, and connect Telegram Bot events to other apps.
+
+Open gap: they are plumbing. Users still need source curation, ranking, dedupe,
+report semantics, and AI/provider privacy controls. RSS.app also documents a
+public-channel limitation for Telegram RSS feeds.
+
+### Telegram Analytics, Search, And Monitoring
+
+Examples: [TGStat alerts](https://by.tgstat.com/en/alerts),
+[Telemetrio](https://telemetr.io/en), and [TGStat](https://tgstat.org/).
+
+Strength: public channel catalogues, keyword alerts, advertising analytics,
+channel growth, and engagement metrics.
+
+Open gap: they are strong for public-market monitoring and ads, but less suited
+to private subscribed-channel review, daily decision reports, and
+source-auditable personal workflows.
+
+### Telegram AI Digest And Aggregator Tools
+
+Examples: [Junction Bot AI Digests](https://www.junctionbot.io/ai-digests),
+[Aggregaat](https://aggregaat.bot/), [Telebrief](https://telebrief.ti1orn.com/),
+[tg-channel-digest](https://github.com/andrew-ld/tg-channel-digest), and
+[Televizor](https://www.reddit.com/r/microsaas/comments/1sy0nl9/i_built_televizor_opensource_telegram_channel/).
+
+Strength: these tools validate the core pain. Users follow too many
+channels/chats, need digests, and often want private-channel support. Some tools
+offer bot delivery, local Ollama, Docker, templates, or a unified feed.
+
+Open gap: differentiate through profile-driven evaluation, ranked HTML/Markdown
+artifacts, explicit source refs, local-first defaults, and safe media/AI upload
+gates.
+
+## User Pain Points
+
+1. Telegram volume hides time-sensitive decisions.
+   Users tracking jobs, tenders, crypto, local news, or business communities can
+   easily face dozens of active chats and channels. Junction Bot explicitly
+   sells against "1,000+ messages" and 5-minute review, while the Televizor
+   creator describes channel switching and 100+ message/day channels as a core
+   annoyance.
+
+2. A chronological feed is still too much work.
+   Aggregators solve "one place," but the user still has to decide what matters.
+   TG Channel Scanner should rank by a profile and explain why a post is
+   apply-worthy, investigate-worthy, duplicate, or rejected.
+
+3. Private and member-only sources matter.
+   Public RSS converters are useful, but RSS.app documents that Telegram RSS
+   feeds are limited to public profiles/channels that do not require login. A
+   Telethon/MTProto local scanner can serve subscribed/private channels the user
+   can already access, while keeping session handling auditable.
+
+4. Trust requires provenance.
+   AI digests are useful only if the user can expand the original text, inspect
+   the channel/message id, and understand why the item was included or skipped.
+   Source identity, raw context, and scan completeness are product features, not
+   just internal correctness.
+
+5. Privacy and cost need explicit controls.
+   Telebrief's Ollama/local path and self-hosting language show that privacy and
+   vendor lock-in matter in this category. TG Channel Scanner should keep OCR,
+   STT, full-video upload, and cloud LLM use opt-in and visible.
+
+6. Automation tools leave too much glue work.
+   Zapier and Make make routing easy, but they do not define the domain-specific
+   scoring, profile schema, source health, dedupe, or daily review artifact.
+
+## Positioning
+
+Primary positioning:
+
+> Local-first Telegram signal reports for people who monitor many channels but
+> need a short, auditable daily decision list.
+
+Best early users:
+
+1. Job seekers and recruiters monitoring hiring channels.
+2. Crypto, airdrop, and market watchers monitoring high-noise channels.
+3. Analysts, researchers, and OSINT users who need evidence trails.
+4. Founders, sales teams, and community managers watching leads, mentions, and
+   competitor updates.
+5. Personal news power users who already curate Telegram folders.
+
+Non-goals for now:
+
+1. Do not become a public Telegram search index.
+2. Do not build a hosted SaaS until legal, privacy, and session handling are
+   clearly designed.
+3. Do not train, fine-tune, or resell datasets from Telegram data. As of
+   2026-05-07, Telegram's API terms point to content licensing and AI scraping
+   restrictions, so this remains a release-time review item.
+4. Do not chase generic analytics dashboards unless users prove that channel
+   metrics matter more than decision quality.
+
+## Product Principles
+
+1. Local-first by default.
+   The scanner should remain useful without a hosted backend. Any cloud LLM,
+   OCR, STT, or delivery integration should be explicit.
+
+2. Source evidence before summary polish.
+   A pretty digest is not enough. Every retained item should have a stable
+   source key, raw text expansion, scan metadata, and a clear match reason.
+
+3. Profiles are the product surface.
+   Markdown profiles should become the way users encode goals, exclusions,
+   scoring rubrics, language preferences, and output style.
+
+4. Reports should be decision artifacts.
+   HTML/Markdown outputs should support fast review, search, sharing, and later
+   audit. The output is not just a debug artifact.
+
+5. Safe defaults beat hidden power.
+   Full-video upload, broad history scans, and third-party AI calls should stay
+   behind explicit flags/config with documentation close to the option.
+
+## Roadmap
+
+### v0.2 - Stabilize The Daily Decision Loop
+
+Goal: make the current CLI reliable enough for repeated personal use.
+
+Already in scope or recently addressed:
+
+- Stable channel+message source identity for report items.
+- Cutoff-aware scan completeness.
+- Thumbnail-first standalone OCR defaults.
+- Explicit scan output handoff in the daily pipeline.
+- Focused tests and `pyproject.toml` tooling.
+
+Next iterations:
+
+- Add a first-run `doctor` command for config path, Telegram credentials,
+  session state, channel list, LLM provider, media dependencies, and output
+  directory permissions.
+- Add built-in profile templates for jobs, airdrops, market/news, research
+  leads, and competitor monitoring.
+- Improve "no useful results" diagnostics: no messages fetched, all filtered
+  out, scan incomplete, OCR disabled, or LLM unavailable.
+- Add local feedback capture from the report: keep, skip, false positive, false
+  negative, and short user note.
+- Add a tiny sample fixture and documented demo command that does not require a
+  Telegram login.
+
+Exit criteria:
+
+- New user can produce a meaningful sample report in under 10 minutes.
+- Reports explain all included and excluded high-confidence items.
+- No silent reuse of stale scan files or ambiguous source ids.
+
+### v0.3 - Source Operations
+
+Goal: help users manage channels as durable sources instead of one-off text
+lists.
+
+Planned work:
+
+- Introduce a source registry with channel username/id, human label, topic,
+  priority, expected language, scan window, and optional per-source notes.
+- Import from Telegram folders or exported channel lists, then normalize into the
+  registry.
+- Show per-channel health: fetched count, kept count, filtered count, newest
+  message time, oldest scanned time, incomplete flag, and last error.
+- Add duplicate and forward-source handling so the same original post does not
+  dominate the report.
+- Add source pruning hints: noisy source, dormant source, repeated duplicate
+  source, or source with frequent access failures.
+
+Exit criteria:
+
+- Users can understand which channels generated value and which created noise.
+- Source list changes are reviewable and reversible.
+
+### v0.4 - Decision Intelligence
+
+Goal: move from summarization to durable signal detection.
+
+Planned work:
+
+- Add local item memory for seen-before, changed, recurring, and expired leads.
+- Add cross-channel clustering so related posts collapse into one decision card.
+- Extract structured entities per profile: company, role, location, deadline,
+  token/project, person, event, product, or risk.
+- Add scoring explanations that separate match confidence, urgency, novelty,
+  source priority, and user-defined exclusions.
+- Add negative evidence: why an item was skipped, not just why kept items were
+  selected.
+- Support profile-specific report templates without changing scanner internals.
+
+Exit criteria:
+
+- Daily reports reduce repeated items and highlight changes since the last run.
+- Users can tune profiles without editing Python.
+
+### v0.5 - Delivery And Automation
+
+Goal: make the scanner a dependable daily habit while keeping artifacts local and
+auditable.
+
+Planned work:
+
+- Add scheduler helpers for Windows Task Scheduler, cron, and GitHub Actions
+  self-hosted runners.
+- Add delivery adapters: local HTML, Markdown, email, Telegram saved messages or
+  bot delivery, and machine-readable JSON summary.
+- Add alert mode for high-priority matches while keeping the full daily report as
+  the audit artifact.
+- Add optional SQLite state for history, feedback, duplicate tracking, and source
+  health.
+- Add run manifests that record config/profile/channel-list hashes and generated
+  output paths.
+
+Exit criteria:
+
+- The daily pipeline can run unattended and fail loudly when prerequisites break.
+- Users can trace a delivered alert back to the full report and raw message.
+
+### v0.6 - Packaging And Team Use
+
+Goal: reduce setup friction and support small trusted teams without becoming a
+hosted scraper.
+
+Planned work:
+
+- Provide `pipx`, `uvx`, and Docker installation paths.
+- Add a minimal local dashboard for profile selection, source health, recent
+  reports, and feedback review.
+- Add encrypted config/session guidance and backup/restore docs.
+- Support multi-profile batch runs from the same channel registry.
+- Add team-safe runbooks for shared profiles, local deployment, and third-party
+  AI provider risk.
+
+Exit criteria:
+
+- A technical user can deploy the tool for a small team with a documented privacy
+  model and repeatable setup.
+- The CLI remains fully usable without the dashboard.
+
+## Research Backlog
+
+1. Interview 5-10 target users across job search, crypto/market monitoring,
+   research/OSINT, community management, and personal news.
+2. Compare first useful report time against Junction Bot, Aggregaat, Telebrief,
+   Feedly/Inoreader, and a Zapier/Make workflow.
+3. Validate whether users prefer daily reports, real-time alerts, or a hybrid.
+4. Measure local LLM quality and cost tradeoffs against OpenAI/Anthropic/Gemini
+   for the built-in profiles.
+5. Re-check Telegram API terms, Bot API limitations, MTProto behavior, and AI
+   scraping/content licensing rules before any public release.
+6. Test whether source health and pruning hints are more valuable than a full
+   dashboard for early users.
+
+## Success Metrics
+
+- Time to first useful report: under 10 minutes for a prepared channel list.
+- Daily review time: under 5-10 minutes for 50+ channels.
+- Source traceability: 100% of report items link to channel+message identity.
+- Scan reliability: incomplete scans are explicit and below 5% after tuning.
+- Quality loop: false positives and false negatives trend down after feedback.
+- Privacy posture: no third-party upload of media or raw messages without an
+  explicit config/flag.
+- Product value: users keep at least one profile running weekly without manual
+  prompt surgery.
+
+## Source Notes
+
+- [Feedly](https://feedly.com/) positions itself across news reading, market
+  intelligence, and threat intelligence.
+- [Inoreader features](https://www.inoreader.com/features) cover RSS, monitoring
+  feeds, social listening, newsletters, global search, and website change
+  tracking.
+- [RSS.app Telegram RSS guide](https://help.rss.app/en/articles/11060974-how-to-create-rss-feeds-from-telegram)
+  documents Telegram-to-RSS generation, automation uses, and the public-channel
+  limitation.
+- [Zapier Telegram integrations](https://zapier.com/apps/telegram/integrations)
+  and [Make Telegram Bot integrations](https://www.make.com/en/integrations/telegram)
+  represent the no-code automation category.
+- [TGStat alerts](https://by.tgstat.com/en/alerts), [TGStat](https://tgstat.org/),
+  and [Telemetrio](https://telemetr.io/en) represent public Telegram monitoring,
+  search, advertising, and analytics tools.
+- [Junction Bot AI Digests](https://www.junctionbot.io/ai-digests) and
+  [Aggregaat](https://aggregaat.bot/) validate demand for Telegram digests,
+  unified feeds, forwarding, and team-oriented monitoring.
+- [Telebrief](https://telebrief.ti1orn.com/) and
+  [tg-channel-digest](https://github.com/andrew-ld/tg-channel-digest) are close
+  open-source references for Telethon-based AI digest workflows.
+- [Televizor discussion](https://www.reddit.com/r/microsaas/comments/1sy0nl9/i_built_televizor_opensource_telegram_channel/)
+  is useful community evidence for the "too many channels, one usable feed"
+  pain.
+- [Telegram API Terms](https://core.telegram.org/api/terms) remain a release-time
+  checkpoint for content licensing and AI-scraping constraints.
