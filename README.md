@@ -45,12 +45,12 @@
 ## Demo
 
 <div align="center">
-  <a href="docs/demo.mp4">
-    <img src="docs/demo.gif" alt="TG Channel Scanner 49-second product demo" width="900">
-  </a>
+
+https://github.com/user-attachments/assets/d3a6fd44-7140-4843-86af-b32325abae33
+
 </div>
 
-<p align="center"><em>49s walkthrough preview. Open the full MP4 at <a href="docs/demo.mp4">docs/demo.mp4</a>.</em></p>
+<p align="center"><em>49s walkthrough preview. Source MP4: <a href="docs/demo.mp4">docs/demo.mp4</a>.</em></p>
 
 ---
 
@@ -300,8 +300,7 @@ tg-channel-scanner/
 │   └── report-theme.js      # Shared inline theme/motion behavior
 ├── output/                  # gitignored
 └── docs/
-    ├── demo.gif             # README demo preview
-    ├── demo.mp4             # Full product demo video
+    ├── demo.mp4             # Full product demo video, kept under 10 MB for GitHub uploads
     ├── demo/                # HyperFrames demo source and maintenance notes
     ├── licensing.md         # AGPL + commercial licensing policy
     ├── report-design-context.md  # Report UI design constraints

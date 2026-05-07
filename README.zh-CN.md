@@ -45,12 +45,12 @@
 ## 演示
 
 <div align="center">
-  <a href="docs/demo.mp4">
-    <img src="docs/demo.gif" alt="TG Channel Scanner 49 秒产品演示" width="900">
-  </a>
+
+https://github.com/user-attachments/assets/d3a6fd44-7140-4843-86af-b32325abae33
+
 </div>
 
-<p align="center"><em>49 秒产品演示预览。完整 MP4 见 <a href="docs/demo.mp4">docs/demo.mp4</a>。</em></p>
+<p align="center"><em>49 秒产品演示预览。源 MP4 见 <a href="docs/demo.mp4">docs/demo.mp4</a>。</em></p>
 
 ---
 
@@ -297,8 +297,7 @@ tg-channel-scanner/
 │   └── report-theme.js      # 内联主题与动效逻辑
 ├── output/                  # 已 gitignore
 └── docs/
-    ├── demo.gif             # README 演示预览
-    ├── demo.mp4             # 完整产品演示视频
+    ├── demo.mp4             # 完整产品演示视频，控制在 10 MB 内便于 GitHub 上传
     ├── demo/                # HyperFrames 演示源码和维护说明
     ├── licensing.md         # AGPL + 商业授权策略
     ├── report-design-context.md  # 报告 UI 设计约束
