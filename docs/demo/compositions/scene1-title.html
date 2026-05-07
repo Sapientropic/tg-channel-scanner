@@ -1,0 +1,163 @@
+<template id="scene1-template">
+  <div data-composition-id="scene1" data-width="1920" data-height="1080">
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&family=Space+Grotesk:wght@400;500;700&family=Press+Start+2P&display=swap');
+
+      #scene1 {
+        background: oklch(0.10 0.01 75);
+        overflow: hidden;
+        position: relative;
+      }
+      /* Film grain noise overlay to eliminate banding */
+      .noise-overlay {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        z-index: 1;
+        opacity: 0.04;
+        background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+        background-repeat: repeat;
+        background-size: 256px 256px;
+      }
+      .ambient-grid {
+        position: absolute;
+        inset: 0;
+        background-image:
+          linear-gradient(oklch(0.55 0.16 155 / 0.03) 1px, transparent 1px),
+          linear-gradient(90deg, oklch(0.55 0.16 155 / 0.03) 1px, transparent 1px);
+        background-size: 60px 60px;
+        opacity: 0;
+      }
+      .glow-orb {
+        position: absolute;
+        width: 900px;
+        height: 900px;
+        border-radius: 50%;
+        background: radial-gradient(circle at center, oklch(0.55 0.14 155 / 0.09) 0%, oklch(0.55 0.10 155 / 0.04) 45%, transparent 72%);
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        opacity: 0;
+      }
+      .scene-content {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        width: 100%;
+        height: 100%;
+        padding: 80px 120px;
+        gap: 28px;
+        box-sizing: border-box;
+        position: relative;
+        z-index: 2;
+      }
+      .hook-line {
+        font-family: 'Syne', sans-serif;
+        font-size: 64px;
+        font-weight: 800;
+        color: oklch(0.96 0.01 75);
+        text-align: center;
+        line-height: 1.15;
+        letter-spacing: -0.03em;
+        text-shadow:
+          0 2px 30px rgba(0, 0, 0, 0.35),
+          0 0 80px rgba(0, 0, 0, 0.12),
+          0 0 2px rgba(0, 0, 0, 0.15);
+      }
+      .hook-line .word {
+        display: inline-block;
+        margin: 0 0.08em;
+      }
+      .product-name {
+        font-family: 'Press Start 2P', 'Courier New', monospace;
+        font-size: 84px;
+        font-weight: 400;
+        color: oklch(0.55 0.16 155);
+        text-align: center;
+        letter-spacing: 0.06em;
+        line-height: 1.5;
+        text-transform: uppercase;
+        text-shadow:
+          4px 4px 0 oklch(0.30 0.10 155),
+          8px 8px 0 oklch(0.20 0.06 155),
+          0 0 60px oklch(0.55 0.16 155 / 0.25);
+        opacity: 0;
+      }
+      .accent-bar {
+        width: 0px;
+        height: 3px;
+        background: oklch(0.55 0.16 155);
+        border-radius: 2px;
+        opacity: 0;
+      }
+    </style>
+
+    <div class="ambient-grid"></div>
+    <div class="noise-overlay"></div>
+    <div class="glow-orb"></div>
+
+    <div class="scene-content">
+      <div class="hook-line">
+        <span class="word w-0">What</span>
+        <span class="word w-1">if</span>
+        <span class="word w-2">your</span>
+        <span class="word w-3">next</span>
+        <span class="word w-4">job</span>
+      </div>
+      <div class="hook-line">
+        <span class="word w-5">found</span>
+        <span class="word w-6">you?</span>
+      </div>
+      <div class="accent-bar" id="accent-bar"></div>
+      <div class="product-name" id="product-name">TG CHANNEL SCANNER</div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <script>
+      window.__timelines = window.__timelines || {};
+      var tl = gsap.timeline({ paused: true });
+
+      // Ambient grid fade in + subtle drift
+      tl.fromTo(".ambient-grid", { opacity: 0 }, { opacity: 1, duration: 1.5, ease: "power2.out" }, 0);
+      tl.fromTo(".ambient-grid", { x: 0, y: 0 }, { x: 24, y: 24, duration: 5, ease: "none" }, 0);
+
+      // Background glow
+      tl.fromTo(".glow-orb", { opacity: 0, scale: 0.6 }, { opacity: 1, scale: 1, duration: 1.8, ease: "power2.out" }, 0.1);
+
+      // Per-word kinetic typography — dramatic slide from right
+      var wordTimings = [0.0, 0.18, 0.36, 0.54, 0.72, 1.10, 1.40];
+      var slideDistances = [120, 100, 80, 60, 50, 80, 50];
+
+      document.querySelectorAll(".word").forEach(function (word, i) {
+        tl.fromTo(
+          word,
+          { opacity: 0, x: slideDistances[i], y: 18, rotateZ: 2 },
+          { opacity: 1, x: 0, y: 0, rotateZ: 0, duration: 0.45, ease: "power3.out" },
+          wordTimings[i]
+        );
+      });
+
+      // Accent bar expands
+      tl.fromTo(
+        "#accent-bar",
+        { opacity: 0, width: 0 },
+        { opacity: 1, width: 120, duration: 0.5, ease: "power2.out" },
+        2.2
+      );
+
+      // Product name entrance — pixel logo punch
+      tl.fromTo(
+        "#product-name",
+        { opacity: 0, y: 36, scale: 0.92 },
+        { opacity: 1, y: 0, scale: 1, duration: 0.8, ease: "back.out(1.2)" },
+        2.5
+      );
+
+      // Subtle glow pulse at end
+      tl.to(".glow-orb", { scale: 1.08, duration: 1.2, ease: "sine.inOut", yoyo: true, repeat: 1 }, 2.8);
+
+      window.__timelines["scene1"] = tl;
+    </script>
+  </div>
+</template>

@@ -1,8 +1,17 @@
 # TG Channel Scanner
 
+[![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![Telegram MTProto](https://img.shields.io/badge/Telegram-MTProto-26A5E4?logo=telegram&logoColor=white)](https://core.telegram.org/mtproto)
+[![LLM Powered](https://img.shields.io/badge/powered%20by-LLM-22C55E?logo=openai&logoColor=white)](https://github.com/Sapientropic/tg-channel-scanner)
+
 Read Telegram channel messages on demand, filter by keywords/profiles, and generate AI-powered digests.
 
 Multi-mode: built-in job scanning mode plus profile-driven custom modes for any monitoring scenario (airdrops, news, events, etc.).
+
+<p align="center">
+  <video src="docs/demo.mp4" controls="controls" width="100%"></video>
+</p>
 
 [**中文文档**](README.zh-CN.md)
 
@@ -99,12 +108,6 @@ python scripts/report.py --input output/scan_XXXX.jsonl --profile profiles/examp
 python scripts/report.py --input output/scan_XXXX.jsonl --profile profiles/example-airdrop.md \
   --output output/airdrop-report-2026-05-06.md
 
-```bash
-# Stable report pipeline: LLM extracts job reasoning; Python renders stats + Markdown
-export OPENAI_API_KEY=sk-your-key
-python scripts/report.py --input output/scan_XXXX.jsonl --profile profiles/example.md \
-  --output output/job-scan-report-2026-05-06.md
-
 # Optional: redact emails, phone numbers, and Telegram handles before sending
 python scripts/report.py --input output/scan_XXXX.jsonl --profile profiles/example.md \
   --redact-contact-info
@@ -127,6 +130,18 @@ python scripts/daily_report.py channel_lists/example.txt --profile profiles/exam
 `report.py` sends selected messages and the profile to your configured OpenAI-compatible API. The LLM handles semantic matching; Python handles deduplication, statistics, and rendering. The extraction schema, system prompt, and report labels are all driven by the profile. For remote LLM providers, `--redact-contact-info` is recommended unless contact details are needed. Use `--dry-run-prompt` to review the exact payload before sending.
 
 `daily_report.py` is a local convenience wrapper. It does not install a scheduler; use cron or Windows Task Scheduler if you want it to run daily.
+
+### Report output
+
+<p align="center">
+  <img src="docs/screenshots/report-header.png" alt="Report header with stats bar" width="700">
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/report-cards.png" alt="Ranked cards with semantic color coding" width="700">
+</p>
+
+The HTML report is a single self-contained file with OKLCH color coding (green = apply, amber = investigate, gray = skip), animated card entrances, expandable raw messages, and Telegram deep links.
 
 Daily scheduling examples:
 
@@ -180,13 +195,20 @@ By default, video OCR uses the thumbnail only. `--ocr-full-video` downloads the 
 
 ## How It Works
 
-```
-Telegram Channels
-  → Telethon reads messages (MTProto, precise time filter)
-    → scanner detects saturation + completeness
-    → saved to output/ (JSONL + metadata sidecar)
-      → LLM extracts matching items (schema from profile)
-        → Python deduplicates, counts, and renders Markdown/HTML report
+```mermaid
+graph LR
+    A["📱 Telegram<br>Channels"] -->|MTProto| B["🔍 Scanner<br>scan.py"]
+    B -->|"JSONL + meta"| C["🤖 LLM<br>Semantic Filter"]
+    C -->|"Structured JSON"| D["📊 Report<br>report.py"]
+    D --> E["📝 Markdown"]
+    D --> F["🎨 HTML Report"]
+
+    style A fill:#26A5E4,color:#fff
+    style B fill:#3776AB,color:#fff
+    style C fill:#14B8A6,color:#fff
+    style D fill:#22C55E,color:#fff
+    style E fill:#64748B,color:#fff
+    style F fill:#F59E0B,color:#fff
 ```
 
 1. **Read**: Telethon (MTProto user client) reads messages from channels you've subscribed to, including media metadata

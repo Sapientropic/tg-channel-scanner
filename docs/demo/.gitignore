@@ -1,0 +1,58 @@
+# Binary renders — too large for repo; upload final to GitHub Release
+renders/
+
+# Screenshots used in README are in docs/screenshots/
+screenshots/
+
+# Dependencies and caches
+node_modules/
+.waveform-cache/
+
+# Sound effects (intermediate)
+sfx/
+
+# Intermediate audio/video
+*.m4a
+*.wav
+!bgm.mp3
+
+# Intermediate MP4s at demo root
+demo-final-*.mp4
+demo-v*.mp4
+
+# Narration (removed from final product)
+narration*.mp3
+narration*.json
+
+# Obsolete BGM versions
+bgm_minimax.*
+bgm_v12.mp3
+
+# Temporary audio
+tmp_*.mp3
+
+# One-off helper scripts
+_fetch_*.py
+_gen_*.py
+gen_*.py
+capture-screenshots.*
+
+# Agent/session docs — not part of the project
+AGENTS.md
+HANDOFF.md
+CLAUDE.md
+SCRIPT.md
+
+# Captions (removed from final product)
+caption*.json
+captions*.json
+
+# Audit/frame screenshots
+v*_audit_*.png
+v*-frame-*.png
+v*-t*.png
+v9-audit-*.png
+demo-thumbnail-raw.png
+
+# Transcripts
+transcript*.json

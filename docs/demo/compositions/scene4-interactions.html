@@ -1,0 +1,141 @@
+<template id="scene4-template">
+  <div data-composition-id="scene4" data-width="1920" data-height="1080">
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;700&display=swap');
+
+      #scene4 {
+        background: oklch(0.985 0.003 75);
+        overflow: hidden;
+      }
+      .scene-content {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        width: 100%;
+        height: 100%;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      .report-frame {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        border-radius: 0;
+        overflow: hidden;
+        box-shadow: none;
+        border: none;
+      }
+      .report-img-container {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: oklch(0.985 0.003 75);
+      }
+      [data-layout-allow-overflow] {
+        /* intentional overflow for Ken Burns and badges */
+      }
+      .report-slide {
+        position: absolute;
+        top: 0;
+        left: 50%;
+        width: 100%;
+        height: auto;
+        transform: translateX(-50%);
+        display: block;
+      }
+      /* Annotation badges */
+      .badge {
+        position: absolute;
+        font-family: 'Space Grotesk', system-ui, sans-serif;
+        font-size: 22px;
+        font-weight: 700;
+        padding: 12px 28px;
+        border-radius: 10px;
+        white-space: nowrap;
+        z-index: 10;
+        letter-spacing: 0.02em;
+        box-shadow: 0 6px 24px rgba(0,0,0,0.12);
+      }
+      .badge.green {
+        color: oklch(0.25 0.08 155);
+        background: oklch(0.95 0.04 155);
+        border: 2px solid oklch(0.60 0.16 155);
+        top: 50px;
+        right: 60px;
+      }
+      .badge.amber {
+        color: oklch(0.35 0.08 75);
+        background: oklch(0.96 0.04 75);
+        border: 2px solid oklch(0.75 0.14 75);
+        top: 50px;
+        right: 60px;
+      }
+      .badge.gray {
+        color: oklch(0.35 0.01 75);
+        background: oklch(0.95 0.003 75);
+        border: 2px solid oklch(0.65 0.01 75);
+        top: 50px;
+        right: 60px;
+      }
+    </style>
+
+    <div class="scene-content">
+      <div class="report-frame">
+        <div class="report-img-container" data-layout-allow-overflow>
+          <img class="report-slide" id="slide-high" src="../screenshots/02-cards-high.png" alt="High cards">
+          <img class="report-slide" id="slide-med" src="../screenshots/03-cards-medium.png" alt="Medium cards">
+          <img class="report-slide" id="slide-low" src="../screenshots/03b-cards-low.png" alt="Low cards">
+          <img class="report-slide" id="slide-link" src="../screenshots/06-telegram-link.png" alt="Telegram link">
+          <img class="report-slide" id="slide-expand" src="../screenshots/04-expand-view.png" alt="Expanded view">
+        </div>
+        <div class="badge green" id="label-apply" style="opacity:0">✓ APPLY NOW</div>
+        <div class="badge amber" id="label-inspect" style="opacity:0">◆ INVESTIGATE</div>
+        <div class="badge gray" id="label-skip" style="opacity:0">○ SKIP</div>
+      </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <script>
+      window.__timelines = window.__timelines || {};
+      var tl = gsap.timeline({ paused: true });
+
+      // Beat 1: Green APPLY cards (0.3-2.0s)
+      tl.fromTo("#slide-high", { opacity: 0, scale: 1.6, y: -30 }, { opacity: 1, scale: 1.5, y: 0, duration: 1.0, ease: "power2.out" }, 0.2);
+      tl.fromTo("#label-apply", { opacity: 0, y: 20, scale: 0.92 }, { opacity: 1, y: 0, scale: 1, duration: 0.45, ease: "back.out(1.7)" }, 0.5);
+      tl.to("#label-apply", { opacity: 0, duration: 0.25 }, 1.8);
+      tl.to("#slide-high", { opacity: 0, duration: 0.35, ease: "power2.inOut" }, 2.0);
+
+      // Beat 2: Amber INVESTIGATE (2.3-4.2s)
+      tl.fromTo("#slide-med", { opacity: 0, scale: 1.55, y: -25 }, { opacity: 1, scale: 1.5, y: 0, duration: 1.0, ease: "power2.out" }, 2.3);
+      tl.fromTo("#label-inspect", { opacity: 0, y: 20, scale: 0.92 }, { opacity: 1, y: 0, scale: 1, duration: 0.45, ease: "back.out(1.7)" }, 2.6);
+      tl.to("#label-inspect", { opacity: 0, duration: 0.25 }, 3.8);
+      tl.to("#slide-med", { opacity: 0, duration: 0.35, ease: "power2.inOut" }, 4.2);
+
+      // Beat 3: Gray SKIP (4.8-6.5s)
+      tl.fromTo("#slide-low", { opacity: 0, scale: 1.55, y: -25 }, { opacity: 1, scale: 1.5, y: 0, duration: 1.0, ease: "power2.out" }, 4.8);
+      tl.fromTo("#label-skip", { opacity: 0, y: 20, scale: 0.92 }, { opacity: 1, y: 0, scale: 1, duration: 0.45, ease: "back.out(1.7)" }, 5.1);
+      tl.to("#label-skip", { opacity: 0, duration: 0.25 }, 6.2);
+      tl.to("#slide-low", { opacity: 0, duration: 0.35, ease: "power2.inOut" }, 6.5);
+
+      // Beat 4: Telegram link (7.5-10.5s)
+      tl.fromTo("#slide-link", { opacity: 0, scale: 1.7, y: -30 }, { opacity: 1, scale: 1.6, y: 0, duration: 1.2, ease: "power2.out" }, 7.5);
+      // Ken Burns zoom on the link area
+      tl.to("#slide-link", { scale: 1.9, y: -80, x: -40, duration: 2.5, ease: "power1.inOut", overwrite: "auto" }, 8.0);
+      tl.to("#slide-link", { opacity: 0, duration: 0.35, ease: "power2.inOut" }, 10.5);
+
+      // Beat 5: Expanded view with strong zoom for readability (11.0-15.0s)
+      // Phase 1: Fade in completely before zooming
+      tl.fromTo("#slide-expand", { opacity: 0, scale: 1.5, y: 0 }, { opacity: 1, scale: 1.5, y: 0, duration: 1.2, ease: "power2.out" }, 11.0);
+      // Phase 2: Ken Burns zoom starts only after fade-in completes
+      tl.to("#slide-expand", { scale: 1.9, y: -100, x: -50, duration: 2.8, ease: "power1.inOut", overwrite: "auto" }, 12.2);
+      tl.to("#slide-expand", { opacity: 0, duration: 0.4, ease: "power2.in" }, 15.0);
+
+      // Keep-alive: ensure timeline lasts full clip duration
+      tl.to("#scene4", { opacity: 1, duration: 0.01 }, 11.99);
+
+      window.__timelines["scene4"] = tl;
+    </script>
+  </div>
+</template>

@@ -1,0 +1,85 @@
+<template id="scene3-template">
+  <div data-composition-id="scene3" data-width="1920" data-height="1080">
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
+
+      #scene3 {
+        background: oklch(0.985 0.003 75);
+        overflow: hidden;
+      }
+      .scene-content {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        width: 100%;
+        height: 100%;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      .report-frame {
+        width: 100%;
+        height: 100%;
+        border-radius: 0;
+        overflow: hidden;
+        box-shadow: none;
+        border: none;
+      }
+      .report-img-container {
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: oklch(0.985 0.003 75);
+        position: relative;
+      }
+      .report-img {
+        position: absolute;
+        top: 0;
+        left: 50%;
+        width: 100%;
+        height: auto;
+        transform: translateX(-50%);
+        transform-origin: top center;
+        display: block;
+      }
+    </style>
+
+    <div class="scene-content">
+      <div class="report-frame">
+        <div class="report-img-container">
+          <img class="report-img" id="report-img" src="../screenshots/01-header-stats.png" alt="Report overview">
+        </div>
+      </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <script>
+      window.__timelines = window.__timelines || {};
+      var tl = gsap.timeline({ paused: true });
+
+      // Report frame entrance — snappy for 3.4s scene
+      tl.fromTo(
+        ".report-frame",
+        { opacity: 0, scale: 0.96 },
+        { opacity: 1, scale: 1, duration: 0.5, ease: "power3.out" },
+        0
+      );
+
+      // Zoomed image reveal — start at 1.3, focus on stats at top
+      tl.fromTo(
+        "#report-img",
+        { opacity: 0, scale: 1.3 },
+        { opacity: 1, scale: 1.3, duration: 0.6, ease: "power2.out" },
+        0.1
+      );
+
+      // Ken Burns zoom deeper into stats area
+      tl.to("#report-img", { scale: 1.9, duration: 2.4, ease: "power1.inOut" }, 0.8);
+
+      // Keep-alive: ensure timeline lasts full clip duration
+      tl.to("#scene3", { opacity: 1, duration: 0.01 }, 7.99);
+
+      window.__timelines["scene3"] = tl;
+    </script>
+  </div>
+</template>

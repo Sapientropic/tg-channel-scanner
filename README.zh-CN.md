@@ -1,8 +1,17 @@
 # TG 频道扫描器
 
+[![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![Telegram MTProto](https://img.shields.io/badge/Telegram-MTProto-26A5E4?logo=telegram&logoColor=white)](https://core.telegram.org/mtproto)
+[![LLM Powered](https://img.shields.io/badge/powered%20by-LLM-22C55E?logo=openai&logoColor=white)](https://github.com/Sapientropic/tg-channel-scanner)
+
 按需读取 Telegram 频道消息，按 profile 过滤，生成 AI 摘要报告。
 
 多模式支持：内置求职扫描模式，同时支持 profile 驱动的自定义模式（空投监控、新闻追踪、活动筛选等）。
+
+<p align="center">
+  <video src="docs/demo.mp4" controls="controls" width="100%"></video>
+</p>
 
 [**English**](README.md)
 
@@ -118,6 +127,18 @@ python scripts/daily_report.py channel_lists/example.txt --profile profiles/exam
 
 `daily_report.py` 只是本地便利入口，不会创建系统定时任务。需要每天自动运行时，请用 cron 或 Windows Task Scheduler 调用它。
 
+### 报告效果
+
+<p align="center">
+  <img src="docs/screenshots/report-header.png" alt="报告头部与统计栏" width="700">
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/report-cards.png" alt="语义色标排序卡片" width="700">
+</p>
+
+HTML 报告为单文件自包含格式，使用 OKLCH 色标（绿色=申请、琥珀色=调查、灰色=跳过）、卡片入场动画、可展开原文和 Telegram 深链接。
+
 定时示例：
 
 ```bash
@@ -170,13 +191,20 @@ export OPENAI_API_KEY=your-key
 
 ## 工作原理
 
-```
-Telegram 频道
-  → Telethon 读取消息（MTProto，精确时间过滤，含 media 信息）
-    → scanner 做饱和检测 + 完整性检查
-    → 保存到 output/（JSONL + metadata sidecar）
-      → LLM 按 profile 中的 schema 抽取匹配项
-        → Python 去重、统计并渲染 Markdown/HTML 报告
+```mermaid
+graph LR
+    A["📱 Telegram<br>频道"] -->|MTProto| B["🔍 扫描器<br>scan.py"]
+    B -->|"JSONL + meta"| C["🤖 LLM<br>语义过滤"]
+    C -->|"结构化 JSON"| D["📊 报告<br>report.py"]
+    D --> E["📝 Markdown"]
+    D --> F["🎨 HTML 报告"]
+
+    style A fill:#26A5E4,color:#fff
+    style B fill:#3776AB,color:#fff
+    style C fill:#14B8A6,color:#fff
+    style D fill:#22C55E,color:#fff
+    style E fill:#64748B,color:#fff
+    style F fill:#F59E0B,color:#fff
 ```
 
 1. **读取**：Telethon（MTProto user client）读取你已订阅频道的消息，包括图片等 media 元数据

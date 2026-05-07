@@ -1,0 +1,136 @@
+<template id="scene2-template">
+  <div data-composition-id="scene2" data-width="1920" data-height="1080">
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+
+      #scene2 {
+        background: oklch(0.10 0.01 75);
+        overflow: hidden;
+      }
+      .scene-content {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        width: 100%;
+        height: 100%;
+        padding: 60px 80px;
+        box-sizing: border-box;
+      }
+      .terminal-window {
+        width: 100%;
+        border-radius: 0;
+        overflow: hidden;
+        box-shadow: none;
+        border: none;
+      }
+      .terminal-body {
+        background: oklch(0.13 0.01 75);
+        padding: 60px 80px;
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 40px;
+        line-height: 1.7;
+        color: oklch(0.88 0.01 75);
+      }
+      .terminal-line {
+        display: flex;
+        align-items: flex-start;
+        gap: 14px;
+      }
+      .prompt {
+        color: oklch(0.55 0.16 155);
+        font-weight: 700;
+        flex-shrink: 0;
+        font-size: 40px;
+      }
+      #typed-cmd {
+        color: oklch(0.95 0.005 75);
+        white-space: pre-wrap;
+        word-break: break-all;
+      }
+      .cursor {
+        display: inline-block;
+        width: 20px;
+        height: 48px;
+        background: oklch(0.55 0.16 155);
+        vertical-align: text-bottom;
+        border-radius: 1px;
+      }
+      .output-line {
+        margin-top: 14px;
+        font-size: 40px;
+        letter-spacing: 0.01em;
+      }
+      .output-line.success { color: oklch(0.55 0.16 155); }
+      .output-line.info { color: oklch(0.55 0.01 75); }
+      .hl-num {
+        color: oklch(0.55 0.16 155);
+        font-weight: 700;
+      }
+    </style>
+
+    <div class="scene-content">
+      <div class="terminal-window">
+        <div class="terminal-body">
+          <div class="terminal-line">
+            <span class="prompt">❯</span>
+            <span id="typed-cmd"></span>
+            <span class="cursor" id="cmd-cursor"></span>
+          </div>
+          <div class="output-line info" id="out-1" style="opacity:0">Scanning <span class="hl-num">68</span> channels...</div>
+          <div class="output-line info" id="out-2" style="opacity:0"><span class="hl-num">1,247</span> messages collected</div>
+          <div class="output-line success" id="out-3" style="opacity:0"><span class="hl-num">22</span> matches found</div>
+        </div>
+      </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <script>
+      window.__timelines = window.__timelines || {};
+      var tl = gsap.timeline({ paused: true });
+
+      var CMD = 'python daily_report.py';
+      var typedEl = document.getElementById("typed-cmd");
+
+      // Terminal body entrance
+      tl.fromTo(
+        ".terminal-body",
+        { opacity: 0, y: 40, scale: 0.98 },
+        { opacity: 1, y: 0, scale: 1, duration: 0.6, ease: "power3.out" },
+        0
+      );
+
+      // Cursor blink during typing
+      var typeDuration = 2.8;
+      var typeStart = 0.5;
+      tl.to(".cursor", { opacity: 0, duration: 0.5, yoyo: true, repeat: 8, ease: "steps(1)" }, typeStart);
+
+      // Character-by-character typing
+      for (var i = 0; i < CMD.length; i++) {
+        (function (idx) {
+          tl.call(
+            function () {
+              typedEl.textContent = CMD.substring(0, idx + 1);
+            },
+            null,
+            typeStart + (idx / CMD.length) * typeDuration
+          );
+        })(i);
+      }
+
+      // Output lines appear after typing
+      var outputStart = typeStart + typeDuration + 0.3;
+
+      tl.to("#cmd-cursor", { opacity: 0, duration: 0.01 }, outputStart);
+
+      tl.fromTo("#out-1", { opacity: 0, x: -16 }, { opacity: 1, x: 0, duration: 0.4 }, outputStart + 0.3);
+      tl.fromTo("#out-2", { opacity: 0, x: -16 }, { opacity: 1, x: 0, duration: 0.4 }, outputStart + 1.2);
+      tl.fromTo("#out-3", { opacity: 0, x: -16 }, { opacity: 1, x: 0, duration: 0.5 }, outputStart + 2.1);
+
+      // Keep-alive: ensure timeline lasts full clip duration
+      tl.to("#scene2", { opacity: 1, duration: 0.01 }, 7.99);
+
+      window.__timelines["scene2"] = tl;
+    </script>
+  </div>
+</template>
