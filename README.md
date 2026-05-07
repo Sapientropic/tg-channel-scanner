@@ -1,17 +1,28 @@
-# TG Channel Scanner
+```
+ _____ ____    ____ _   _    _    _   _ _   _ _____ _
+|_   _/ ___|  / ___| | | |  / \  | \ | | \ | | ____| |
+  | || |  _  | |   | |_| | / _ \ |  \| |  \| |  _| | |
+  | || |_| | | |___|  _  |/ ___ \| |\  | |\  | |___| |___
+  |_| \____|  \____|_| |_/_/   \_\_| \_|_| \_|_____|_____|
+ ____   ____    _    _   _ _   _ _____ ____
+/ ___| / ___|  / \  | \ | | \ | | ____|  _ \
+\___ \| |     / _ \ |  \| |  \| |  _| | |_) |
+ ___) | |___ / ___ \| |\  | |\  | |___|  _ <
+|____/ \____/_/   \_\_| \_|_| \_|_____|_| \_\
+```
 
 [![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Telegram MTProto](https://img.shields.io/badge/Telegram-MTProto-26A5E4?logo=telegram&logoColor=white)](https://core.telegram.org/mtproto)
 [![LLM Powered](https://img.shields.io/badge/powered%20by-LLM-22C55E?logo=openai&logoColor=white)](https://github.com/Sapientropic/tg-channel-scanner)
 
-Read Telegram channel messages on demand, filter by keywords/profiles, and generate AI-powered digests.
+**Read Telegram channels → AI semantic filter → self-contained HTML report.**
 
-Multi-mode: built-in job scanning mode plus profile-driven custom modes for any monitoring scenario (airdrops, news, events, etc.).
+One command scans dozens of channels, filters through your LLM, and generates a ranked digest. Job hunting, airdrop monitoring, news tracking — driven by plain-text profiles.
 
-<p align="center">
-  <video src="docs/demo.mp4" controls="controls" width="100%"></video>
-</p>
+<p align="center"><a href="https://github.com/Sapientropic/tg-channel-scanner/releases/download/v1.0-demo/demo.mp4"><img src="docs/demo.gif" alt="Product demo" width="100%"></a></p>
+
+<p align="center"><em>Click to play the full demo (56s)</em></p>
 
 [**中文文档**](README.zh-CN.md)
 
@@ -34,162 +45,127 @@ chmod +x setup.sh scripts/scan.sh
 ./setup.sh
 ```
 
-> `setup.sh` installs pinned dependencies from `requirements.txt` / `requirements-llm.txt` and verifies Telethon is available.
-
-### Configure
+### Configure & Run
 
 ```bash
 # 1. Edit config with your Telegram API credentials
 #    (setup.sh created it at ~/.config/tgcli/config.toml)
 nano ~/.config/tgcli/config.toml
 
-# 2. Run a scan (first run prompts for login if no session exists)
+# 2. Scan channels (first run prompts for login)
 source .venv/bin/activate
 ./scripts/scan.sh channel_lists/example.txt
+
+# 3. Generate HTML report
+python scripts/daily_report.py channel_lists/example.txt \
+  --profile profiles/example.md --html
 ```
 
-### Run a scan
+### Scan Options
 
 ```bash
-# Scan all channels in a list, past 24 hours
+# Past 24 hours (default)
 ./scripts/scan.sh channel_lists/example.txt
 
-# Scan past 7 days
+# Past 7 days
 ./scripts/scan.sh channel_lists/example.txt 168
 
-# Scan since a precise ISO-8601 cutoff
+# From a precise ISO-8601 cutoff
 ./scripts/scan.sh channel_lists/example.txt --since 2026-05-06T07:30:00Z
-
-# Output goes to output/scan_YYYYMMDD_HHMMSS.jsonl
-# Metadata goes to output/scan_YYYYMMDD_HHMMSS.meta.json
-# Errors go to output/scan_YYYYMMDD_HHMMSS.errors.log
 ```
 
-The scanner reads messages via Telethon (MTProto user client) with a precise UTC cutoff. It uses `iter_messages` with early termination — as soon as it encounters a message older than the cutoff, it stops. This avoids over-fetching from high-volume channels. `SCAN_MAX_LIMIT` serves as a safety cap against runaway reads.
+The scanner uses Telethon (MTProto) with `iter_messages` and early termination — it stops as soon as it hits a message older than your cutoff. No over-fetching.
 
-Useful environment variables:
+<details>
+<summary>Environment variables</summary>
 
 ```bash
 SCAN_INITIAL_LIMIT=200   # initial read limit per channel
 SCAN_MAX_LIMIT=5000      # hard cap before reporting incomplete
 SCAN_DELAY=1             # seconds between channels
-SCAN_MAX_FLOOD_WAIT_SECONDS=300  # fail the channel instead of sleeping longer
-TG_SCANNER_CONFIG_DIR=~/.config/tgcli  # optional config/session directory override
+SCAN_MAX_FLOOD_WAIT_SECONDS=300
+TG_SCANNER_CONFIG_DIR=~/.config/tgcli
 ```
 
-### Export channels from a Telegram folder
+</details>
 
-If you organize channels into Telegram chat folders, you can export them directly:
+### Export Channels from Telegram
 
 ```bash
-# List all folders
 python scripts/export_folder.py --list
-
-# Export a folder by name
 python scripts/export_folder.py --folder "Jobs" --output channel_lists/jobs.txt
-
-# Export by folder ID (from --list)
-python scripts/export_folder.py --folder-id 2 --output channel_lists/jobs.txt
 ```
 
-The exported file works as a regular channel list for `scan.py`.
-
-### Generate a report
-
-Job mode (default) and custom mode are both driven by the profile. A job-mode profile produces a job scan report; a custom-mode profile produces a report with your own fields, schema, and labels.
+### Generate Reports
 
 ```bash
-# Job report (default)
-export OPENAI_API_KEY=sk-your-key
-python scripts/report.py --input output/scan_XXXX.jsonl --profile profiles/example.md \
-  --output output/job-scan-report-2026-05-06.md
+# Markdown + HTML report
+python scripts/daily_report.py channel_lists/example.txt \
+  --profile profiles/example.md --html
 
-# Custom mode: airdrop monitor
-python scripts/report.py --input output/scan_XXXX.jsonl --profile profiles/example-airdrop.md \
-  --output output/airdrop-report-2026-05-06.md
-
-# Optional: redact emails, phone numbers, and Telegram handles before sending
-python scripts/report.py --input output/scan_XXXX.jsonl --profile profiles/example.md \
-  --redact-contact-info
-
-# Preview the exact extraction prompt without calling the LLM
-python scripts/report.py --input output/scan_XXXX.jsonl --profile profiles/example.md \
-  --dry-run-prompt output/prompt-preview.md
-
-# Works with DeepSeek, Ollama, etc:
-python scripts/report.py --input output/scan_XXXX.jsonl --profile profiles/example.md \
+# Custom LLM endpoint (DeepSeek, Ollama, etc.)
+python scripts/report.py --input output/scan_XXXX.jsonl \
+  --profile profiles/example.md \
   --base-url https://api.deepseek.com/v1 --model deepseek-chat
 
-# One command: scan then generate today's report
-python scripts/daily_report.py channel_lists/example.txt --profile profiles/example.md
+# Redact contact info before sending to LLM
+python scripts/report.py --input output/scan_XXXX.jsonl \
+  --profile profiles/example.md --redact-contact-info
 
-# Generate HTML report alongside Markdown (card layout, inline links, self-contained)
-python scripts/daily_report.py channel_lists/example.txt --profile profiles/example.md --html
+# Preview prompt without calling LLM
+python scripts/report.py --input output/scan_XXXX.jsonl \
+  --profile profiles/example.md --dry-run-prompt output/prompt-preview.md
 ```
 
-`report.py` sends selected messages and the profile to your configured OpenAI-compatible API. The LLM handles semantic matching; Python handles deduplication, statistics, and rendering. The extraction schema, system prompt, and report labels are all driven by the profile. For remote LLM providers, `--redact-contact-info` is recommended unless contact details are needed. Use `--dry-run-prompt` to review the exact payload before sending.
+<p align="center"><img src="docs/screenshots/report-header.png" alt="Report header with stats bar" width="700"></p>
 
-`daily_report.py` is a local convenience wrapper. It does not install a scheduler; use cron or Windows Task Scheduler if you want it to run daily.
+<p align="center"><img src="docs/screenshots/report-cards.png" alt="Ranked cards with semantic color coding" width="700"></p>
 
-### Report output
+The HTML report is a single self-contained file: OKLCH color coding (green/amber/gray), animated cards, expandable raw messages, and Telegram deep links.
 
-<p align="center">
-  <img src="docs/screenshots/report-header.png" alt="Report header with stats bar" width="700">
-</p>
-
-<p align="center">
-  <img src="docs/screenshots/report-cards.png" alt="Ranked cards with semantic color coding" width="700">
-</p>
-
-The HTML report is a single self-contained file with OKLCH color coding (green = apply, amber = investigate, gray = skip), animated card entrances, expandable raw messages, and Telegram deep links.
-
-Daily scheduling examples:
+<details>
+<summary>Scheduling examples</summary>
 
 ```bash
-# cron: run every day at 09:00
+# cron: every day at 09:00
 0 9 * * * cd /path/to/tg-channel-scanner && .venv/bin/python scripts/daily_report.py channel_lists/example.txt --profile profiles/example.md
 ```
 
 ```bat
-REM Windows Task Scheduler action
+REM Windows Task Scheduler
 cmd /c "cd /d C:\path\to\tg-channel-scanner && .venv\Scripts\python.exe scripts\daily_report.py channel_lists\example.txt --profile profiles\example.md"
 ```
 
-### Free-form AI summary
+</details>
+
+<details>
+<summary>Free-form AI summary & Media OCR</summary>
+
+**Free-form summary** (no fixed layout, just a digest):
 
 ```bash
 python scripts/summarize.py --input output/scan_XXXX.jsonl --profile profiles/example.md
-
-# Or feed output directly to Codex / Claude / any AI agent
-#   Point your agent at:
-#   - The JSONL scan file in output/
-#   - Your profile in profiles/
-#   Example Codex prompt:
-#     "Read output/scan_XXXX.jsonl and filter jobs matching profiles/my-profile.md"
 ```
 
-`summarize.py` remains available for a lightweight free-form digest when you do not need deterministic statistics or a fixed daily-report layout.
-
-### Optional media OCR
-
-Media OCR/STT is **off by default**. Enabling it downloads matching media to temporary files and uploads images, video thumbnails/frames, or voice audio to your configured OpenAI-compatible API.
+**Media OCR/STT** (off by default):
 
 ```bash
-# xAI vision default
+# xAI vision
 export XAI_API_KEY=your-key
 ./scripts/scan.sh channel_lists/example.txt --ocr --ocr-provider xai
 
-# OpenAI vision default
+# OpenAI vision
 export OPENAI_API_KEY=sk-your-key
 ./scripts/scan.sh channel_lists/example.txt --ocr --ocr-provider openai
 
-# Custom OpenAI-compatible endpoint
-export OPENAI_API_KEY=your-key
+# Custom endpoint
 ./scripts/scan.sh channel_lists/example.txt --ocr --ocr-provider custom \
   --ocr-base-url http://localhost:11434/v1 --ocr-model your-vision-model
 ```
 
-By default, video OCR uses the thumbnail only. `--ocr-full-video` downloads the full video and extracts frames; that mode requires `ffmpeg` and `ffprobe` on `PATH`.
+Use `--ocr-full-video` to extract frames from full videos (requires `ffmpeg`).
+
+</details>
 
 ---
 
@@ -211,49 +187,16 @@ graph LR
     style F fill:#F59E0B,color:#fff
 ```
 
-1. **Read**: Telethon (MTProto user client) reads messages from channels you've subscribed to, including media metadata
-2. **Filter**: `scripts/scan.py` filters by precise timestamp and refuses to silently accept saturated limits
-3. **Save**: Messages are saved as JSONL with date, sender, text, channel info, media fields, and a `.meta.json` scan sidecar
-4. **Report**: The LLM performs semantic matching using the extraction schema from your profile; Python renders deterministic stats and Markdown/HTML sections
+1. **Read** — Telethon reads messages from your subscribed channels
+2. **Filter** — Precise timestamp cutoff with early termination
+3. **Save** — JSONL + `.meta.json` sidecar
+4. **Report** — LLM semantic matching → Python renders stats + Markdown/HTML
 
-## Directory Structure
+## Profiles & Channel Lists
 
-```
-tg-channel-scanner/
-├── config.example.toml      # Template (actual config at ~/.config/tgcli/)
-├── requirements.txt         # Pinned scanner dependency (telethon)
-├── requirements-llm.txt     # Pinned optional summarizer dependency
-├── requirements-dev.txt     # Pinned test dependency
-├── setup.sh / setup.bat     # One-command installer
-├── profiles/                # Filter profiles (job or custom mode)
-│   ├── example.md           # Example: Frontend Developer job search
-│   └── example-airdrop.md   # Example: Crypto airdrop monitor (custom mode)
-├── channel_lists/           # Channel name lists (one per line)
-│   └── example.txt          # Example channel list
-├── scripts/
-│   ├── scan.sh              # Batch channel reader (Mac/Linux)
-│   ├── scan.bat             # Batch channel reader (Windows)
-│   ├── scan.py              # Cross-platform scanner core (Telethon)
-│   ├── export_folder.py     # Export channels from a Telegram chat folder
-│   ├── media_ocr.py         # Shared OCR/STT helpers
-│   ├── ocr_media.py         # Standalone OCR re-processor
-│   ├── profile_schema.py    # Profile parser and mode configuration
-│   ├── report.py            # Multi-mode report generator (Markdown + HTML)
-│   ├── daily_report.py      # Scan + report convenience pipeline
-│   └── summarize.py         # Optional LLM summarizer
-├── templates/
-│   ├── report-job.html      # HTML template for job mode (OKLCH palette)
-│   ├── report-generic.html  # HTML template for custom modes
-│   └── icon-job.png         # Report favicon/header icon
-├── output/                  # Scan results (gitignored)
-└── docs/
-    ├── tos-risk-analysis.md
-    └── getting-api-credentials.md
-```
+### Profile
 
-## Creating Your Own Profile
-
-Copy `profiles/example.md` and edit the matching criteria. The profile tells the AI what to filter for:
+Copy `profiles/example.md` and edit:
 
 ```markdown
 ## Candidate
@@ -268,72 +211,64 @@ Copy `profiles/example.md` and edit the matching criteria. The profile tells the
 - Exclude: Backend-only, Mobile, DevOps...
 ```
 
-### Custom mode profiles
+Custom modes (airdrops, news, events) add `## Extraction Schema`, `## Extraction Prompt`, and `## Report Labels` sections. See `profiles/example-airdrop.md`.
 
-To use a custom mode (e.g. monitoring airdrops, news, events), add the optional `## Extraction Schema`, `## Extraction Prompt`, and `## Report Labels` sections to your profile. These override the built-in job-mode defaults. See `profiles/example-airdrop.md` for a complete example.
+### Channel List
 
-Key configuration sections:
-
-| Section | What it controls |
-|---------|-----------------|
-| `## Extraction Schema` | Field definitions, dedup keys, top-level JSON key |
-| `## Extraction Prompt` | System prompt, location/contact filter overrides |
-| `## Report Labels` | Report title, section headers, output filename |
-
-## Creating Your Own Channel List
-
-Create a `.txt` file in `channel_lists/`. Use **Telegram channel usernames** (not display names), one per line:
+Create a `.txt` in `channel_lists/` with **Telegram usernames** (not display names), one per line:
 
 ```
-# Good — these are Telegram usernames
 remote_italic
 dev_jobs_remote
 react_jobs
-
-# BAD — these are display names, won't work
-React Job | JavaScript | Вакансии
 ```
 
-> How to find a channel's username: open the channel in Telegram → tap the name → look for @username.
+> Find a channel's username: open in Telegram → tap name → look for @username.
 
-Lines starting with `#` are comments.
+Or export directly from Telegram: `python scripts/export_folder.py --folder "Jobs" --output channel_lists/jobs.txt`
+
+## Directory Structure
+
+```
+tg-channel-scanner/
+├── config.example.toml      # Template (actual config at ~/.config/tgcli/)
+├── requirements.txt         # telethon
+├── requirements-llm.txt     # optional summarizer deps
+├── setup.sh / setup.bat     # One-command installer
+├── profiles/                # Filter profiles
+├── channel_lists/           # Channel name lists
+├── scripts/
+│   ├── scan.py              # Scanner core (Telethon)
+│   ├── export_folder.py     # Export from Telegram folders
+│   ├── report.py            # Report generator (Markdown + HTML)
+│   ├── daily_report.py      # Scan + report pipeline
+│   └── summarize.py         # Free-form LLM summary
+├── templates/
+│   ├── report-job.html      # OKLCH palette template
+│   └── report-generic.html  # Custom mode template
+├── output/                  # gitignored
+└── docs/
+    └── screenshots/         # Report screenshots
+```
 
 ## Safety & Telegram ToS
 
-This tool reads messages from channels you've already subscribed to. Use it for personal monitoring and keep the scan rate modest.
+- Reads only from channels you've subscribed to
+- Respects `FloodWaitError` — no API abuse
+- Use your real account, not a new/virtual number
+- Do not use Telegram data for AI training, resale, or bulk harvesting
 
-**Key points:**
-- There is no project-level hard limit on channel count, but Telegram can rate-limit accounts
-- On-demand and scheduled scans should respect `FloodWaitError`
-- Use your real account (not a new/virtual number account)
-- Do not use Telegram data for AI training, resale, redistribution, or bulk harvesting
-
-Telegram's **FloodWaitError** is the normal rate-limit signal; account restrictions can still happen if the API is abused. See [docs/tos-risk-analysis.md](docs/tos-risk-analysis.md) for full details.
-
-## Windows
-
-```bat
-setup.bat
-```
-
-This creates config at `%USERPROFILE%\.config\tgcli\config.toml` — edit it with your API credentials, then:
-
-```bat
-call .venv\Scripts\activate.bat
-scripts\scan.bat channel_lists\example.txt
-```
+See [docs/tos-risk-analysis.md](docs/tos-risk-analysis.md) for details.
 
 ## Troubleshooting
 
 | Problem | Fix |
 |---------|-----|
-| `ModuleNotFoundError: telethon` | Activate venv first: `source .venv/bin/activate` |
+| `ModuleNotFoundError: telethon` | `source .venv/bin/activate` |
 | `.sh` scripts `Permission denied` | `chmod +x setup.sh scripts/scan.sh` |
-| my.telegram.org shows ERROR | See [docs/getting-api-credentials.md](docs/getting-api-credentials.md) |
-| 0 messages collected | Check `output/*.errors.log` for failures |
-| Scan exits with incomplete channel | Rare with iter_messages; raise `SCAN_MAX_LIMIT` if still hitting cap |
-| Session expired / not authorized | Delete `~/.config/tgcli/session` and re-run; scan.py will prompt for login |
-| OCR does not run | Pass `--ocr` explicitly and set `XAI_API_KEY` or `OPENAI_API_KEY` |
+| my.telegram.org shows ERROR | [docs/getting-api-credentials.md](docs/getting-api-credentials.md) |
+| 0 messages collected | Check `output/*.errors.log` |
+| Session expired | Delete `~/.config/tgcli/session`, re-run |
 
 ## License
 
