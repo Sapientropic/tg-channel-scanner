@@ -145,6 +145,77 @@ class ReportTests(unittest.TestCase):
         self.assertIn("| Duplicates removed | 1 |", result.markdown)
         self.assertIn("*Generated automatically. Next scan scheduled for tomorrow.*", result.markdown)
 
+    def test_source_refs_keep_raw_messages_scoped_by_channel(self):
+        report = load_report_module(self)
+        messages = [
+            {
+                "id": 1,
+                "channel": "channel_a",
+                "date": "2026-05-06T08:00:00+00:00",
+                "text": "Correct original text",
+            },
+            {
+                "id": 1,
+                "channel": "channel_b",
+                "date": "2026-05-06T08:01:00+00:00",
+                "text": "Wrong same-id text",
+            },
+        ]
+        raw_jobs = [
+            {
+                "source_message_ids": [1],
+                "source_message_refs": [{"channel": "channel_a", "id": 1}],
+                "company": "Signal Co",
+                "role": "Frontend Developer",
+                "source": "channel_a",
+                "rating": "high",
+                "why": "Matches profile",
+            }
+        ]
+
+        jobs, _ = report.deduplicate_jobs(raw_jobs, messages)
+        html = report._render_job_card(jobs[0], 1, report.build_message_lookup(messages))
+
+        self.assertEqual(jobs[0]["sources"], ["channel_a"])
+        self.assertEqual(
+            jobs[0]["source_message_refs"],
+            [{"channel": "channel_a", "id": 1}],
+        )
+        self.assertIn("Correct original text", html)
+        self.assertNotIn("Wrong same-id text", html)
+
+    def test_custom_schema_prompt_keeps_source_refs_contract(self):
+        report = load_report_module(self)
+        profile = """# Custom watchlist
+
+## Extraction Schema
+mode: custom
+top_level_key: items
+dedup_fields: [project]
+fields:
+  - name: project
+    required: true
+  - name: rating
+    values: [high, medium, low]
+
+## Extraction Prompt
+system_prompt: |
+  Extract useful watchlist items.
+"""
+        profile_config = report.parse_profile_config(profile)
+
+        system_prompt, _ = report.build_extraction_prompts(
+            sample_messages(),
+            profile,
+            meta=None,
+            max_messages=10,
+            profile_config=profile_config,
+        )
+
+        self.assertIn('"source_message_refs": [{"channel": "channel name", "id": 123}]', system_prompt)
+        self.assertIn('"source_message_ids": [123]', system_prompt)
+        self.assertIn("source_message_refs with both channel and id", system_prompt)
+
     def test_missing_meta_keeps_running_and_marks_report_as_needing_confirmation(self):
         report = load_report_module(self)
 

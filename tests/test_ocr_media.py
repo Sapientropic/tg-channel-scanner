@@ -33,6 +33,15 @@ class OcrMediaTests(unittest.TestCase):
         self.assertEqual(cfg.prompt, "extract text")
         self.assertTrue(cfg.full_video)
 
+    def test_parser_uses_thumbnail_video_by_default_and_full_video_opt_in(self):
+        parser = ocr_media.build_parser()
+
+        default_args = parser.parse_args(["--input", "scan.jsonl"])
+        full_args = parser.parse_args(["--input", "scan.jsonl", "--full-video"])
+
+        self.assertFalse(default_args.full_video)
+        self.assertTrue(full_args.full_video)
+
     def test_ocr_video_cleans_temporary_frame_directory(self):
         class FakeTemporaryDirectory:
             def __init__(self, path: Path):

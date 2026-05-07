@@ -53,6 +53,10 @@ mode: job
 top_level_key: jobs
 dedup_fields: [company, role]
 fields:
+  - name: source_message_refs
+    type: list
+  - name: source_message_ids
+    type: list
   - name: company
     required: true
   - name: role
@@ -72,6 +76,10 @@ fields:
     type: list
   - name: action
     values: [Apply, Inspect, "Skip unless criteria change"]
+
+# Source identity is part of the built-in report contract. New reports should
+# use source_message_refs ({channel, id}); source_message_ids stays only for
+# older JSONL/report compatibility.
 
 ## Extraction Prompt
 system_prompt: |

@@ -16,6 +16,11 @@ This directory holds Markdown files describing your filtering criteria for AI-po
 
 If no optional sections are present, job-mode defaults are used — backward compatible.
 
+Source identity is handled by the built-in report contract: new LLM output should use
+`source_message_refs` (`channel` + `id`), while `source_message_ids` is retained only
+for older JSONL/report compatibility. Custom schemas do not need to invent another
+source field.
+
 ## Format
 
 A profile tells the AI what to filter for. Basic sections:

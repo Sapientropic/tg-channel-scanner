@@ -204,7 +204,12 @@ export OPENAI_API_KEY=sk-your-key
   --ocr-base-url http://localhost:11434/v1 --ocr-model your-vision-model
 ```
 
-Use `--ocr-full-video` to extract frames from full videos (requires `ffmpeg`).
+Video OCR is thumbnail-first by default, including standalone reprocessing with
+`python scripts/ocr_media.py`. Use `--ocr-full-video` during scans, or
+`--full-video` with `ocr_media.py`, only when you explicitly want full-video
+processing. Full-video mode requires `ffmpeg` and can send extracted frames,
+audio, or transcripts to the selected OCR/STT provider, so review privacy and
+cost before enabling it.
 
 </details>
 
@@ -232,6 +237,12 @@ graph LR
 2. **Filter** — Precise timestamp cutoff with early termination
 3. **Save** — JSONL + `.meta.json` sidecar
 4. **Report** — LLM semantic matching → Python renders stats + Markdown/HTML
+
+Data contract: each scanned message carries a stable `message_ref` (`channel` + `id`).
+Reports ask the LLM for `source_message_refs` and use that channel-scoped key for raw
+message lookup; `source_message_ids` is kept only for older JSONL/report compatibility.
+The daily pipeline passes an explicit scan `--output` path into `report.py`, so a report
+cannot silently reuse an older `scan_*.jsonl` from the output directory.
 
 ## Profiles & Channel Lists
 

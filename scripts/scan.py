@@ -508,6 +508,7 @@ def message_to_dict(msg, channel_name: str) -> dict:
 
     result = {
         "id": msg.id,
+        "message_ref": {"channel": channel_name, "id": msg.id},
         "date": msg.date.isoformat() if msg.date else None,
         "text": msg.text or "",
         "sender_id": msg.sender_id,
@@ -552,7 +553,7 @@ async def read_channel(
     kept_msgs: list = []
     raw_count = 0
     skipped_missing_date = 0
-    hit_cap = False
+    hit_cutoff = False
 
     async for msg in client.iter_messages(entity, limit=safety_cap):
         raw_count += 1
@@ -561,10 +562,11 @@ async def read_channel(
             continue
         d = msg.date if msg.date.tzinfo else msg.date.replace(tzinfo=UTC)
         if d.astimezone(UTC) < cutoff_utc:
+            hit_cutoff = True
             break
         kept_msgs.append(msg)
 
-    hit_cap = raw_count >= safety_cap
+    exhausted_limit = raw_count >= safety_cap
 
     # OCR media
     ocr_texts: dict[int, str] = {}
@@ -594,7 +596,7 @@ async def read_channel(
         raw_count=raw_count,
         skipped_missing_date=skipped_missing_date,
         limit=safety_cap,
-        incomplete=hit_cap,
+        incomplete=exhausted_limit and not hit_cutoff,
         ocr_count=ocr_count,
         stderr="\n".join(ocr_errors),
     )
@@ -638,6 +640,11 @@ def build_parser() -> argparse.ArgumentParser:
         default=env_default("SCAN_DELAY", DEFAULT_DELAY_SECONDS),
     )
     parser.add_argument("--output-dir", type=Path, default=Path("output"))
+    parser.add_argument(
+        "--output",
+        type=Path,
+        help="Explicit JSONL output path. Defaults to output/scan_YYYYMMDD_HHMMSS.jsonl.",
+    )
     parser.add_argument("--allow-incomplete", action="store_true")
     parser.add_argument(
         "--max-flood-wait-seconds",
@@ -722,6 +729,10 @@ async def _run_scan(args) -> int:
         await client.disconnect()
         print(f"Error: Failed to read channel list: {exc}", file=sys.stderr)
         return 1
+    if not channels:
+        await client.disconnect()
+        print(f"Error: Channel list is empty: {args.channel_list}", file=sys.stderr)
+        return 1
 
     try:
         ocr = _make_ocr_config(args)
@@ -743,8 +754,9 @@ async def _run_scan(args) -> int:
     args.output_dir.mkdir(parents=True, exist_ok=True)
     started_at = datetime.now(UTC)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    output_path = args.output_dir / f"scan_{timestamp}.jsonl"
-    errors_path = args.output_dir / f"scan_{timestamp}.errors.log"
+    output_path = args.output or (args.output_dir / f"scan_{timestamp}.jsonl")
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    errors_path = output_path.with_suffix(".errors.log")
     meta_path = meta_path_for_output(output_path)
 
     print(f"Scan started: {started_at.isoformat(timespec='seconds')}")

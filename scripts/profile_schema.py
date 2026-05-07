@@ -81,6 +81,8 @@ _SECTION_RE = re.compile(r"^##\s+(.+)$", re.MULTILINE)
 
 # Default field definitions matching the original hardcoded job-mode schema
 _DEFAULT_JOB_FIELDS: list[FieldDef] = [
+    FieldDef("source_message_refs", type="list"),
+    FieldDef("source_message_ids", type="list"),
     FieldDef("company", required=True),
     FieldDef("role", required=True),
     FieldDef("location"),
@@ -181,7 +183,7 @@ def _parse_text_block(text: str, key: str) -> str | None:
     m = pattern.search(text)
     if m:
         lines = m.group(1).splitlines()
-        return "\n".join(re.sub(r"^[ \t]{2,}", "", l) for l in lines).strip()
+        return "\n".join(re.sub(r"^[ \t]{2,}", "", line) for line in lines).strip()
     # Single-line value
     pattern2 = re.compile(rf"^{re.escape(key)}:\s*(.+)$", re.MULTILINE)
     m2 = pattern2.search(text)
@@ -276,16 +278,25 @@ def parse_profile_config(profile_text: str) -> ProfileConfig:
 def build_json_schema_prompt(mode_config: ModeConfig) -> str:
     """Build a JSON schema description for the LLM prompt from field definitions.
 
-    Produces the same output as the original hardcoded schema when
-    mode_config.fields matches the default job-mode fields.
+    Source identity is part of the report contract, so source refs are always
+    present even when a custom profile omits them from its visible fields.
     """
     lines = ["{"]
     lines.append(f'  "{mode_config.top_level_key}": [')
     lines.append("    {")
 
     field_descriptions = []
+    has_source_refs = False
+    has_source_ids = False
     for f in mode_config.fields:
+        if f.name == "source_message_refs":
+            has_source_refs = True
+            field_descriptions.append(
+                '      "source_message_refs": [{"channel": "channel name", "id": 123}]'
+            )
+            continue
         if f.name == "source_message_ids":
+            has_source_ids = True
             field_descriptions.append('      "source_message_ids": [123]')
             continue
         if f.type == "list":
@@ -295,6 +306,14 @@ def build_json_schema_prompt(mode_config: ModeConfig) -> str:
             field_descriptions.append(f'      "{f.name}": "{vals}"')
         else:
             field_descriptions.append(f'      "{f.name}": "..."')
+
+    if not has_source_refs:
+        field_descriptions.insert(
+            0,
+            '      "source_message_refs": [{"channel": "channel name", "id": 123}]',
+        )
+    if not has_source_ids:
+        field_descriptions.insert(1, '      "source_message_ids": [123]')
 
     lines.append(",\n".join(field_descriptions))
     lines.append("    }")

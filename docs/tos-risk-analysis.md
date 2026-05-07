@@ -52,6 +52,10 @@ These are practical starting points, not official Telegram limits:
 
 The scanner defaults to a 1-second delay between channels (`SCAN_DELAY=1`). If Telegram asks for a wait longer than `SCAN_MAX_FLOOD_WAIT_SECONDS`, the channel fails instead of silently sleeping for a long time.
 
+## Third-party LLM/OCR Uploads
+
+Report generation sends the selected message text and profile to your configured LLM provider. Media OCR/STT is off by default; when enabled, image/video thumbnails or audio may be sent to the configured OCR/STT provider. Full-video processing is explicit-only (`--ocr-full-video` in `scan.py`, `--full-video` in `ocr_media.py`) and may upload extracted frames, audio, or transcripts. Check the provider's privacy, retention, and billing terms before enabling it.
+
 ## Reading All Subscribed Channels
 
 This is a legitimate use case. If you want to scan all your channels:

@@ -111,6 +111,30 @@ class ScanTests(unittest.TestCase):
         self.assertTrue(result.incomplete)
         self.assertEqual(result.raw_count, 4)
 
+    def test_channel_read_is_complete_when_cutoff_is_seen_at_safety_cap(self):
+        cutoff = datetime(2026, 5, 6, 7, 30, tzinfo=timezone.utc)
+        msgs = [
+            _make_mock_message(3, "2026-05-06T08:00:00+00:00"),
+            _make_mock_message(2, "2026-05-06T07:30:00+00:00"),
+            _make_mock_message(1, "2026-05-06T06:00:00+00:00"),
+        ]
+
+        client = MagicMock()
+
+        async def _iter_msgs(*a, limit=None, **kw):
+            for m in msgs[:limit]:
+                yield m
+
+        client.iter_messages = _iter_msgs
+
+        result = asyncio.run(
+            scan.read_channel(client, "entity", "jobs", cutoff, 3)
+        )
+
+        self.assertFalse(result.incomplete)
+        self.assertEqual(result.raw_count, 3)
+        self.assertEqual([m["id"] for m in result.messages], [3, 2])
+
     def test_load_channel_list_trims_whitespace_and_ignores_comments(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "channels.txt"
@@ -276,7 +300,7 @@ class ScanTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmp:
             channel_list = Path(tmp) / "channels.txt"
-            channel_list.write_text("", encoding="utf-8")
+            channel_list.write_text("jobs\n", encoding="utf-8")
             output_dir = Path(tmp) / "output"
             parser = scan.build_parser()
             args = parser.parse_args(
@@ -289,16 +313,60 @@ class ScanTests(unittest.TestCase):
                 ]
             )
 
+            async def fake_resolve_entity(client, channel_name):
+                return f"entity:{channel_name}"
+
+            async def fake_read_channel(**kwargs):
+                return scan.ChannelResult(
+                    channel=kwargs["channel_name"],
+                    messages=[],
+                    raw_count=0,
+                    skipped_missing_date=0,
+                    limit=kwargs["max_limit"],
+                    incomplete=False,
+                    ocr_count=0,
+                    stderr="",
+                )
+
             with patch.object(scan, "load_config", return_value=scan.ScannerConfig(1, "hash", "session")):
                 with patch.object(scan, "StringSession", return_value="fake-session"):
                     with patch.object(scan, "TelegramClient", FakeClient):
-                        exit_code = asyncio.run(scan._run_scan(args))
+                        with patch.object(scan, "resolve_entity", side_effect=fake_resolve_entity):
+                            with patch.object(scan, "read_channel", side_effect=fake_read_channel):
+                                exit_code = asyncio.run(scan._run_scan(args))
 
         self.assertEqual(exit_code, 0)
         self.assertEqual(created["session"], "fake-session")
         self.assertEqual(created["api_id"], 1)
         self.assertEqual(created["api_hash"], "hash")
         self.assertEqual(created["flood_sleep_threshold"], 42)
+
+    def test_run_scan_fails_empty_channel_list(self):
+        class FakeClient:
+            def __init__(self, session, api_id, api_hash, *, flood_sleep_threshold):
+                pass
+
+            async def connect(self):
+                return None
+
+            async def is_user_authorized(self):
+                return True
+
+            async def disconnect(self):
+                return None
+
+        with tempfile.TemporaryDirectory() as tmp:
+            channel_list = Path(tmp) / "channels.txt"
+            channel_list.write_text("", encoding="utf-8")
+            parser = scan.build_parser()
+            args = parser.parse_args([str(channel_list), "--output-dir", str(Path(tmp) / "output")])
+
+            with patch.object(scan, "load_config", return_value=scan.ScannerConfig(1, "hash", "session")):
+                with patch.object(scan, "StringSession", return_value="fake-session"):
+                    with patch.object(scan, "TelegramClient", FakeClient):
+                        exit_code = asyncio.run(scan._run_scan(args))
+
+        self.assertEqual(exit_code, 1)
 
     def test_initial_limit_is_deprecated_and_ignored(self):
         parser = scan.build_parser()

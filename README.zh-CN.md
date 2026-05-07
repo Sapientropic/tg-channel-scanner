@@ -204,7 +204,10 @@ export OPENAI_API_KEY=sk-your-key
   --ocr-base-url http://localhost:11434/v1 --ocr-model your-vision-model
 ```
 
-使用 `--ocr-full-video` 提取完整视频帧（需要 `ffmpeg`）。
+视频 OCR 默认只走缩略图，独立重处理命令 `python scripts/ocr_media.py` 也是如此。
+只有明确需要完整视频处理时，扫描命令才使用 `--ocr-full-video`，独立命令才使用
+`--full-video`。完整视频模式需要 `ffmpeg`，并可能把提取的视频帧、音频或转写文本
+发送给所选 OCR/STT provider；开启前先确认隐私和成本边界。
 
 </details>
 
@@ -232,6 +235,11 @@ graph LR
 2. **过滤** — 精确时间截断 + 提前终止
 3. **保存** — JSONL + `.meta.json`
 4. **报告** — LLM 语义匹配 → Python 渲染统计 + Markdown/HTML
+
+数据合同：每条扫描消息都会带稳定 `message_ref`（`channel` + `id`）。报告要求
+LLM 输出 `source_message_refs`，并用这个按频道限定的 key 查原文；`source_message_ids`
+只保留作旧 JSONL/旧报告兼容。每日流水线会把本轮 scan 的明确 `--output` 路径传给
+`report.py`，不会静默复用输出目录里的旧 `scan_*.jsonl`。
 
 ## Profile 与频道列表
 

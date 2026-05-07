@@ -230,12 +230,18 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--video-frames", type=positive_int, default=DEFAULT_VIDEO_FRAMES)
     parser.add_argument("--prompt", default=OCR_PROMPT)
     parser.add_argument(
+        "--full-video",
+        dest="full_video",
+        action="store_true",
+        help="Download full videos for frame extraction/STT. This uploads more media and may cost more.",
+    )
+    parser.add_argument(
         "--thumbnail-video",
         dest="full_video",
         action="store_false",
-        help="Use video thumbnails only instead of downloading full videos.",
+        help="Use video thumbnails only. Kept as an explicit compatibility alias for the default.",
     )
-    parser.set_defaults(full_video=True)
+    parser.set_defaults(full_video=False)
     return parser
 
 

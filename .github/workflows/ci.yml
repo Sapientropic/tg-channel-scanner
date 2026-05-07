@@ -30,6 +30,10 @@ jobs:
         run: |
           python -m py_compile scripts/scan.py scripts/summarize.py scripts/media_ocr.py scripts/ocr_media.py scripts/report.py scripts/daily_report.py
 
+      - name: Run Ruff
+        run: |
+          python -m ruff check .
+
       - name: Run tests
         run: |
           python -m pytest -q

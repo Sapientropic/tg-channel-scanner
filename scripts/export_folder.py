@@ -22,7 +22,7 @@ from telethon import TelegramClient
 from telethon.sessions import StringSession
 
 # Reuse config loading from scan.py
-from scripts.scan import CONFIG_DIR, CONFIG_PATH, SESSION_PATH, ScanError, load_config
+from scripts.scan import ScanError, load_config
 
 
 async def list_folders(client: TelegramClient) -> list[dict]:
@@ -160,7 +160,7 @@ async def _run(args) -> int:
     if output:
         output.parent.mkdir(parents=True, exist_ok=True)
         with output.open("w", encoding="utf-8", newline="\n") as f:
-            f.write(f"# Auto-exported from Telegram folder\n")
+            f.write("# Auto-exported from Telegram folder\n")
             f.write(f"# {len(channels)} channels\n\n")
             for ch in channels:
                 f.write(f"{ch}\n")

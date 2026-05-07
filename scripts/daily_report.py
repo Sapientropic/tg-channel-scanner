@@ -26,11 +26,9 @@ def default_report_output_path(
     return output_dir / filename_template.format(date=date)
 
 
-def find_latest_scan(output_dir: Path) -> Path:
-    scans = sorted(output_dir.glob("scan_*.jsonl"), key=lambda path: path.stat().st_mtime)
-    if not scans:
-        raise FileNotFoundError(f"No scan_*.jsonl files found in {output_dir}")
-    return scans[-1]
+def default_scan_output_path(output_dir: Path) -> Path:
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    return output_dir / f"scan_{timestamp}.jsonl"
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -61,6 +59,7 @@ def main(argv: list[str] | None = None) -> int:
     profile_config = parse_profile_config(args.profile.read_text(encoding="utf-8"))
     filename_template = profile_config.labels.output_filename
 
+    scan_file = default_scan_output_path(args.output_dir)
     scan_cmd = [
         sys.executable,
         str(script_dir / "scan.py"),
@@ -68,12 +67,19 @@ def main(argv: list[str] | None = None) -> int:
         str(args.hours),
         "--output-dir",
         str(args.output_dir),
+        "--output",
+        str(scan_file),
     ]
     if args.allow_incomplete:
         scan_cmd.append("--allow-incomplete")
 
-    subprocess.run(scan_cmd, check=True)
-    scan_file = find_latest_scan(args.output_dir)
+    try:
+        subprocess.run(scan_cmd, check=True)
+    except subprocess.CalledProcessError as exc:
+        return exc.returncode or 1
+    if not scan_file.exists():
+        print(f"Error: scan did not create expected output: {scan_file}", file=sys.stderr)
+        return 1
     report_output = args.report_output or default_report_output_path(args.output_dir, filename_template=filename_template)
 
     report_cmd = [
