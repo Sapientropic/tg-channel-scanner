@@ -8,6 +8,7 @@ Job-mode is the default; custom modes are activated via the
 from __future__ import annotations
 
 import argparse
+import html
 import json
 import os
 import re
@@ -16,6 +17,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Iterable
+from urllib.parse import urlparse
 
 try:
     from scripts.profile_schema import ProfileConfig, build_json_schema_prompt, parse_profile_config
@@ -811,6 +813,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--redact-contact-info", action="store_true")
     parser.add_argument("--output", help="Save report to file (default: print to stdout)")
     parser.add_argument("--html", action="store_true", help="Output HTML instead of Markdown")
+    parser.add_argument("--html-output", type=Path, help="Also write an HTML copy while keeping --output as Markdown")
     parser.add_argument("--html-only", type=Path, metavar="REPORT.md",
                         help="Render HTML from an existing Markdown report (no LLM call). "
                         "Requires --input for raw messages.")
@@ -901,11 +904,17 @@ def main(argv: list[str] | None = None) -> int:
             print(f"HTML report saved to {html_path}", file=sys.stderr)
         else:
             print(html_output)
-    elif args.output:
-        Path(args.output).write_text(result.markdown, encoding="utf-8")
-        print(f"Report saved to {args.output}", file=sys.stderr)
     else:
-        print(result.markdown)
+        if args.output:
+            Path(args.output).write_text(result.markdown, encoding="utf-8")
+            print(f"Report saved to {args.output}", file=sys.stderr)
+        else:
+            print(result.markdown)
+        if args.html_output:
+            html_output = render_html(result, profile, meta, args, messages, profile_config)
+            args.html_output.parent.mkdir(parents=True, exist_ok=True)
+            args.html_output.write_text(html_output, encoding="utf-8")
+            print(f"HTML report saved to {args.html_output}", file=sys.stderr)
     return 0
 
 
@@ -931,7 +940,65 @@ def _load_icon_b64(job_mode: bool = True) -> str:
 
 
 def _esc(text: str) -> str:
-    return str(text).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
+    return html.escape(str(text), quote=True)
+
+
+SAFE_LINK_REL = "noopener noreferrer"
+SAFE_HREF_SCHEMES = {"http", "https", "mailto"}
+UNSAFE_HREF_CHAR_RE = re.compile(r"""[\x00-\x20"'<>`]""")
+TELEGRAM_HANDLE_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_]{4,31}$")
+EMAIL_RE = re.compile(r"^[^@\s<>]+@[^@\s<>]+\.[^@\s<>]+$")
+
+
+def safe_href(value: object) -> str | None:
+    """Return an escaped href attribute value, or None when it is not safe.
+
+    Reports are built from Telegram text and LLM output, so link validation must
+    happen before attribute escaping. In particular, quotes and whitespace are
+    rejected instead of merely escaped because they usually indicate attribute
+    injection attempts or pasted prose rather than a navigable URL.
+    """
+    href = str(value or "").strip()
+    if not href or UNSAFE_HREF_CHAR_RE.search(href):
+        return None
+    parsed = urlparse(href)
+    scheme = parsed.scheme.lower()
+    if scheme not in SAFE_HREF_SCHEMES:
+        return None
+    if scheme in {"http", "https"} and not parsed.netloc:
+        return None
+    if scheme == "mailto":
+        address = parsed.path
+        if not EMAIL_RE.fullmatch(address):
+            return None
+    return html.escape(href, quote=True)
+
+
+def telegram_handle_to_url(value: object) -> str | None:
+    handle = str(value or "").strip()
+    if handle.startswith("@"):
+        handle = handle[1:]
+    if not TELEGRAM_HANDLE_RE.fullmatch(handle):
+        return None
+    return f"https://t.me/{handle}"
+
+
+def _safe_link_html(href: object, label: object, *, label_is_html: bool = False) -> str | None:
+    safe = safe_href(href)
+    if safe is None:
+        return None
+    label_html = str(label) if label_is_html else _esc(label)
+    return (
+        f'<a href="{safe}" target="_blank" '
+        f'rel="{SAFE_LINK_REL}">{label_html}</a>'
+    )
+
+
+def _link_or_text(href: object, label: object, *, label_is_html: bool = False) -> str:
+    link = _safe_link_html(href, label, label_is_html=label_is_html)
+    if link:
+        return link
+    return str(label) if label_is_html else _esc(label)
 
 
 def _tg_md_to_html(text: str) -> str:
@@ -940,10 +1007,8 @@ def _tg_md_to_html(text: str) -> str:
     Handles: **bold**, __italic__, `code`, [link](url), https://urls.
     Everything else is HTML-escaped first, then patterns are restored.
     """
-    import html as _html
-
     # Escape first
-    s = _html.escape(text)
+    s = html.escape(text, quote=True)
 
     # Restore **bold**
     s = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", s)
@@ -952,15 +1017,25 @@ def _tg_md_to_html(text: str) -> str:
     # Restore `code`
     s = re.sub(r"`([^`]+)`", r"<code>\1</code>", s)
     # Restore [text](url)
+    def _replace_md_link(match: re.Match[str]) -> str:
+        label_html = match.group(1)
+        href = html.unescape(match.group(2))
+        return _link_or_text(href, label_html, label_is_html=True)
+
     s = re.sub(
         r"\[([^\]]+)\]\(([^)]+)\)",
-        r'<a href="\2" target="_blank">\1</a>',
+        _replace_md_link,
         s,
     )
     # Bare URLs
+    def _replace_bare_url(match: re.Match[str]) -> str:
+        label_html = match.group(1)
+        href = html.unescape(label_html)
+        return _link_or_text(href, label_html, label_is_html=True)
+
     s = re.sub(
         r"(?<!href=\")(https?://[^\s<\)]+)",
-        r'<a href="\1" target="_blank">\1</a>',
+        _replace_bare_url,
         s,
     )
     # Newlines → <br>
@@ -970,8 +1045,11 @@ def _tg_md_to_html(text: str) -> str:
 
 def _channel_link(name: str) -> str:
     name = name.strip()
-    if name and name[0].isalpha():
-        return f'<a href="https://t.me/{name}">{_esc(name)}</a>'
+    telegram_url = telegram_handle_to_url(name)
+    if telegram_url:
+        return _link_or_text(telegram_url, name)
+    if safe_href(name):
+        return _link_or_text(name, name)
     return _esc(name)
 
 
@@ -984,19 +1062,15 @@ def _contact_html(contact: str) -> str:
     if not contact or contact in ("Not specified", "Unknown"):
         return _esc(contact)
     if contact.startswith("@"):
-        return f'<a href="https://t.me/{contact[1:]}">{_esc(contact)}</a>'
-    if "@" in contact and "." in contact and not contact.startswith("http"):
-        return f'<a href="mailto:{contact}">{_esc(contact)}</a>'
-    if contact.startswith("http"):
+        telegram_url = telegram_handle_to_url(contact)
+        return _link_or_text(telegram_url, contact) if telegram_url else _esc(contact)
+    if EMAIL_RE.fullmatch(contact):
+        return _link_or_text(f"mailto:{contact}", contact)
+    if contact.startswith(("http://", "https://")):
         # Shorten URL display: show domain + /... for long URLs
-        from urllib.parse import urlparse
-        try:
-            parsed = urlparse(contact)
-            domain = parsed.netloc or parsed.path.split("/")[0]
-            display = domain
-        except Exception:
-            display = "link"
-        return f'<a href="{contact}" target="_blank">{_esc(display)}</a>'
+        parsed = urlparse(contact)
+        display = parsed.netloc or "link"
+        return _link_or_text(contact, display)
     return _esc(contact)
 
 
@@ -1057,7 +1131,7 @@ def _render_generic_card(
             elif f.name == "source" and val_list:
                 rendered = _source_links(val_list)
             elif f.name == "link" and val_list:
-                rendered = " / ".join(f'<a href="{_esc(str(v))}" target="_blank">{_esc(str(v))}</a>' for v in val_list)
+                rendered = " / ".join(_link_or_text(str(v), str(v)) for v in val_list)
             else:
                 display = " / ".join(str(v) for v in val_list) if val_list else str(val)
                 rendered = _esc(display)
@@ -1171,8 +1245,11 @@ def _render_job_card(
             if origin_channel:
                 origin_bits.append(f'Forwarded from <strong>{_esc(origin_channel)}</strong>')
             if origin_url:
-                origin_bits.append(f'<a href="{origin_url}" target="_blank">Open in Telegram</a>')
-            origin_footer = f'<div style="margin-top:0.6em;font-size:0.78rem;color:var(--c-text-tertiary)">{" &middot; ".join(origin_bits)}</div>'
+                origin_link = _safe_link_html(origin_url, "Open in Telegram")
+                if origin_link:
+                    origin_bits.append(origin_link)
+            if origin_bits:
+                origin_footer = f'<div style="margin-top:0.6em;font-size:0.78rem;color:var(--c-text-tertiary)">{" &middot; ".join(origin_bits)}</div>'
 
         raw_section = f"""
       <button class="raw-toggle" type="button"><span class="arrow">&#9654;</span> <span class="label">View original</span></button>
@@ -1185,8 +1262,11 @@ def _render_job_card(
         if origin_channel:
             origin_parts.append(f'Forwarded from <strong>{_esc(origin_channel)}</strong>')
         if origin_url:
-            origin_parts.append(f'<a href="{origin_url}" target="_blank">Open in Telegram</a>')
-        origin_line = f'<div class="job-origin">{" &middot; ".join(origin_parts)}</div>'
+            origin_link = _safe_link_html(origin_url, "Open in Telegram")
+            if origin_link:
+                origin_parts.append(origin_link)
+        if origin_parts:
+            origin_line = f'<div class="job-origin">{" &middot; ".join(origin_parts)}</div>'
 
     tags = "\n".join(f'<li class="tag">{_esc(t)}</li>' for t in stack)
     concern_items = "\n".join(f"<li>{_esc(c)}</li>" for c in concerns)

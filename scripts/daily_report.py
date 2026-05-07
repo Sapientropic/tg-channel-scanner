@@ -96,30 +96,11 @@ def main(argv: list[str] | None = None) -> int:
         report_cmd.append("--redact-contact-info")
     if args.next_scan_note:
         report_cmd.extend(["--next-scan-note", args.next_scan_note])
-
-    subprocess.run(report_cmd, check=True)
-
     if args.html:
         html_output = report_output.with_suffix(".html")
-        html_cmd = [
-            sys.executable,
-            str(script_dir / "report.py"),
-            "--input", str(scan_file),
-            "--profile", str(args.profile),
-            "--html",
-            "--output", str(html_output),
-        ]
-        if args.base_url:
-            html_cmd.extend(["--base-url", args.base_url])
-        if args.model:
-            html_cmd.extend(["--model", args.model])
-        if args.max_messages:
-            html_cmd.extend(["--max-messages", str(args.max_messages)])
-        if args.redact_contact_info:
-            html_cmd.append("--redact-contact-info")
-        if args.next_scan_note:
-            html_cmd.extend(["--next-scan-note", args.next_scan_note])
-        subprocess.run(html_cmd, check=True)
+        report_cmd.extend(["--html-output", str(html_output)])
+
+    subprocess.run(report_cmd, check=True)
 
     print(f"Daily report saved to {report_output}")
     return 0

@@ -11,7 +11,7 @@ from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from scripts import scan
-from telethon.errors import FloodWaitError, SessionPasswordNeededError
+from telethon.errors import SessionPasswordNeededError
 
 
 def _make_mock_message(msg_id: int, date_str: str, text: str = ""):
@@ -78,7 +78,7 @@ class ScanTests(unittest.TestCase):
         client.iter_messages = _iter_msgs
 
         result = asyncio.run(
-            scan.read_channel(client, "entity", "jobs", cutoff, 2, 5000)
+            scan.read_channel(client, "entity", "jobs", cutoff, 5000)
         )
 
         self.assertFalse(result.incomplete)
@@ -105,7 +105,7 @@ class ScanTests(unittest.TestCase):
         client.iter_messages = _iter_msgs
 
         result = asyncio.run(
-            scan.read_channel(client, "entity", "jobs", cutoff, 2, 4)
+            scan.read_channel(client, "entity", "jobs", cutoff, 4)
         )
 
         self.assertTrue(result.incomplete)
@@ -233,15 +233,16 @@ class ScanTests(unittest.TestCase):
         self.assertIsNotNone(cfg)
         self.assertEqual(created[0], ("http://localhost:11434/v1", "sk-test"))
 
-    def test_invalid_scan_initial_limit_env_reports_parser_error(self):
+    def test_scan_initial_limit_env_is_deprecated_and_ignored(self):
         with patch.dict(os.environ, {"SCAN_INITIAL_LIMIT": "abc"}, clear=True):
             parser = scan.build_parser()
             stderr = io.StringIO()
             with patch("sys.stderr", stderr):
-                with self.assertRaises(SystemExit):
-                    parser.parse_args(["channel_lists/example.txt"])
+                args = parser.parse_args(["channel_lists/example.txt"])
+                scan.warn_deprecated_options(["channel_lists/example.txt"], args)
 
         self.assertIn("SCAN_INITIAL_LIMIT", stderr.getvalue())
+        self.assertIn("ignored", stderr.getvalue())
 
     def test_invalid_scan_env_reports_parser_error_before_help(self):
         with patch.dict(os.environ, {"SCAN_DELAY": "nope"}, clear=True):
@@ -254,49 +255,61 @@ class ScanTests(unittest.TestCase):
         self.assertIn("SCAN_DELAY", stderr.getvalue())
         self.assertNotIn("Traceback", stderr.getvalue())
 
-    def test_fetch_with_retry_sleeps_full_flood_wait_when_under_threshold(self):
-        client = MagicMock()
-        client.get_messages = AsyncMock(
-            side_effect=[
-                FloodWaitError(request=None, capture=2),
-                [_make_mock_message(1, "2026-05-06T08:00:00+00:00")],
-            ]
-        )
+    def test_run_scan_passes_flood_wait_threshold_to_telethon_client(self):
+        created = {}
 
-        with patch.object(scan.asyncio, "sleep", AsyncMock()) as sleep:
-            result = asyncio.run(
-                scan._fetch_with_retry(
-                    client,
-                    "entity",
-                    "jobs",
-                    limit=10,
-                    max_flood_wait_seconds=10,
-                )
+        class FakeClient:
+            def __init__(self, session, api_id, api_hash, *, flood_sleep_threshold):
+                created["session"] = session
+                created["api_id"] = api_id
+                created["api_hash"] = api_hash
+                created["flood_sleep_threshold"] = flood_sleep_threshold
+
+            async def connect(self):
+                return None
+
+            async def is_user_authorized(self):
+                return True
+
+            async def disconnect(self):
+                return None
+
+        with tempfile.TemporaryDirectory() as tmp:
+            channel_list = Path(tmp) / "channels.txt"
+            channel_list.write_text("", encoding="utf-8")
+            output_dir = Path(tmp) / "output"
+            parser = scan.build_parser()
+            args = parser.parse_args(
+                [
+                    str(channel_list),
+                    "--output-dir",
+                    str(output_dir),
+                    "--max-flood-wait-seconds",
+                    "42",
+                ]
             )
 
-        self.assertEqual(len(result), 1)
-        sleep.assert_awaited_once_with(2)
+            with patch.object(scan, "load_config", return_value=scan.ScannerConfig(1, "hash", "session")):
+                with patch.object(scan, "StringSession", return_value="fake-session"):
+                    with patch.object(scan, "TelegramClient", FakeClient):
+                        exit_code = asyncio.run(scan._run_scan(args))
 
-    def test_fetch_with_retry_raises_when_flood_wait_exceeds_threshold(self):
-        client = MagicMock()
-        client.get_messages = AsyncMock(
-            side_effect=FloodWaitError(request=None, capture=120)
-        )
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(created["session"], "fake-session")
+        self.assertEqual(created["api_id"], 1)
+        self.assertEqual(created["api_hash"], "hash")
+        self.assertEqual(created["flood_sleep_threshold"], 42)
 
-        with patch.object(scan.asyncio, "sleep", AsyncMock()) as sleep:
-            with self.assertRaises(scan.ScanError) as ctx:
-                asyncio.run(
-                    scan._fetch_with_retry(
-                        client,
-                        "entity",
-                        "jobs",
-                        limit=10,
-                        max_flood_wait_seconds=60,
-                    )
-                )
+    def test_initial_limit_is_deprecated_and_ignored(self):
+        parser = scan.build_parser()
+        args = parser.parse_args(["channel_lists/example.txt", "--initial-limit", "10"])
+        stderr = io.StringIO()
 
-        self.assertIn("exceeds configured maximum", str(ctx.exception))
-        sleep.assert_not_called()
+        with patch("sys.stderr", stderr):
+            scan.warn_deprecated_options(["channel_lists/example.txt", "--initial-limit", "10"], args)
+
+        self.assertIn("--initial-limit", stderr.getvalue())
+        self.assertIn("ignored", stderr.getvalue())
 
     def test_interactive_login_handles_two_factor_password(self):
         client = MagicMock()

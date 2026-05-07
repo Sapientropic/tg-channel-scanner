@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import Callable, Iterable
 
 from telethon import TelegramClient
-from telethon.errors import FloodWaitError, SessionPasswordNeededError
+from telethon.errors import SessionPasswordNeededError
 from telethon.sessions import StringSession
 from telethon.tl.types import MessageMediaPhoto
 
@@ -39,7 +39,6 @@ if _PROJECT_ROOT not in sys.path:
 from scripts.media_ocr import OcrConfig, process_message
 
 DEFAULT_HOURS = 24
-DEFAULT_INITIAL_LIMIT = 200
 DEFAULT_MAX_LIMIT = 5000
 DEFAULT_DELAY_SECONDS = 1.0
 DEFAULT_MAX_FLOOD_WAIT_SECONDS = 300
@@ -529,32 +528,6 @@ def message_to_dict(msg, channel_name: str) -> dict:
     return result
 
 
-async def _fetch_with_retry(
-    client: TelegramClient,
-    entity,
-    channel_name: str,
-    limit: int,
-    max_retries: int = 5,
-    max_flood_wait_seconds: int = DEFAULT_MAX_FLOOD_WAIT_SECONDS,
-) -> list:
-    for attempt in range(1, max_retries + 1):
-        try:
-            return await client.get_messages(entity, limit=limit)
-        except FloodWaitError as exc:
-            if exc.seconds > max_flood_wait_seconds:
-                raise ScanError(
-                    f"FloodWait {exc.seconds}s for {channel_name} exceeds "
-                    f"configured maximum {max_flood_wait_seconds}s."
-                ) from exc
-            if attempt == max_retries:
-                raise ScanError(
-                    f"FloodWait: {max_retries} retries exceeded for {channel_name}"
-                ) from exc
-            wait = exc.seconds
-            print(f"  FloodWait: sleeping {wait}s (retry {attempt}/{max_retries})...")
-            await asyncio.sleep(wait)
-
-
 # ---------------------------------------------------------------------------
 # Channel reading (with integrated OCR)
 # ---------------------------------------------------------------------------
@@ -564,10 +537,8 @@ async def read_channel(
     entity,
     channel_name: str,
     cutoff: datetime,
-    initial_limit: int,
     max_limit: int,
     ocr: OcrConfig | None = None,
-    max_flood_wait_seconds: int = DEFAULT_MAX_FLOOD_WAIT_SECONDS,
 ) -> ChannelResult:
     """Stream messages via iter_messages, stop immediately at cutoff.
 
@@ -638,11 +609,9 @@ def build_parser() -> argparse.ArgumentParser:
         description="Scan Telegram channels via Telethon with optional media OCR.",
         allow_abbrev=False,
     )
-    initial_limit_type = positive_int_with_label("SCAN_INITIAL_LIMIT")
     max_limit_type = positive_int_with_label("SCAN_MAX_LIMIT")
     delay_type = non_negative_float_with_label("SCAN_DELAY")
     max_flood_wait_type = positive_int_with_label("SCAN_MAX_FLOOD_WAIT_SECONDS")
-    parser.register_env_default("SCAN_INITIAL_LIMIT", initial_limit_type)
     parser.register_env_default("SCAN_MAX_LIMIT", max_limit_type)
     parser.register_env_default("SCAN_DELAY", delay_type)
     parser.register_env_default("SCAN_MAX_FLOOD_WAIT_SECONDS", max_flood_wait_type)
@@ -656,8 +625,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--since", type=parse_since, help="Precise ISO-8601 cutoff.")
     parser.add_argument(
-        "--initial-limit", type=initial_limit_type,
-        default=env_default("SCAN_INITIAL_LIMIT", DEFAULT_INITIAL_LIMIT),
+        "--initial-limit",
+        default=os.environ.get("SCAN_INITIAL_LIMIT"),
+        help=argparse.SUPPRESS,
     )
     parser.add_argument(
         "--max-limit", type=max_limit_type,
@@ -714,6 +684,20 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def warn_deprecated_options(argv: list[str] | None, args) -> None:
+    raw_args = list(sys.argv[1:] if argv is None else argv)
+    has_initial_limit_arg = any(
+        value == "--initial-limit" or value.startswith("--initial-limit=")
+        for value in raw_args
+    )
+    if has_initial_limit_arg or os.environ.get("SCAN_INITIAL_LIMIT") is not None:
+        print(
+            "Warning: --initial-limit/SCAN_INITIAL_LIMIT is deprecated and ignored; "
+            "scan.py streams until --max-limit.",
+            file=sys.stderr,
+        )
+
+
 async def _run_scan(args) -> int:
     config = load_config()
 
@@ -721,7 +705,7 @@ async def _run_scan(args) -> int:
         StringSession(config.session_string),
         config.api_id,
         config.api_hash,
-        flood_sleep_threshold=0,
+        flood_sleep_threshold=args.max_flood_wait_seconds,
     )
     await client.connect()
 
@@ -792,10 +776,8 @@ async def _run_scan(args) -> int:
                     entity=entity,
                     channel_name=display_name,
                     cutoff=cutoff,
-                    initial_limit=args.initial_limit,
                     max_limit=args.max_limit,
                     ocr=ocr,
-                    max_flood_wait_seconds=args.max_flood_wait_seconds,
                 )
             except ScanError as exc:
                 failures += 1
@@ -879,12 +861,10 @@ async def _run_scan(args) -> int:
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
+    warn_deprecated_options(argv, args)
 
     if not args.channel_list.exists():
         print(f"Error: Channel list not found: {args.channel_list}", file=sys.stderr)
-        return 1
-    if args.initial_limit > args.max_limit:
-        print("Error: --initial-limit cannot exceed --max-limit", file=sys.stderr)
         return 1
 
     return asyncio.run(_run_scan(args))

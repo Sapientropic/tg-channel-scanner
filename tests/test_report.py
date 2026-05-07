@@ -244,6 +244,66 @@ class ReportTests(unittest.TestCase):
         self.assertTrue(debug_exists)
         self.assertEqual(debug_text, "bad")
 
+    def test_html_report_does_not_link_unsafe_untrusted_urls(self):
+        report = load_report_module(self)
+        job = sample_extracted_jobs()[0] | {
+            "contact": 'https://safe.example/" onclick="alert(1)',
+            "source": 'jobs" onclick="alert(2)',
+            "origin_url": "javascript:alert(3)",
+        }
+        messages = {
+            1: {
+                "id": 1,
+                "channel": 'source" onclick="alert(4)',
+                "text": '[bad](javascript:alert(5)) https://safe.example/path?x=1',
+            }
+        }
+
+        html = report._render_job_card(job, 1, messages)
+
+        self.assertNotIn('onclick="', html.lower())
+        self.assertNotIn("href=\"javascript", html.lower())
+        self.assertNotIn("javascript:", html.lower())
+        self.assertIn("https://safe.example/path?x=1", html)
+        self.assertIn('rel="noopener noreferrer"', html)
+
+    def test_html_output_writes_markdown_and_html_from_one_extraction(self):
+        report = load_report_module(self)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            input_path = root / "scan_20260506_080000.jsonl"
+            profile_path = root / "profile.md"
+            output_path = root / "job-scan-report.md"
+            html_output_path = root / "job-scan-report.html"
+            input_path.write_text(
+                json.dumps(sample_messages()[0], ensure_ascii=False) + "\n",
+                encoding="utf-8",
+            )
+            profile_path.write_text("Senior Frontend Developer", encoding="utf-8")
+
+            with patch.object(report, "extract_jobs", return_value=sample_extracted_jobs()[:1]) as extract_jobs:
+                exit_code = report.main(
+                    [
+                        "--input",
+                        str(input_path),
+                        "--profile",
+                        str(profile_path),
+                        "--output",
+                        str(output_path),
+                        "--html-output",
+                        str(html_output_path),
+                    ]
+                )
+
+            markdown = output_path.read_text(encoding="utf-8")
+            html = html_output_path.read_text(encoding="utf-8")
+
+        self.assertEqual(exit_code, 0)
+        extract_jobs.assert_called_once()
+        self.assertIn("# Job Scan Report", markdown)
+        self.assertIn("<!doctype html>", html.lower())
+
 
 if __name__ == "__main__":
     unittest.main()

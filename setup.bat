@@ -26,6 +26,11 @@ if %PYMAJOR% equ 3 if %PYMINOR% lss 12 (
 
 echo Found Python %PYVER%
 
+if "%TG_SCANNER_SETUP_SKIP_INSTALL%"=="1" (
+    echo Skipping dependency install because TG_SCANNER_SETUP_SKIP_INSTALL=1.
+    goto configure_scanner
+)
+
 if not exist ".venv" (
     echo Creating virtual environment...
     python -m venv .venv
@@ -62,35 +67,46 @@ if "%TELETHON_VERSION%"=="" (
 )
 echo telethon %TELETHON_VERSION% OK
 
+:configure_scanner
 REM Configure scanner (default path kept for backward compatibility)
-if not "%TG_SCANNER_CONFIG_DIR%"=="" (
-    set "TGCLI_DIR=%TG_SCANNER_CONFIG_DIR%"
-) else (
-    if not "%TGCLI_CONFIG_DIR%"=="" (
-        set "TGCLI_DIR=%TGCLI_CONFIG_DIR%"
-    ) else (
-        set "TGCLI_DIR=%USERPROFILE%\.config\tgcli"
-    )
-)
+set "TGCLI_DIR="
+if not "%TG_SCANNER_CONFIG_DIR%"=="" set "TGCLI_DIR=%TG_SCANNER_CONFIG_DIR%"
+if "%TGCLI_DIR%"=="" if not "%TGCLI_CONFIG_DIR%"=="" set "TGCLI_DIR=%TGCLI_CONFIG_DIR%"
+if "%TGCLI_DIR%"=="" set "TGCLI_DIR=%USERPROFILE%\.config\tgcli"
 set "TGCLI_CONFIG=%TGCLI_DIR%\config.toml"
 
-if not exist "%TGCLI_CONFIG%" (
-    if not exist "%TGCLI_DIR%" mkdir "%TGCLI_DIR%"
-    copy config.example.toml "%TGCLI_CONFIG%" >nul
-    echo.
-    echo === Next Steps ===
-    echo 1. Edit Telegram API credentials:
-    echo    %TGCLI_CONFIG%
-    echo    Get your api_id and api_hash from: https://my.telegram.org/apps
-    echo    ^(If the form shows ERROR, see docs\getting-api-credentials.md^)
-    echo.
-    echo 2. Run a scan (first run will prompt for login if no session):
-    echo    call .venv\Scripts\activate.bat
-    echo    scripts\scan.bat channel_lists\example.txt
-) else (
-    echo Scanner config already exists at %TGCLI_CONFIG% - skipping.
-    echo To reconfigure, edit: %TGCLI_CONFIG%
-)
+if exist "%TGCLI_CONFIG%" goto config_exists
+
+if exist "%TGCLI_DIR%" goto config_dir_ready
+mkdir "%TGCLI_DIR%"
+if not errorlevel 1 goto config_dir_ready
+echo Error: Failed to create config directory: %TGCLI_DIR%
+exit /b 1
+
+:config_dir_ready
+copy config.example.toml "%TGCLI_CONFIG%" >nul
+if not errorlevel 1 goto config_copied
+echo Error: Failed to copy config.example.toml to %TGCLI_CONFIG%
+exit /b 1
+
+:config_copied
+echo.
+echo === Next Steps ===
+echo 1. Edit Telegram API credentials:
+echo    %TGCLI_CONFIG%
+echo    Get your api_id and api_hash from: https://my.telegram.org/apps
+echo    ^(If the form shows ERROR, see docs\getting-api-credentials.md^)
+echo.
+echo 2. Run a scan ^(first run will prompt for login if no session^):
+echo    call .venv\Scripts\activate.bat
+echo    scripts\scan.bat channel_lists\example.txt
+goto config_done
+
+:config_exists
+echo Scanner config already exists at %TGCLI_CONFIG% - skipping.
+echo To reconfigure, edit: %TGCLI_CONFIG%
+
+:config_done
 
 if not exist "output" mkdir output
 
