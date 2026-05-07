@@ -1,30 +1,69 @@
-```
- _____ ____    ____ _   _    _    _   _ _   _ _____ _
-|_   _/ ___|  / ___| | | |  / \  | \ | | \ | | ____| |
-  | || |  _  | |   | |_| | / _ \ |  \| |  \| |  _| | |
-  | || |_| | | |___|  _  |/ ___ \| |\  | |\  | |___| |___
-  |_| \____|  \____|_| |_/_/   \_\_| \_|_| \_|_____|_____|
- ____   ____    _    _   _ _   _ _____ ____
-/ ___| / ___|  / \  | \ | | \ | | ____|  _ \
-\___ \| |     / _ \ |  \| |  \| |  _| | |_) |
- ___) | |___ / ___ \| |\  | |\  | |___|  _ <
-|____/ \____/_/   \_\_| \_|_| \_|_____|_| \_\
-```
+<div align="center">
 
-[![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/downloads/)
-[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![Telegram MTProto](https://img.shields.io/badge/Telegram-MTProto-26A5E4?logo=telegram&logoColor=white)](https://core.telegram.org/mtproto)
-[![LLM Powered](https://img.shields.io/badge/powered%20by-LLM-22C55E?logo=openai&logoColor=white)](https://github.com/Sapientropic/tg-channel-scanner)
+<pre align="center">
+████████╗ ██████╗      ██████╗██╗  ██╗ █████╗ ███╗   ██╗███╗   ██╗███████╗██╗
+╚══██╔══╝██╔════╝     ██╔════╝██║  ██║██╔══██╗████╗  ██║████╗  ██║██╔════╝██║
+   ██║   ██║  ███╗    ██║     ███████║███████║██╔██╗ ██║██╔██╗ ██║█████╗  ██║
+   ██║   ██║   ██║    ██║     ██╔══██║██╔══██║██║╚██╗██║██║╚██╗██║██╔══╝  ██║
+   ██║   ╚██████╔╝    ╚██████╗██║  ██║██║  ██║██║ ╚████║██║ ╚████║███████╗███████╗
+   ╚═╝    ╚═════╝      ╚═════╝╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═══╝╚═╝  ╚═══╝╚══════╝╚══════╝
 
-**Read Telegram channels → AI semantic filter → self-contained HTML report.**
+███████╗ ██████╗ █████╗ ███╗   ██╗███╗   ██╗███████╗██████╗
+██╔════╝██╔════╝██╔══██╗████╗  ██║████╗  ██║██╔════╝██╔══██╗
+███████╗██║     ███████║██╔██╗ ██║██╔██╗ ██║█████╗  ██████╔╝
+╚════██║██║     ██╔══██║██║╚██╗██║██║╚██╗██║██╔══╝  ██╔══██╗
+███████║╚██████╗██║  ██║██║ ╚████║██║ ╚████║███████╗██║  ██║
+╚══════╝ ╚═════╝╚═╝  ╚═╝╚═╝  ╚═══╝╚═╝  ╚═══╝╚══════╝╚═╝  ╚═╝
+</pre>
 
-One command scans dozens of channels, filters through your LLM, and generates a ranked digest. Job hunting, airdrop monitoring, news tracking — driven by plain-text profiles.
+<h3>Turn Telegram channel noise into a ranked daily signal report.</h3>
 
-<p align="center"><a href="https://github.com/Sapientropic/tg-channel-scanner/releases/download/v1.0-demo/demo.mp4"><img src="docs/demo.gif" alt="Product demo" width="100%"></a></p>
+<p>
+  <a href="https://www.python.org/downloads/"><img alt="Python 3.12+" src="https://img.shields.io/badge/python-3.12%2B-3776AB?logo=python&logoColor=white"></a>
+  <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-green.svg"></a>
+  <a href="https://core.telegram.org/mtproto"><img alt="Telegram MTProto" src="https://img.shields.io/badge/Telegram-MTProto-26A5E4?logo=telegram&logoColor=white"></a>
+  <a href="https://github.com/Sapientropic/tg-channel-scanner"><img alt="LLM Powered" src="https://img.shields.io/badge/powered%20by-LLM-22C55E?logo=openai&logoColor=white"></a>
+  <img alt="Output: HTML + Markdown" src="https://img.shields.io/badge/output-HTML%20%2B%20Markdown-F59E0B">
+</p>
 
-<p align="center"><em>Click to play the full demo (56s)</em></p>
+<p><strong>Read subscribed channels -> apply a Markdown profile -> ship a self-contained HTML report.</strong></p>
 
-[**中文文档**](README.zh-CN.md)
+<p>Built for job leads, airdrop watchlists, market/news tracking, and any Telegram workflow where the problem is too many channels and too little signal.</p>
+
+<p>
+  <a href="README.zh-CN.md"><strong>中文文档</strong></a>
+  ·
+  <a href="#demo"><strong>Demo</strong></a>
+  ·
+  <a href="#quick-start"><strong>Quick Start</strong></a>
+  ·
+  <a href="#report-output"><strong>Report Output</strong></a>
+  ·
+  <a href="#safety--telegram-tos"><strong>Safety</strong></a>
+</p>
+
+</div>
+
+<table>
+  <tr>
+    <td align="center"><strong>Profile-driven</strong><br>Plain Markdown profiles define what counts as a match, reject, or follow-up.</td>
+    <td align="center"><strong>Cutoff-aware</strong><br>Telethon reads through MTProto and stops as soon as messages fall outside your time window.</td>
+    <td align="center"><strong>Report-ready</strong><br>Generate a single HTML file with semantic labels, source links, raw context, and stats.</td>
+  </tr>
+</table>
+
+## Demo
+
+<!--
+GitHub README video note:
+Inline playback is generated from GitHub Markdown attachments
+(user-images/user-attachments URLs). Release assets are served with
+Content-Disposition: attachment, so linking them from the README forces downloads.
+Keep the GIF preview as the stable fallback until an attachment URL is available.
+-->
+<p align="center"><img src="docs/demo.gif" alt="Product demo" width="100%"></p>
+
+<p align="center"><em>56s walkthrough preview. The README keeps the GIF inline until a GitHub attachment video URL is available.</em></p>
 
 ---
 
@@ -117,9 +156,22 @@ python scripts/report.py --input output/scan_XXXX.jsonl \
   --profile profiles/example.md --dry-run-prompt output/prompt-preview.md
 ```
 
-<p align="center"><img src="docs/screenshots/report-header.png" alt="Report header with stats bar" width="700"></p>
+## Report Output
 
-<p align="center"><img src="docs/screenshots/report-cards.png" alt="Ranked cards with semantic color coding" width="700"></p>
+The generated report is designed to be read as a decision surface: what matters, why it matched, where it came from, and whether it deserves action.
+
+<table>
+  <tr>
+    <td align="center" width="50%">
+      <img src="docs/screenshots/report-header.png" alt="Report header with stats bar" width="100%"><br>
+      <sub>Run summary, profile metadata, and quality counters.</sub>
+    </td>
+    <td align="center" width="50%">
+      <img src="docs/screenshots/report-cards.png" alt="Ranked cards with semantic color coding" width="100%"><br>
+      <sub>Ranked findings with labels, rationale, raw message access, and source links.</sub>
+    </td>
+  </tr>
+</table>
 
 The HTML report is a single self-contained file: OKLCH color coding (green/amber/gray), animated cards, expandable raw messages, and Telegram deep links.
 
