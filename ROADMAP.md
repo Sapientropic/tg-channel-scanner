@@ -281,6 +281,15 @@ Goal: make the scanner a dependable repeated habit: high-priority new or
 changed items can interrupt the user, while everything else goes into a local
 review dashboard.
 
+Alpha implementation now started:
+
+- v0.5-alpha.1 adds `scripts/monitor.py run`, `profile_run_config_v1`,
+  `run_manifest_v1`, SQLite-backed review cards/alert events/profile patch
+  suggestions, private Telegram Bot delivery dry-run/live modes, and an
+  optional Vite React dashboard served from `127.0.0.1`.
+- The existing v0.4 scan/report JSON contracts remain the agent-facing base.
+  Dashboard state is local `.tgcs/tgcs.db` state, not a raw Telegram archive.
+
 Planned work:
 
 - Treat each profile as a durable monitoring task with its own schedule,

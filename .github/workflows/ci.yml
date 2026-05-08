@@ -28,7 +28,7 @@ jobs:
 
       - name: Compile Python scripts
         run: |
-          python -m py_compile scripts/scan.py scripts/summarize.py scripts/media_ocr.py scripts/ocr_media.py scripts/report.py scripts/report_diagnostics.py scripts/daily_report.py scripts/doctor.py
+          python -m py_compile scripts/scan.py scripts/summarize.py scripts/media_ocr.py scripts/ocr_media.py scripts/report.py scripts/report_diagnostics.py scripts/daily_report.py scripts/doctor.py scripts/delivery.py scripts/monitor_state.py scripts/monitor.py scripts/dashboard_server.py
 
       - name: Run Ruff
         run: |
@@ -42,3 +42,24 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           bash -n setup.sh scripts/scan.sh
+
+  dashboard:
+    name: Dashboard build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: dashboard/package-lock.json
+
+      - name: Install dashboard dependencies
+        working-directory: dashboard
+        run: npm ci
+
+      - name: Build dashboard
+        working-directory: dashboard
+        run: npm run build

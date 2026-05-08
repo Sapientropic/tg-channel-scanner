@@ -92,6 +92,9 @@ tgcs run
 tgcs run --profile market-news --hours 72
 tgcs run --no-state
 tgcs sources import channel_lists/example.txt
+tgcs monitor run --profile-id market-news
+tgcs dashboard
+tgcs delivery test telegram-bot --chat-id 123456
 ```
 
 `tgcs run` defaults to `.tgcs/sources.json` when present, the `market-news`
@@ -109,7 +112,84 @@ python scripts/scan.py --source-registry .tgcs/sources.json --hours 24 --output 
 python scripts/report.py --input output/scan.jsonl --profile profiles/templates/market-news.md --output output/report.md --html-output output/report.html --source-registry .tgcs/sources.json --format json
 python scripts/report.py --input output/scan.jsonl --profile profiles/templates/market-news.md --items-json output/extracted-items.json --state-dir .tgcs/state --feedback-jsonl output/report-feedback.jsonl --format json
 python scripts/daily_report.py --source-registry .tgcs/sources.json --profile profiles/templates/market-news.md --html --state-dir .tgcs/state --format json
+python scripts/monitor.py run --profile-id market-news --delivery-mode dry-run --format json
 ```
+
+## Monitor Runner: `profile_run_config_v1`
+
+v0.5-alpha adds a CLI-first monitor layer. It preserves existing scan/report
+contracts and writes repeated-run state to `.tgcs/tgcs.db`.
+
+Default config path: `.tgcs/profiles.toml`.
+
+```toml
+schema_version = "profile_run_config_v1"
+
+[defaults]
+output_dir = "output"
+state_dir = ".tgcs/state"
+database = ".tgcs/tgcs.db"
+dashboard_url = "http://127.0.0.1:8765"
+
+[[profiles]]
+id = "market-news"
+path = "profiles/templates/market-news.md"
+enabled = true
+source_registry = ".tgcs/sources.json"
+source_topics = ["market-news"]
+alert_rule = "high_new_or_changed"
+delivery_targets = ["telegram-bot-default"]
+
+[[delivery]]
+id = "telegram-bot-default"
+type = "telegram_bot"
+enabled = false
+chat_id = ""
+```
+
+`scripts/monitor.py run` returns `agent_envelope_v1` with:
+
+```json
+{
+  "schema_version": "monitor_run_result_v1",
+  "status": "complete",
+  "run_id": "run_20260508T090000Z_abcd1234",
+  "manifest_path": "output/runs/run_20260508T090000Z_abcd1234/run-manifest.json",
+  "db_path": ".tgcs/tgcs.db",
+  "report_path": "output/runs/run_20260508T090000Z_abcd1234/report.md",
+  "html_path": "output/runs/run_20260508T090000Z_abcd1234/report.html",
+  "review_card_count": 3,
+  "alert_count": 1,
+  "delivery_attempts": []
+}
+```
+
+Run manifests use `run_manifest_v1`. They include profile/source hashes,
+scan window, artifact paths, report status, alert count, error summary, and
+delivery attempts. Previous runs are kept under `output/runs/<run_id>/`; only
+`output/latest/run-manifest.path` is updated as a pointer.
+
+SQLite stores dashboard state using these projections:
+
+- `review_card_v1`: extracted item fields, source refs, card status, run refs.
+- `alert_event_v1`: alert target, status, redacted payload, delivery result.
+- `delivery_target_v1`: target id/type/enabled/config; never bot tokens.
+- `profile_patch_suggestion_v1`: follow-up note, diff, proposed profile text.
+
+Central SQLite state must not store Telegram sessions, API keys, bot tokens, or
+raw Telegram message bodies. Follow-up notes are local workflow data; they do
+not enter `item-memory.json` or future LLM prompts unless the user applies the
+generated profile diff.
+
+Default alert rule:
+
+```text
+rating == "high" and decision_state.status in ["new", "changed"]
+```
+
+Telegram Bot delivery reads the token from `TGCS_TELEGRAM_BOT_TOKEN`. Use
+`--delivery-mode dry-run` for tests and `--delivery-mode live` only when the
+target chat id and environment token are intentionally configured.
 
 ## Human Login Boundary
 

@@ -26,11 +26,16 @@ For a human at a terminal, prefer the short facade commands: `tgcs init`,
    `python scripts/report.py --input output/scan.jsonl --profile profiles/templates/market-news.md --items-json output/extracted-items.json --output output/report.md --html-output output/report.html --source-registry .tgcs/sources.json --state-dir .tgcs/state --format json`
    Use `--state-read-only` when inspecting history without updating it. Use repeated
    `--feedback-jsonl <path>` flags to import exported local report feedback.
-7. If report returns `agent_extraction_required`, do the semantic extraction as the agent:
+7. For v0.5-alpha repeated monitoring, prefer the monitor runner after source/profile setup:
+   `python scripts/monitor.py run --profile-id market-news --delivery-mode dry-run --format json`
+   It writes `run_manifest_v1`, `.tgcs/tgcs.db`, review cards, alert events, and report artifacts under `output/runs/<run_id>/`.
+8. If report or monitor returns `agent_extraction_required`, do the semantic extraction as the agent:
    - Read `request_path`.
    - Write `semantic_items_v1` JSON to `items_output_path`.
    - Rerun report:
      `python scripts/report.py --input output/scan.jsonl --profile profiles/templates/market-news.md --items-json output/extracted-items.json --output output/report.md --html-output output/report.html --source-registry .tgcs/sources.json --format json`
+9. For local review, serve the optional dashboard:
+   `python scripts/dashboard_server.py --host 127.0.0.1 --port 8765`
 
 ## Safety Boundaries
 
@@ -51,5 +56,11 @@ For a human at a terminal, prefer the short facade commands: `tgcs init`,
 - When no LLM key exists, prefer the agent fallback request instead of asking the user to configure a key.
 - `--extractor agent` never calls an external LLM provider; it writes a local extraction request for the current agent to handle.
 - Agent-produced items must preserve `source_message_refs`; do not invent refs or bind refs across channels.
+- Monitor SQLite state is local dashboard state, not a raw Telegram archive.
+  Never persist bot tokens, Telegram sessions, credentials, or raw message text
+  there. Bot delivery reads `TGCS_TELEGRAM_BOT_TOKEN` from the environment.
+- Use `--delivery-mode dry-run` in tests and agent verification. Use
+  `--delivery-mode live` only when the user intentionally configured the
+  private bot target.
 
 Detailed CLI contract: `docs/agent-cli-contract.md`.

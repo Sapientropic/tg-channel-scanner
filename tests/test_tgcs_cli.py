@@ -98,10 +98,12 @@ class TgcsCliTests(unittest.TestCase):
                     exit_code = tgcs.main(["init"])
 
             config_text = (root / ".tgcs" / "config.toml").read_text(encoding="utf-8")
+            profiles_config_text = (root / ".tgcs" / "profiles.toml").read_text(encoding="utf-8")
 
         self.assertEqual(exit_code, 0)
         self.assertIn("profile", config_text)
         self.assertIn("state_dir", config_text)
+        self.assertIn("profile_run_config_v1", profiles_config_text)
         cmd = [str(part) for part in run_mock.call_args.args[0]]
         self.assertIn("source_registry.py", cmd[1])
         self.assertIn("import-list", cmd)
@@ -123,6 +125,76 @@ class TgcsCliTests(unittest.TestCase):
         cmd = [str(part) for part in run_mock.call_args.args[0]]
         self.assertIn("scan.py", cmd[1])
         self.assertIn("--login-only", cmd)
+
+    def test_monitor_run_delegates_to_monitor_script(self):
+        tgcs = load_tgcs_module(self)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+
+            def fake_run(cmd, check=False):
+                return subprocess.CompletedProcess(cmd, 0)
+
+            with patch.object(tgcs, "PROJECT_ROOT", root):
+                with patch.object(tgcs.subprocess, "run", side_effect=fake_run) as run_mock:
+                    exit_code = tgcs.main(
+                        [
+                            "monitor",
+                            "run",
+                            "--profile-id",
+                            "market-news",
+                            "--delivery-mode",
+                            "dry-run",
+                            "--format",
+                            "json",
+                        ]
+                    )
+
+        self.assertEqual(exit_code, 0)
+        cmd = [str(part) for part in run_mock.call_args.args[0]]
+        self.assertIn("monitor.py", cmd[1])
+        self.assertIn("run", cmd)
+        self.assertIn("--profile-id", cmd)
+        self.assertIn("market-news", cmd)
+        self.assertIn("--format", cmd)
+
+    def test_dashboard_delegates_to_dashboard_server(self):
+        tgcs = load_tgcs_module(self)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+
+            def fake_run(cmd, check=False):
+                return subprocess.CompletedProcess(cmd, 0)
+
+            with patch.object(tgcs, "PROJECT_ROOT", root):
+                with patch.object(tgcs.subprocess, "run", side_effect=fake_run) as run_mock:
+                    exit_code = tgcs.main(["dashboard", "--port", "8765"])
+
+        self.assertEqual(exit_code, 0)
+        cmd = [str(part) for part in run_mock.call_args.args[0]]
+        self.assertIn("dashboard_server.py", cmd[1])
+        self.assertIn("--host", cmd)
+        self.assertIn("127.0.0.1", cmd)
+
+    def test_delivery_test_delegates_to_monitor_delivery_test(self):
+        tgcs = load_tgcs_module(self)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+
+            def fake_run(cmd, check=False):
+                return subprocess.CompletedProcess(cmd, 0)
+
+            with patch.object(tgcs, "PROJECT_ROOT", root):
+                with patch.object(tgcs.subprocess, "run", side_effect=fake_run) as run_mock:
+                    exit_code = tgcs.main(["delivery", "test", "telegram-bot", "--chat-id", "123"])
+
+        self.assertEqual(exit_code, 0)
+        cmd = [str(part) for part in run_mock.call_args.args[0]]
+        self.assertIn("monitor.py", cmd[1])
+        self.assertIn("delivery-test", cmd)
+        self.assertIn("telegram-bot", cmd)
 
 
 if __name__ == "__main__":

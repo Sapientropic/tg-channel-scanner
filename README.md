@@ -97,6 +97,28 @@ the `market-news` profile, `.tgcs/sources.json`, `output/`, HTML output, and
 v0.4 local decision memory at `.tgcs/state`. Use `tgcs run --no-state` when
 you need a stateless run.
 
+### v0.5-alpha Monitor & Inbox
+
+The v0.5-alpha monitor keeps the CLI-first workflow and adds repeated-run
+state, alert events, and a local review inbox:
+
+```bash
+# Write .tgcs/profiles.toml if you want an editable monitor config
+./tgcs monitor init-config
+
+# Run one profile monitor; dry-run delivery is the safe default
+./tgcs monitor run --profile-id market-news --delivery-mode dry-run
+
+# Serve the optional localhost dashboard after building dashboard/
+./tgcs dashboard
+```
+
+Monitor runs write artifacts under `output/runs/<run_id>/`, update a
+`run_manifest_v1`, and store dashboard state in `.tgcs/tgcs.db`. High-priority
+new or changed items become alert candidates and pending review cards. Telegram
+Bot delivery reads `TGCS_TELEGRAM_BOT_TOKEN` from the environment and never
+stores the token in SQLite, manifests, or docs.
+
 ### Agent-Native Mode
 
 The repository also ships a root [SKILL.md](SKILL.md) and a structured
@@ -128,6 +150,10 @@ python scripts/report.py --input output/scan.jsonl \
   --state-dir .tgcs/state \
   --feedback-jsonl output/report-feedback.jsonl \
   --format json
+
+# Optional v0.5-alpha monitor state, manifest, inbox, and alert events
+python scripts/monitor.py run --profile-id market-news \
+  --delivery-mode dry-run --format json
 ```
 
 If no LLM provider key exists, `report.py --extractor auto` returns
@@ -382,6 +408,7 @@ tg-channel-scanner/
 ├── requirements.txt         # telethon
 ├── requirements-llm.txt     # optional summarizer deps
 ├── setup.sh / setup.bat     # One-command installer
+├── dashboard/               # Optional Vite React localhost dashboard
 ├── profiles/                # Filter profiles
 │   └── templates/            # Built-in starter profiles
 ├── channel_lists/           # Channel name lists
@@ -395,6 +422,10 @@ tg-channel-scanner/
 │   ├── report_diagnostics.py # Empty-result and scan-health diagnostics
 │   ├── doctor.py            # First-run environment checks
 │   ├── daily_report.py      # Scan + report pipeline
+│   ├── monitor.py           # v0.5-alpha profile monitor runner
+│   ├── monitor_state.py     # SQLite state for inbox/alerts/profile diffs
+│   ├── delivery.py          # Delivery adapters
+│   ├── dashboard_server.py  # Localhost dashboard API/static server
 │   └── summarize.py         # Free-form LLM summary
 ├── templates/
 │   ├── report-job.html      # Job report HTML shell

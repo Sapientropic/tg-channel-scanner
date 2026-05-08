@@ -238,6 +238,14 @@ class AgentNativeCliTests(unittest.TestCase):
         self.assertIn("decision_state_v1", contract)
         self.assertIn("state_summary", contract)
 
+    def test_agent_contract_documents_monitor_contract(self):
+        contract = Path("docs/agent-cli-contract.md").read_text(encoding="utf-8")
+
+        self.assertIn("profile_run_config_v1", contract)
+        self.assertIn("run_manifest_v1", contract)
+        self.assertIn("review_card_v1", contract)
+        self.assertIn("TGCS_TELEGRAM_BOT_TOKEN", contract)
+
 
 if __name__ == "__main__":
     unittest.main()

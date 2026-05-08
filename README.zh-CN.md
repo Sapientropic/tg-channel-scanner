@@ -96,6 +96,27 @@ Windows 下使用 `tgcs.bat`。这个人类入口默认使用 `market-news` prof
 `.tgcs/sources.json`、`output/`、HTML 输出，并默认启用 v0.4 本地决策记忆
 `.tgcs/state`。需要无状态运行时使用 `tgcs run --no-state`。
 
+### v0.5-alpha Monitor 与 Inbox
+
+v0.5-alpha monitor 在 CLI-first 流程上增加重复运行状态、告警事件和本地 review inbox：
+
+```bash
+# 写入可编辑的 .tgcs/profiles.toml
+./tgcs monitor init-config
+
+# 跑一个 profile；dry-run delivery 是安全默认值
+./tgcs monitor run --profile-id market-news --delivery-mode dry-run
+
+# 构建 dashboard/ 后启动本地 dashboard
+./tgcs dashboard
+```
+
+Monitor run 会把 artifact 写到 `output/runs/<run_id>/`，更新
+`run_manifest_v1`，并把 dashboard 状态写入 `.tgcs/tgcs.db`。高优先级 new /
+changed 项会成为 alert candidate 和 pending review card。Telegram Bot delivery
+从环境变量 `TGCS_TELEGRAM_BOT_TOKEN` 读取 token，不把 token 写进 SQLite、
+manifest 或文档。
+
 ### Agent 原生模式
 
 仓库根目录提供 [SKILL.md](SKILL.md) 和结构化
@@ -126,6 +147,10 @@ python scripts/report.py --input output/scan.jsonl \
   --state-dir .tgcs/state \
   --feedback-jsonl output/report-feedback.jsonl \
   --format json
+
+# 可选：v0.5-alpha monitor 状态、manifest、inbox 和 alert events
+python scripts/monitor.py run --profile-id market-news \
+  --delivery-mode dry-run --format json
 ```
 
 如果本机没有 LLM provider key，`report.py --extractor auto` 会返回
@@ -373,6 +398,7 @@ tg-channel-scanner/
 ├── requirements.txt         # telethon
 ├── requirements-llm.txt     # 可选摘要依赖
 ├── setup.sh / setup.bat     # 一键安装
+├── dashboard/               # 可选 Vite React 本地 dashboard
 ├── profiles/                # 筛选 profile
 │   └── templates/            # 内置 starter profiles
 ├── channel_lists/           # 频道名称列表
@@ -386,6 +412,10 @@ tg-channel-scanner/
 │   ├── report_diagnostics.py # 空结果与扫描健康诊断
 │   ├── doctor.py            # first-run 环境检查
 │   ├── daily_report.py      # 扫描 + 报告流水线
+│   ├── monitor.py           # v0.5-alpha profile monitor runner
+│   ├── monitor_state.py     # inbox/alert/profile diff 的 SQLite 状态
+│   ├── delivery.py          # delivery adapters
+│   ├── dashboard_server.py  # localhost dashboard API/静态服务
 │   └── summarize.py         # 自由格式摘要
 ├── templates/
 │   ├── report-job.html      # 求职报告 HTML 壳

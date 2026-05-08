@@ -15,6 +15,11 @@ config.toml
 __pycache__/
 *.pyc
 
+# Node
+node_modules/
+dashboard/dist/
+*.tsbuildinfo
+
 # Output
 output/
 .tgcs/

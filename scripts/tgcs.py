@@ -19,6 +19,7 @@ from typing import Any
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 LOCAL_DIR = ".tgcs"
 CONFIG_NAME = "config.toml"
+PROFILES_CONFIG_NAME = "profiles.toml"
 DEFAULT_PROFILE = "market-news"
 PROFILE_ALIASES = {
     "jobs": "profiles/templates/jobs.md",
@@ -119,6 +120,47 @@ def _write_default_config(path: Path, *, force: bool = False) -> None:
     )
 
 
+def _write_default_profiles_config(path: Path, *, force: bool = False) -> None:
+    if path.exists() and not force:
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        "\n".join(
+            [
+                'schema_version = "profile_run_config_v1"',
+                "",
+                "[defaults]",
+                'output_dir = "output"',
+                'state_dir = ".tgcs/state"',
+                'database = ".tgcs/tgcs.db"',
+                'dashboard_url = "http://127.0.0.1:8765"',
+                "",
+                "[[profiles]]",
+                'id = "market-news"',
+                'path = "profiles/templates/market-news.md"',
+                "enabled = true",
+                'timezone = "Asia/Shanghai"',
+                "work_interval_minutes = 120",
+                "off_hours_interval_minutes = 360",
+                'source_registry = ".tgcs/sources.json"',
+                'channel_list = "channel_lists/example.txt"',
+                'source_topics = ["market-news"]',
+                'alert_rule = "high_new_or_changed"',
+                'delivery_targets = ["telegram-bot-default"]',
+                "dashboard_visible = true",
+                "",
+                "[[delivery]]",
+                'id = "telegram-bot-default"',
+                'type = "telegram_bot"',
+                "enabled = false",
+                'chat_id = ""',
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+
 def run_demo(args: argparse.Namespace) -> int:
     output = _root_path(args.output or "output/demo-report.md")
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -140,10 +182,12 @@ def run_demo(args: argparse.Namespace) -> int:
 
 def run_init(args: argparse.Namespace) -> int:
     config_path = _local_path(CONFIG_NAME)
+    profiles_config_path = _local_path(PROFILES_CONFIG_NAME)
     _local_path().mkdir(parents=True, exist_ok=True)
     _default_output_dir({}).mkdir(parents=True, exist_ok=True)
     _default_state_dir({}).mkdir(parents=True, exist_ok=True)
     _write_default_config(config_path, force=args.force)
+    _write_default_profiles_config(profiles_config_path, force=args.force)
 
     registry = _root_path(args.source_registry or f"{LOCAL_DIR}/sources.json")
     channel_list = _root_path(args.channel_list or "channel_lists/example.txt")
@@ -244,6 +288,77 @@ def run_sources(args: argparse.Namespace) -> int:
     return _run(cmd)
 
 
+def run_monitor(args: argparse.Namespace) -> int:
+    cmd: list[str | Path] = [_python(), _script("monitor.py")]
+    if args.monitor_command == "run":
+        cmd.extend(
+            [
+                "run",
+                "--profile-id",
+                args.profile_id,
+                "--config",
+                _root_path(args.config or f"{LOCAL_DIR}/{PROFILES_CONFIG_NAME}"),
+                "--hours",
+                str(args.hours),
+                "--delivery-mode",
+                args.delivery_mode,
+            ]
+        )
+        if args.scan_input:
+            cmd.extend(["--scan-input", _root_path(args.scan_input)])
+        if args.items_json:
+            cmd.extend(["--items-json", args.items_json])
+        if args.output_dir:
+            cmd.extend(["--output-dir", _root_path(args.output_dir)])
+        if args.db:
+            cmd.extend(["--db", _root_path(args.db)])
+        if args.format == "json":
+            cmd.extend(["--format", "json"])
+    elif args.monitor_command == "init-config":
+        cmd.extend(["init-config", "--config", _root_path(args.config or f"{LOCAL_DIR}/{PROFILES_CONFIG_NAME}")])
+        if args.force:
+            cmd.append("--force")
+        if args.format == "json":
+            cmd.extend(["--format", "json"])
+    else:
+        raise AssertionError(f"Unsupported monitor command: {args.monitor_command}")
+    return _run(cmd)
+
+
+def run_dashboard(args: argparse.Namespace) -> int:
+    cmd: list[str | Path] = [
+        _python(),
+        _script("dashboard_server.py"),
+        "--host",
+        args.host,
+        "--port",
+        str(args.port),
+        "--db",
+        _root_path(args.db or f"{LOCAL_DIR}/tgcs.db"),
+    ]
+    if args.static_dir:
+        cmd.extend(["--static-dir", _root_path(args.static_dir)])
+    return _run(cmd)
+
+
+def run_delivery(args: argparse.Namespace) -> int:
+    if args.delivery_command != "test" or args.adapter != "telegram-bot":
+        raise AssertionError("Unsupported delivery command")
+    cmd: list[str | Path] = [
+        _python(),
+        _script("monitor.py"),
+        "delivery-test",
+        "telegram-bot",
+        "--delivery-mode",
+        args.delivery_mode,
+    ]
+    if args.chat_id:
+        cmd.extend(["--chat-id", args.chat_id])
+    if args.format == "json":
+        cmd.extend(["--format", "json"])
+    return _run(cmd)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="tgcs",
@@ -313,6 +428,41 @@ def build_parser() -> argparse.ArgumentParser:
     source_export.add_argument("--source-registry")
     source_export.add_argument("--format", choices=("human", "json"), default="human")
     source_export.set_defaults(func=run_sources)
+
+    monitor = subparsers.add_parser("monitor", help="Run v0.5-alpha profile monitors.")
+    monitor_subparsers = monitor.add_subparsers(dest="monitor_command", required=True)
+    monitor_init = monitor_subparsers.add_parser("init-config", help="Write .tgcs/profiles.toml.")
+    monitor_init.add_argument("--config")
+    monitor_init.add_argument("--force", action="store_true")
+    monitor_init.add_argument("--format", choices=("human", "json"), default="human")
+    monitor_init.set_defaults(func=run_monitor)
+    monitor_run = monitor_subparsers.add_parser("run", help="Run one configured profile monitor.")
+    monitor_run.add_argument("--profile-id", default=DEFAULT_PROFILE)
+    monitor_run.add_argument("--config")
+    monitor_run.add_argument("--hours", type=int, default=24)
+    monitor_run.add_argument("--scan-input")
+    monitor_run.add_argument("--items-json")
+    monitor_run.add_argument("--output-dir")
+    monitor_run.add_argument("--db")
+    monitor_run.add_argument("--delivery-mode", choices=("off", "dry-run", "live"), default="dry-run")
+    monitor_run.add_argument("--format", choices=("human", "json"), default="human")
+    monitor_run.set_defaults(func=run_monitor)
+
+    dashboard = subparsers.add_parser("dashboard", help="Serve the local review dashboard.")
+    dashboard.add_argument("--host", default="127.0.0.1")
+    dashboard.add_argument("--port", type=int, default=8765)
+    dashboard.add_argument("--db")
+    dashboard.add_argument("--static-dir")
+    dashboard.set_defaults(func=run_dashboard)
+
+    delivery_parser = subparsers.add_parser("delivery", help="Manage delivery adapters.")
+    delivery_subparsers = delivery_parser.add_subparsers(dest="delivery_command", required=True)
+    delivery_test = delivery_subparsers.add_parser("test", help="Test one delivery adapter.")
+    delivery_test.add_argument("adapter", choices=("telegram-bot",))
+    delivery_test.add_argument("--chat-id")
+    delivery_test.add_argument("--delivery-mode", choices=("dry-run", "live"), default="dry-run")
+    delivery_test.add_argument("--format", choices=("human", "json"), default="human")
+    delivery_test.set_defaults(func=run_delivery)
 
     return parser
 
