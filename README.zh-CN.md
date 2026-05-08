@@ -97,6 +97,32 @@ python scripts/daily_report.py channel_lists/example.txt \
   --profile profiles/example.md --html
 ```
 
+### Agent 原生模式
+
+仓库根目录提供 [SKILL.md](SKILL.md) 和结构化
+[agent CLI 合同](docs/agent-cli-contract.md)。给人用的命令继续兼容；agent 调用时优先使用
+JSON 输出和私有 source registry（默认 `.tgcs/sources.json`）：
+
+```bash
+python scripts/source_registry.py import-list channel_lists/example.txt \
+  --source-registry .tgcs/sources.json --format json
+
+python scripts/doctor.py --source-registry .tgcs/sources.json \
+  --profile profiles/templates/market-news.md --output-dir output --format json
+
+python scripts/scan.py --source-registry .tgcs/sources.json --hours 24 \
+  --output output/scan.jsonl --format json
+
+python scripts/report.py --input output/scan.jsonl \
+  --profile profiles/templates/market-news.md \
+  --output output/report.md --html-output output/report.html \
+  --source-registry .tgcs/sources.json --format json
+```
+
+如果本机没有 LLM provider key，`report.py --extractor auto` 会返回
+`agent_extraction_required`；agent 读取本地 extraction request，写出
+`semantic_items_v1`，再用 `--items-json` 重跑 `report.py`。
+
 ### 扫描选项
 
 ```bash
@@ -227,7 +253,7 @@ export OPENAI_API_KEY=sk-your-key
 ```mermaid
 graph LR
     A["📱 Telegram<br>频道"] -->|MTProto| B["🔍 扫描器<br>scan.py"]
-    B -->|"JSONL + meta"| C["🤖 LLM<br>语义过滤"]
+    B -->|"JSONL + meta"| C["🤖 LLM 或 Agent<br>语义提取"]
     C -->|"结构化 JSON"| D["📊 报告<br>report.py"]
     D --> E["📝 Markdown"]
     D --> F["🎨 HTML 报告"]
@@ -243,12 +269,15 @@ graph LR
 1. **读取** — Telethon 读取已订阅频道消息
 2. **过滤** — 精确时间截断 + 提前终止
 3. **保存** — JSONL + `.meta.json`
-4. **报告** — LLM 语义匹配 → Python 渲染统计 + Markdown/HTML
+4. **报告** — LLM 或 agent 语义提取 -> Python 渲染统计 + Markdown/HTML
 
 数据合同：每条扫描消息都会带稳定 `message_ref`（`channel` + `id`）。报告要求
 LLM 输出 `source_message_refs`，并用这个按频道限定的 key 查原文；`source_message_ids`
 只保留作旧 JSONL/旧报告兼容。每日流水线会把本轮 scan 的明确 `--output` 路径传给
 `report.py`，不会静默复用输出目录里的旧 `scan_*.jsonl`。
+如果没有配置 LLM key，同一报告流程会通过本地
+`agent_extraction_request_v1` / `semantic_items_v1` 合同把语义提取交给调用它的
+agent。完整合同见 [docs/agent-cli-contract.md](docs/agent-cli-contract.md)。
 
 ## Profile 与频道列表
 
@@ -295,10 +324,31 @@ react_jobs
 
 或直接导出：`python scripts/export_folder.py --folder "Jobs" --output channel_lists/jobs.txt`
 
+### Source Registry
+
+需要让 agent 长期维护来源时，优先使用私有 source registry，而不是直接反复改
+channel list。`.tgcs/` 默认已 gitignore，真实来源备注和优先级只保留在本地：
+
+```bash
+python scripts/source_registry.py import-list channel_lists/example.txt \
+  --source-registry .tgcs/sources.json --format json --dry-run
+
+python scripts/source_registry.py import-list channel_lists/example.txt \
+  --source-registry .tgcs/sources.json --format json
+
+python scripts/source_registry.py list \
+  --source-registry .tgcs/sources.json --format json
+```
+
+旧的 `channel_lists/*.txt` 命令仍然可用。Schema 形状见
+[docs/source-registry.example.json](docs/source-registry.example.json)。
+
 ## 目录结构
 
 ```
 tg-channel-scanner/
+├── SKILL.md                 # agent 调用指南
+├── agents/openai.yaml       # skill 安装元数据
 ├── config.example.toml      # 配置模板（实际配置在 ~/.config/tgcli/）
 ├── requirements.txt         # telethon
 ├── requirements-llm.txt     # 可选摘要依赖
@@ -307,7 +357,9 @@ tg-channel-scanner/
 │   └── templates/            # 内置 starter profiles
 ├── channel_lists/           # 频道名称列表
 ├── scripts/
+│   ├── agent_cli.py         # JSON envelope 和退出码 helper
 │   ├── scan.py              # 扫描核心（Telethon）
+│   ├── source_registry.py   # source registry 导入/列出/导出/校验
 │   ├── export_folder.py     # 从 Telegram 文件夹导出
 │   ├── report.py            # 报告生成器（Markdown + HTML）
 │   ├── report_diagnostics.py # 空结果与扫描健康诊断
@@ -321,6 +373,7 @@ tg-channel-scanner/
 │   └── report-theme.js      # 内联主题与动效逻辑
 ├── output/                  # 已 gitignore
 └── docs/
+    ├── agent-cli-contract.md # Agent JSON 合同与 fallback schema
     ├── demo.mp4             # 完整产品演示视频，控制在 10 MB 内便于 GitHub 上传
     ├── demo/                # HyperFrames 演示源码和维护说明
     ├── licensing.md         # AGPL + 商业授权策略

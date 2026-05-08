@@ -97,6 +97,33 @@ python scripts/daily_report.py channel_lists/example.txt \
   --profile profiles/example.md --html
 ```
 
+### Agent-Native Mode
+
+The repository also ships a root [SKILL.md](SKILL.md) and a structured
+[agent CLI contract](docs/agent-cli-contract.md). Human commands remain
+compatible, but agents should prefer JSON output and the private source
+registry at `.tgcs/sources.json`:
+
+```bash
+python scripts/source_registry.py import-list channel_lists/example.txt \
+  --source-registry .tgcs/sources.json --format json
+
+python scripts/doctor.py --source-registry .tgcs/sources.json \
+  --profile profiles/templates/market-news.md --output-dir output --format json
+
+python scripts/scan.py --source-registry .tgcs/sources.json --hours 24 \
+  --output output/scan.jsonl --format json
+
+python scripts/report.py --input output/scan.jsonl \
+  --profile profiles/templates/market-news.md \
+  --output output/report.md --html-output output/report.html \
+  --source-registry .tgcs/sources.json --format json
+```
+
+If no LLM provider key exists, `report.py --extractor auto` returns
+`agent_extraction_required`; the agent can read the local extraction request,
+write `semantic_items_v1`, then rerun `report.py` with `--items-json`.
+
 ### Scan Options
 
 ```bash
@@ -229,7 +256,7 @@ cost before enabling it.
 ```mermaid
 graph LR
     A["📱 Telegram<br>Channels"] -->|MTProto| B["🔍 Scanner<br>scan.py"]
-    B -->|"JSONL + meta"| C["🤖 LLM<br>Semantic Filter"]
+    B -->|"JSONL + meta"| C["🤖 LLM or Agent<br>Semantic Extraction"]
     C -->|"Structured JSON"| D["📊 Report<br>report.py"]
     D --> E["📝 Markdown"]
     D --> F["🎨 HTML Report"]
@@ -245,13 +272,16 @@ graph LR
 1. **Read** — Telethon reads messages from your subscribed channels
 2. **Filter** — Precise timestamp cutoff with early termination
 3. **Save** — JSONL + `.meta.json` sidecar
-4. **Report** — LLM semantic matching → Python renders stats + Markdown/HTML
+4. **Report** — LLM or agent semantic extraction -> Python renders stats + Markdown/HTML
 
 Data contract: each scanned message carries a stable `message_ref` (`channel` + `id`).
 Reports ask the LLM for `source_message_refs` and use that channel-scoped key for raw
 message lookup; `source_message_ids` is kept only for older JSONL/report compatibility.
 The daily pipeline passes an explicit scan `--output` path into `report.py`, so a report
 cannot silently reuse an older `scan_*.jsonl` from the output directory.
+If no LLM key is configured, the same report flow can hand semantic extraction to the
+calling agent through the local `agent_extraction_request_v1` / `semantic_items_v1`
+contract documented in [docs/agent-cli-contract.md](docs/agent-cli-contract.md).
 
 ## Profiles & Channel Lists
 
@@ -298,10 +328,33 @@ react_jobs
 
 Or export directly from Telegram: `python scripts/export_folder.py --folder "Jobs" --output channel_lists/jobs.txt`
 
+### Source Registry
+
+For agent-maintained source operations, prefer a private source registry over
+editing channel lists in place. `.tgcs/` is gitignored by default, so real
+source notes and priorities stay local:
+
+```bash
+python scripts/source_registry.py import-list channel_lists/example.txt \
+  --source-registry .tgcs/sources.json --format json --dry-run
+
+python scripts/source_registry.py import-list channel_lists/example.txt \
+  --source-registry .tgcs/sources.json --format json
+
+python scripts/source_registry.py list \
+  --source-registry .tgcs/sources.json --format json
+```
+
+Legacy `channel_lists/*.txt` commands remain supported. See
+[docs/source-registry.example.json](docs/source-registry.example.json) for the
+schema shape.
+
 ## Directory Structure
 
 ```
 tg-channel-scanner/
+├── SKILL.md                 # Agent-facing operating guide
+├── agents/openai.yaml       # Skill metadata for agent installers
 ├── config.example.toml      # Template (actual config at ~/.config/tgcli/)
 ├── requirements.txt         # telethon
 ├── requirements-llm.txt     # optional summarizer deps
@@ -310,7 +363,9 @@ tg-channel-scanner/
 │   └── templates/            # Built-in starter profiles
 ├── channel_lists/           # Channel name lists
 ├── scripts/
+│   ├── agent_cli.py         # JSON envelope and exit-code helpers
 │   ├── scan.py              # Scanner core (Telethon)
+│   ├── source_registry.py   # Source registry import/list/export/validate
 │   ├── export_folder.py     # Export from Telegram folders
 │   ├── report.py            # Report generator (Markdown + HTML)
 │   ├── report_diagnostics.py # Empty-result and scan-health diagnostics
@@ -324,6 +379,7 @@ tg-channel-scanner/
 │   └── report-theme.js      # Shared inline theme/motion behavior
 ├── output/                  # gitignored
 └── docs/
+    ├── agent-cli-contract.md # Agent JSON contract and fallback schemas
     ├── demo.mp4             # Full product demo video, kept under 10 MB for GitHub uploads
     ├── demo/                # HyperFrames demo source and maintenance notes
     ├── licensing.md         # AGPL + commercial licensing policy
