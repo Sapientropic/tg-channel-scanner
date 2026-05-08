@@ -159,6 +159,19 @@ Non-goals for now:
    Full-video upload, broad history scans, and third-party AI calls should stay
    behind explicit flags/config with documentation close to the option.
 
+6. Low-friction control for repeated personal use.
+   The product should help forgetful high-volume users act on signal without
+   turning local automation into an enterprise approval workflow. Prompt/profile
+   changes should be visible, reversible, and easy to apply.
+
+## Current Design Entry
+
+The detailed planning authority for the next delivery iteration is
+[`docs/v0.5-alpha-alert-review-inbox.md`](docs/v0.5-alpha-alert-review-inbox.md).
+Keep implementation-specific details there until the feature ships. This
+roadmap should retain phase intent and exit criteria, not duplicate the full
+dashboard, alert, or profile-editing contract.
+
 ## Roadmap
 
 ### v0.2 - Stabilize The Daily Decision Loop
@@ -198,7 +211,7 @@ Exit criteria:
 Goal: help users manage channels as durable sources instead of one-off text
 lists.
 
-Planned work:
+Already in scope or recently addressed:
 
 - Introduce a source registry with channel username/id, human label, topic,
   priority, expected language, scan window, and optional per-source notes.
@@ -211,6 +224,15 @@ Planned work:
 - Add source pruning hints: noisy source, dormant source, repeated duplicate
   source, or source with frequent access failures.
 
+Hardening focus:
+
+- Keep Telegram folder import compatible with current Telethon response shapes,
+  including wrapped `DialogFilters`, rich folder titles, and the default filter.
+- Make source registry changes easier to review before they replace a user's
+  existing private source list.
+- Keep source health in the report connected to concrete next actions, not just
+  counters.
+
 Exit criteria:
 
 - Users can understand which channels generated value and which created noise.
@@ -220,45 +242,83 @@ Exit criteria:
 
 Goal: move from summarization to durable signal detection.
 
-Planned work:
+Already in scope or recently addressed:
 
 - Add local item memory for seen-before, changed, recurring, and expired leads.
+- Add decision-state explanations for novelty, rating, urgency, source priority,
+  and negative evidence.
+- Support profile-specific report templates without changing scanner internals.
+
+Planned work:
+
 - Add cross-channel clustering so related posts collapse into one decision card.
 - Extract structured entities per profile: company, role, location, deadline,
   token/project, person, event, product, or risk.
-- Add scoring explanations that separate match confidence, urgency, novelty,
-  source priority, and user-defined exclusions.
 - Add negative evidence: why an item was skipped, not just why kept items were
   selected.
-- Support profile-specific report templates without changing scanner internals.
+
+Hardening focus:
+
+- Make the agent extraction handoff reliable when no LLM key is configured:
+  request path, `semantic_items_v1` validation errors, and rerun instructions
+  should be obvious in JSON and human-facing flows.
+- Tighten feedback import/export so keep, skip, false positive, false negative,
+  and short notes improve local decision memory without persisting raw note text.
+- Improve empty-report diagnostics across the main failure modes: no messages,
+  all filtered out, incomplete scan, OCR disabled for media-heavy sources, and
+  unavailable LLM provider.
+- Keep decision memory private and auditable: state should remain small, local,
+  and free of raw Telegram message text, sessions, credentials, or note bodies.
 
 Exit criteria:
 
 - Daily reports reduce repeated items and highlight changes since the last run.
 - Users can tune profiles without editing Python.
 
-### v0.5 - Delivery And Automation
+### v0.5 - Alert And Review Inbox
 
-Goal: make the scanner a dependable daily habit while keeping artifacts local and
-auditable.
+Goal: make the scanner a dependable repeated habit: high-priority new or
+changed items can interrupt the user, while everything else goes into a local
+review dashboard.
 
 Planned work:
 
+- Treat each profile as a durable monitoring task with its own schedule,
+  working hours, source filters, alert rules, and delivery targets.
+- Add a review inbox for pending decision cards with keep, skip,
+  false-positive, and follow-up actions.
+- Add alert mode for high-priority new or changed matches while keeping the full
+  daily report as the audit artifact.
+- Default delivery to a private Telegram bot, with optional webhook, email, and
+  Telegram Saved Messages adapters.
+- Add follow-up-to-profile flow: save the local note, ask whether it should
+  affect future screening, show a profile diff, and apply it with one action.
 - Add scheduler helpers for Windows Task Scheduler, cron, and GitHub Actions
   self-hosted runners.
-- Add delivery adapters: local HTML, Markdown, email, Telegram saved messages or
-  bot delivery, and machine-readable JSON summary.
-- Add alert mode for high-priority matches while keeping the full daily report as
-  the audit artifact.
-- Add optional SQLite state for history, feedback, duplicate tracking, and source
-  health.
+- Add optional SQLite state for runs, review cards, feedback, alert logs,
+  profile snapshots, and source-health snapshots while preserving JSON CLI
+  contracts.
 - Add run manifests that record config/profile/channel-list hashes and generated
   output paths.
+- Add a local dashboard on `127.0.0.1` focused first on Inbox and Profiles, with
+  minimal Runs and Settings support.
+
+Deferred from v0.5 unless user evidence requires it:
+
+- Per-source or per-topic profile binding.
+- Snooze and mute-similar review actions.
+- Rich source-health trend analysis beyond actionable warnings.
+- Hosted, team, or multi-user dashboard features.
+- True per-source scan watermarks.
 
 Exit criteria:
 
-- The daily pipeline can run unattended and fail loudly when prerequisites break.
+- At least two profiles can run with different schedules and alert rules.
+- The pipeline can run repeatedly without overwriting previous reports.
 - Users can trace a delivered alert back to the full report and raw message.
+- Follow-up feedback can become a confirmable profile diff that affects the next
+  scan.
+- The CLI remains usable without the dashboard.
 
 ### v0.6 - Packaging And Team Use
 
@@ -268,8 +328,8 @@ hosted scraper.
 Planned work:
 
 - Provide `pipx`, `uvx`, and Docker installation paths.
-- Add a minimal local dashboard for profile selection, source health, recent
-  reports, and feedback review.
+- Harden the local dashboard for packaging, backup/restore, and small trusted
+  team use.
 - Add encrypted config/session guidance and backup/restore docs.
 - Support multi-profile batch runs from the same channel registry.
 - Add team-safe runbooks for shared profiles, local deployment, and third-party

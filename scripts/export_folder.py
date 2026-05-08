@@ -25,18 +25,36 @@ from telethon.sessions import StringSession
 from scripts.scan import ScanError, load_config
 
 
+def _iter_dialog_filters(response: object) -> list[object]:
+    """Normalize Telethon folder responses across account/API shapes."""
+    filters = getattr(response, "filters", response)
+    if filters is None:
+        return []
+    try:
+        return list(filters)
+    except TypeError:
+        return [filters]
+
+
+def _folder_title_text(value: object) -> str:
+    title = getattr(value, "text", value)
+    return str(title or "").strip()
+
+
 async def list_folders(client: TelegramClient) -> list[dict]:
     """List all chat folders with their names and IDs."""
     from telethon.tl.functions.messages import GetDialogFiltersRequest
 
-    filters = await client(GetDialogFiltersRequest())
+    filters = _iter_dialog_filters(await client(GetDialogFiltersRequest()))
     folders = []
     for f in filters:
-        if hasattr(f, "title") and f.title:
+        folder_id = getattr(f, "id", None)
+        title = _folder_title_text(getattr(f, "title", None))
+        if folder_id is not None and title:
             folders.append(
                 {
-                    "id": f.id,
-                    "title": f.title,
+                    "id": folder_id,
+                    "title": title,
                     "has_pinned": bool(getattr(f, "pinned_peers", None)),
                     "has_included": bool(getattr(f, "include_peers", None)),
                 }
@@ -48,11 +66,11 @@ async def export_folder(client: TelegramClient, folder_id: int) -> list[str]:
     """Export all channel usernames from a specific folder."""
     from telethon.tl.functions.messages import GetDialogFiltersRequest
 
-    filters = await client(GetDialogFiltersRequest())
+    filters = _iter_dialog_filters(await client(GetDialogFiltersRequest()))
 
     target = None
     for f in filters:
-        if f.id == folder_id:
+        if getattr(f, "id", None) == folder_id:
             target = f
             break
 
