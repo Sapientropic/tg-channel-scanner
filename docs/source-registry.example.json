@@ -1,0 +1,19 @@
+{
+  "schema_version": "source_registry_v1",
+  "sources": [
+    {
+      "source_id": "telegram:cointelegraph",
+      "username": "cointelegraph",
+      "channel_id": null,
+      "label": "Cointelegraph",
+      "topics": [
+        "market-news"
+      ],
+      "priority": "normal",
+      "expected_language": "en",
+      "scan_window_hours": 24,
+      "enabled": true,
+      "notes": "Example only. Keep real registries in .tgcs/sources.json."
+    }
+  ]
+}

@@ -306,22 +306,23 @@ system_prompt: |
             profile_path.write_text("Senior Frontend Developer", encoding="utf-8")
             stderr = io.StringIO()
 
-            with patch.object(
-                report,
-                "extract_jobs",
-                side_effect=report.ReportError("LLM response was not valid JSON", "bad"),
-            ):
-                with patch("sys.stderr", stderr):
-                    exit_code = report.main(
-                        [
-                            "--input",
-                            str(input_path),
-                            "--profile",
-                            str(profile_path),
-                            "--output",
-                            str(output_path),
-                        ]
-                    )
+            with patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}, clear=True):
+                with patch.object(
+                    report,
+                    "extract_jobs",
+                    side_effect=report.ReportError("LLM response was not valid JSON", "bad"),
+                ):
+                    with patch("sys.stderr", stderr):
+                        exit_code = report.main(
+                            [
+                                "--input",
+                                str(input_path),
+                                "--profile",
+                                str(profile_path),
+                                "--output",
+                                str(output_path),
+                            ]
+                        )
             debug_path = output_path.with_suffix(".llm-response.txt")
             debug_exists = debug_path.exists()
             debug_text = debug_path.read_text(encoding="utf-8") if debug_exists else ""
@@ -501,19 +502,20 @@ fields:
             )
             profile_path.write_text("Senior Frontend Developer", encoding="utf-8")
 
-            with patch.object(report, "extract_jobs", return_value=sample_extracted_jobs()[:1]) as extract_jobs:
-                exit_code = report.main(
-                    [
-                        "--input",
-                        str(input_path),
-                        "--profile",
-                        str(profile_path),
-                        "--output",
-                        str(output_path),
-                        "--html-output",
-                        str(html_output_path),
-                    ]
-                )
+            with patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}, clear=True):
+                with patch.object(report, "extract_jobs", return_value=sample_extracted_jobs()[:1]) as extract_jobs:
+                    exit_code = report.main(
+                        [
+                            "--input",
+                            str(input_path),
+                            "--profile",
+                            str(profile_path),
+                            "--output",
+                            str(output_path),
+                            "--html-output",
+                            str(html_output_path),
+                        ]
+                    )
 
             markdown = output_path.read_text(encoding="utf-8")
             html = html_output_path.read_text(encoding="utf-8")

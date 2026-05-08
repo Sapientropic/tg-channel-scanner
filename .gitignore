@@ -17,6 +17,7 @@ __pycache__/
 
 # Output
 output/
+.tgcs/
 
 # OS
 .DS_Store

@@ -36,6 +36,7 @@ _PROJECT_ROOT = str(Path(__file__).resolve().parent.parent)
 if _PROJECT_ROOT not in sys.path:
     sys.path.insert(0, _PROJECT_ROOT)
 
+from scripts import agent_cli, source_registry
 from scripts.media_ocr import OcrConfig, process_message
 
 DEFAULT_HOURS = 24
@@ -77,6 +78,19 @@ class ChannelResult:
     incomplete: bool
     ocr_count: int = 0
     stderr: str = ""
+
+
+@dataclass
+class ScanSource:
+    channel: str
+    source_id: str | None = None
+    username: str | None = None
+    channel_id: int | None = None
+    label: str | None = None
+    topics: list[str] | None = None
+    priority: str | None = None
+    expected_language: str | None = None
+    scan_window_hours: int | None = None
 
 
 @dataclass
@@ -195,6 +209,60 @@ def load_channel_list(path: Path) -> list[str]:
     return channels
 
 
+def source_from_channel_list_entry(channel: str) -> ScanSource:
+    original = str(channel or "").strip()
+    normalized = source_registry.normalize_channel_name(original)
+    username = normalized if not normalized.lstrip("-").isdigit() else None
+    channel_id = int(normalized) if normalized.lstrip("-").isdigit() else None
+    return ScanSource(
+        channel=original,
+        source_id=source_registry.source_id_for(username, channel_id),
+        username=username,
+        channel_id=channel_id,
+        label=original,
+        topics=[],
+        priority="normal",
+        expected_language="",
+        scan_window_hours=None,
+    )
+
+
+def source_from_registry_entry(entry: dict) -> ScanSource:
+    channel = source_registry.channel_value(entry)
+    return ScanSource(
+        channel=channel,
+        source_id=entry.get("source_id"),
+        username=entry.get("username"),
+        channel_id=entry.get("channel_id"),
+        label=entry.get("label") or channel,
+        topics=list(entry.get("topics") or []),
+        priority=entry.get("priority"),
+        expected_language=entry.get("expected_language"),
+        scan_window_hours=entry.get("scan_window_hours"),
+    )
+
+
+def load_scan_sources(args) -> tuple[list[ScanSource], dict | None]:
+    if args.source_registry:
+        payload = source_registry.load_registry(args.source_registry)
+        issues = source_registry.validate_registry(payload)
+        if issues:
+            raise ScanError(source_registry.validation_message(issues))
+        return [
+            source_from_registry_entry(entry)
+            for entry in source_registry.enabled_sources(payload)
+            if source_registry.channel_value(entry)
+        ], payload
+    if not args.channel_list:
+        raise ScanError("Missing source input. Pass a channel list or --source-registry.")
+    channels = load_channel_list(args.channel_list)
+    return [source_from_channel_list_entry(channel) for channel in channels], None
+
+
+def scan_hours(args) -> int:
+    return args.hours_flag or args.hours or DEFAULT_HOURS
+
+
 def parse_message_date(value: object) -> datetime | None:
     if not isinstance(value, str) or not value.strip():
         return None
@@ -272,8 +340,10 @@ def build_scan_metadata(
     total_ocr: int,
     ocr_enabled: bool,
     hours: int,
+    source_health: list[dict] | None = None,
+    source_registry_path: Path | None = None,
 ) -> dict:
-    return {
+    payload = {
         "scan_date": started_at.astimezone(UTC).date().isoformat(),
         "scan_started_at": started_at.astimezone(UTC).isoformat(),
         "scan_completed_at": completed_at.astimezone(UTC).isoformat(),
@@ -292,6 +362,11 @@ def build_scan_metadata(
         "output_path": str(output_path),
         "errors_path": str(errors_path),
     }
+    if source_registry_path:
+        payload["source_registry_path"] = str(source_registry_path)
+    if source_health is not None:
+        payload["source_health"] = source_health
+    return payload
 
 
 def write_scan_metadata(path: Path, metadata: dict) -> None:
@@ -494,6 +569,7 @@ def message_to_dict(msg, channel_name: str) -> dict:
         reply_to_msg_id = msg.reply_to.reply_to_msg_id
 
     forward = None
+    origin_message_ref = None
     if msg.forward:
         fwd = msg.forward
         forward = {}
@@ -505,6 +581,13 @@ def message_to_dict(msg, channel_name: str) -> dict:
             forward["from_name"] = fwd.from_name
         if fwd.date:
             forward["date"] = fwd.date.isoformat()
+        if getattr(fwd, "channel_post", None):
+            origin_channel = getattr(fwd, "from_name", None) or str(getattr(fwd, "from_id", "") or "")
+            if origin_channel:
+                origin_message_ref = {
+                    "channel": origin_channel,
+                    "id": int(fwd.channel_post),
+                }
 
     result = {
         "id": msg.id,
@@ -519,6 +602,8 @@ def message_to_dict(msg, channel_name: str) -> dict:
         "media_group": media_group,
         "forward": forward,
     }
+    if origin_message_ref:
+        result["origin_message_ref"] = origin_message_ref
 
     # Attach video metadata for "is this worth watching?" decisions
     if media_group == "video":
@@ -583,7 +668,7 @@ async def read_channel(
                 if text:
                     ocr_texts[m.id] = text
                     ocr_count += 1
-                    print(f"    OCR [{channel_name}:{m.id}] -> {len(text)} chars")
+                    print(f"    OCR [{channel_name}:{m.id}] -> {len(text)} chars", file=sys.stderr)
 
     dicts = [message_to_dict(m, channel_name) for m in kept_msgs]
     for d in dicts:
@@ -618,13 +703,17 @@ def build_parser() -> argparse.ArgumentParser:
     parser.register_env_default("SCAN_DELAY", delay_type)
     parser.register_env_default("SCAN_MAX_FLOOD_WAIT_SECONDS", max_flood_wait_type)
     parser.add_argument(
-        "channel_list", type=Path,
+        "channel_list",
+        nargs="?",
+        type=Path,
         help="Text file with one channel username per line",
     )
     parser.add_argument(
-        "hours", nargs="?", type=positive_int, default=DEFAULT_HOURS,
+        "hours", nargs="?", type=positive_int, default=None,
         help=f"Look back this many hours (default: {DEFAULT_HOURS})",
     )
+    parser.add_argument("--hours", dest="hours_flag", type=positive_int)
+    parser.add_argument("--source-registry", type=Path, help="Private source registry JSON.")
     parser.add_argument("--since", type=parse_since, help="Precise ISO-8601 cutoff.")
     parser.add_argument(
         "--initial-limit",
@@ -687,6 +776,7 @@ def build_parser() -> argparse.ArgumentParser:
         "Extract all text from this image exactly as written. "
         "Output only the extracted text, nothing else."
     ))
+    agent_cli.add_format_argument(parser)
 
     return parser
 
@@ -705,8 +795,98 @@ def warn_deprecated_options(argv: list[str] | None, args) -> None:
         )
 
 
+def _print_progress(args, text: str, *, error: bool = False) -> None:
+    stream = sys.stderr if error or agent_cli.is_json_format(args) else sys.stdout
+    print(text, file=stream)
+
+
+def _source_health_base(source: ScanSource) -> dict:
+    return {
+        "source_id": source.source_id,
+        "channel": source.channel,
+        "username": source.username,
+        "channel_id": source.channel_id,
+        "label": source.label,
+        "topics": source.topics or [],
+        "priority": source.priority,
+        "expected_language": source.expected_language,
+        "scan_window_hours": source.scan_window_hours,
+        "raw_count": 0,
+        "kept_count": 0,
+        "oldest_message_at": None,
+        "newest_message_at": None,
+        "incomplete": False,
+        "failure": None,
+        "last_error": None,
+        "ocr_count": 0,
+    }
+
+
+def _health_from_result(source: ScanSource, result: ChannelResult, kept_count: int) -> dict:
+    health = _source_health_base(source)
+    message_dates = [
+        parsed
+        for parsed in (parse_message_date(message.get("date")) for message in result.messages)
+        if parsed is not None
+    ]
+    health.update(
+        {
+            "channel": result.channel,
+            "raw_count": result.raw_count,
+            "kept_count": kept_count,
+            "oldest_message_at": min(message_dates).isoformat() if message_dates else None,
+            "newest_message_at": max(message_dates).isoformat() if message_dates else None,
+            "incomplete": result.incomplete,
+            "ocr_count": result.ocr_count,
+        }
+    )
+    return health
+
+
+def _health_from_failure(source: ScanSource, exc: Exception) -> dict:
+    health = _source_health_base(source)
+    health.update({"failure": type(exc).__name__, "last_error": str(exc)})
+    return health
+
+
 async def _run_scan(args) -> int:
-    config = load_config()
+    json_mode = agent_cli.is_json_format(args)
+
+    try:
+        sources, registry_payload = load_scan_sources(args)
+    except (OSError, source_registry.RegistryError, ScanError) as exc:
+        agent_cli.emit_error(
+            args,
+            code="source_input_invalid",
+            message=str(exc),
+            retryable=False,
+            next_step="Fix --source-registry or channel list, then rerun scan.",
+        )
+        return agent_cli.EXIT_VALIDATION
+    if not sources:
+        message = "No enabled sources to scan."
+        agent_cli.emit_error(
+            args,
+            code="source_input_empty",
+            message=message,
+            retryable=False,
+            next_step="Enable at least one source or add channels to the list.",
+        )
+        return agent_cli.EXIT_VALIDATION if json_mode else 1
+
+    channels = [source.channel for source in sources]
+
+    try:
+        config = load_config()
+    except ScanError as exc:
+        agent_cli.emit_error(
+            args,
+            code="telegram_credentials_missing",
+            message=str(exc),
+            retryable=False,
+            next_step="Configure TELEGRAM_API_ID and TELEGRAM_API_HASH.",
+        )
+        return agent_cli.EXIT_AUTH if json_mode else 1
 
     client = TelegramClient(
         StringSession(config.session_string),
@@ -718,39 +898,46 @@ async def _run_scan(args) -> int:
 
     try:
         if not await client.is_user_authorized():
+            if json_mode:
+                await client.disconnect()
+                agent_cli.emit_error(
+                    args,
+                    code="telegram_session_unauthorized",
+                    message="Telegram session is not authorized.",
+                    retryable=False,
+                    next_step="Run a human-mode scan once to complete Telegram login.",
+                )
+                return agent_cli.EXIT_AUTH
             await interactive_login(client)
     except ScanError:
         await client.disconnect()
         raise
 
     try:
-        channels = load_channel_list(args.channel_list)
-    except OSError as exc:
-        await client.disconnect()
-        print(f"Error: Failed to read channel list: {exc}", file=sys.stderr)
-        return 1
-    if not channels:
-        await client.disconnect()
-        print(f"Error: Channel list is empty: {args.channel_list}", file=sys.stderr)
-        return 1
-
-    try:
         ocr = _make_ocr_config(args)
     except ScanError as exc:
         await client.disconnect()
-        print(f"Error: {exc}", file=sys.stderr)
-        return 1
+        agent_cli.emit_error(
+            args,
+            code="ocr_config_invalid",
+            message=str(exc),
+            retryable=False,
+            next_step="Disable --ocr or configure the selected OCR provider.",
+        )
+        return agent_cli.EXIT_VALIDATION if json_mode else 1
 
     if ocr:
-        print(
+        _print_progress(
+            args,
             "OCR enabled: "
             f"{ocr.model} @ {args.ocr_effective_base_url} "
-            f"({args.ocr_effective_provider})"
+            f"({args.ocr_effective_provider})",
         )
     else:
-        print("OCR disabled: pass --ocr to upload media to an OCR/STT API")
+        _print_progress(args, "OCR disabled: pass --ocr to upload media to an OCR/STT API")
 
-    cutoff = cutoff_from_args(args.hours, args.since)
+    hours = scan_hours(args)
+    cutoff = cutoff_from_args(hours, args.since)
     args.output_dir.mkdir(parents=True, exist_ok=True)
     started_at = datetime.now(UTC)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -759,11 +946,14 @@ async def _run_scan(args) -> int:
     errors_path = output_path.with_suffix(".errors.log")
     meta_path = meta_path_for_output(output_path)
 
-    print(f"Scan started: {started_at.isoformat(timespec='seconds')}")
-    print(f"Precise cutoff: {cutoff.isoformat()}")
-    print(f"Channel list: {args.channel_list}")
-    print(f"Output: {output_path}")
-    print("---")
+    _print_progress(args, f"Scan started: {started_at.isoformat(timespec='seconds')}")
+    _print_progress(args, f"Precise cutoff: {cutoff.isoformat()}")
+    if args.source_registry:
+        _print_progress(args, f"Source registry: {args.source_registry}")
+    else:
+        _print_progress(args, f"Channel list: {args.channel_list}")
+    _print_progress(args, f"Output: {output_path}")
+    _print_progress(args, "---")
 
     failures = 0
     incomplete = 0
@@ -771,10 +961,12 @@ async def _run_scan(args) -> int:
     total_ocr = 0
     failed_channels: list[str] = []
     incomplete_channels: list[str] = []
+    source_health: list[dict] = []
 
     with errors_path.open("w", encoding="utf-8", newline="\n") as errors:
-        for index, channel_name in enumerate(channels, start=1):
-            print(f"[{index}] Reading: {channel_name}")
+        for index, scan_source in enumerate(sources, start=1):
+            channel_name = scan_source.channel
+            _print_progress(args, f"[{index}] Reading: {channel_name}")
             try:
                 entity = await resolve_entity(client, channel_name)
                 # Use title for display if channel_name is a bare numeric ID
@@ -795,16 +987,27 @@ async def _run_scan(args) -> int:
                 failures += 1
                 failed_channels.append(channel_name)
                 errors.write(f"[{channel_name}] ERROR: {exc}\n")
-                print(f"  Failed: {channel_name} (see {errors_path.name})", file=sys.stderr)
+                source_health.append(_health_from_failure(scan_source, exc))
+                _print_progress(
+                    args,
+                    f"  Failed: {channel_name} (see {errors_path.name})",
+                    error=True,
+                )
             except Exception as exc:
                 failures += 1
                 failed_channels.append(channel_name)
                 errors.write(f"[{channel_name}] ERROR: {exc}\n")
-                print(f"  Failed: {channel_name}: {exc} (see {errors_path.name})", file=sys.stderr)
+                source_health.append(_health_from_failure(scan_source, exc))
+                _print_progress(
+                    args,
+                    f"  Failed: {channel_name}: {exc} (see {errors_path.name})",
+                    error=True,
+                )
             else:
                 written = write_jsonl(output_path, result.messages)
                 total_written += written
                 total_ocr += result.ocr_count
+                source_health.append(_health_from_result(scan_source, result, written))
                 if result.skipped_missing_date:
                     errors.write(
                         f"[{channel_name}] skipped {result.skipped_missing_date} "
@@ -820,9 +1023,17 @@ async def _run_scan(args) -> int:
                         f"[{channel_name}] INCOMPLETE: read {result.raw_count} rows at "
                         f"max limit {result.limit}; raise SCAN_MAX_LIMIT or narrow the window.\n"
                     )
-                    print(f"  Incomplete at limit {result.limit}; see {errors_path.name}", file=sys.stderr)
+                    _print_progress(
+                        args,
+                        f"  Incomplete at limit {result.limit}; see {errors_path.name}",
+                        error=True,
+                    )
                 ocr_info = f", {result.ocr_count} media OCR'd" if result.ocr_count else ""
-                print(f"  {written} messages kept from {result.raw_count} rows (limit {result.limit}){ocr_info}")
+                _print_progress(
+                    args,
+                    f"  {written} messages kept from {result.raw_count} rows "
+                    f"(limit {result.limit}){ocr_info}",
+                )
 
             if index < len(channels) and args.delay:
                 await asyncio.sleep(args.delay)
@@ -833,7 +1044,7 @@ async def _run_scan(args) -> int:
         started_at=started_at,
         completed_at=completed_at,
         cutoff=cutoff,
-        channel_list_path=args.channel_list,
+        channel_list_path=args.channel_list or Path(""),
         channels=channels,
         output_path=output_path,
         errors_path=errors_path,
@@ -842,32 +1053,82 @@ async def _run_scan(args) -> int:
         incomplete_channels=incomplete_channels,
         total_ocr=total_ocr,
         ocr_enabled=ocr is not None,
-        hours=args.hours,
+        hours=hours,
+        source_health=source_health,
+        source_registry_path=args.source_registry,
     )
+    if registry_payload is not None:
+        metadata["source_registry_source_count"] = len(registry_payload.get("sources", []))
     write_scan_metadata(meta_path, metadata)
 
-    print("---")
-    print(f"Done. {len(channels)} channels scanned, {total_written} messages collected.")
+    _print_progress(args, "---")
+    _print_progress(args, f"Done. {len(channels)} channels scanned, {total_written} messages collected.")
     if total_ocr:
-        print(f"{total_ocr} media messages OCR'd.")
+        _print_progress(args, f"{total_ocr} media messages OCR'd.")
     if failures:
-        print(f"{failures} channels failed. See: {errors_path}")
+        _print_progress(args, f"{failures} channels failed. See: {errors_path}", error=True)
     if incomplete:
-        print(f"{incomplete} channels may be incomplete. See: {errors_path}")
-    print(f"Output: {output_path}")
-    print(f"Metadata: {meta_path}")
-    print("")
-    print("Next: Summarize with your preferred AI:")
-    print(
+        _print_progress(args, f"{incomplete} channels may be incomplete. See: {errors_path}", error=True)
+    _print_progress(args, f"Output: {output_path}")
+    _print_progress(args, f"Metadata: {meta_path}")
+    _print_progress(args, "")
+    _print_progress(args, "Next: Summarize with your preferred AI:")
+    _print_progress(
+        args,
         f"  python scripts/summarize.py "
-        f"--input {output_path} --profile profiles/YOUR_PROFILE.md"
+        f"--input {output_path} --profile profiles/YOUR_PROFILE.md",
     )
 
     if failures:
-        return 1
+        if json_mode:
+            agent_cli.print_json(
+                agent_cli.envelope_error(
+                    code="scan_failed",
+                    message=f"{failures} sources failed.",
+                    retryable=True,
+                    next_step=f"Inspect {errors_path} and source_health.",
+                    details={
+                        "output_path": str(output_path),
+                        "meta_path": str(meta_path),
+                        "errors_path": str(errors_path),
+                        "failed_channels": failed_channels,
+                        "source_health": source_health,
+                    },
+                )
+            )
+        return agent_cli.EXIT_RUNTIME
     if incomplete and not args.allow_incomplete:
-        return 2
-    return 0
+        if json_mode:
+            agent_cli.print_json(
+                agent_cli.envelope_error(
+                    code="scan_incomplete",
+                    message=f"{incomplete} sources may be incomplete.",
+                    retryable=True,
+                    next_step="Raise --max-limit, narrow --hours, or pass --allow-incomplete.",
+                    details={
+                        "output_path": str(output_path),
+                        "meta_path": str(meta_path),
+                        "errors_path": str(errors_path),
+                        "incomplete_channels": incomplete_channels,
+                        "source_health": source_health,
+                    },
+                )
+            )
+        return agent_cli.EXIT_INCOMPLETE
+    if json_mode:
+        agent_cli.print_json(
+            agent_cli.envelope_success(
+                {
+                    "output_path": str(output_path),
+                    "meta_path": str(meta_path),
+                    "errors_path": str(errors_path),
+                    "message_count": total_written,
+                    "channel_count": len(channels),
+                    "source_health": source_health,
+                }
+            )
+        )
+    return agent_cli.EXIT_SUCCESS
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -875,9 +1136,24 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     warn_deprecated_options(argv, args)
 
-    if not args.channel_list.exists():
-        print(f"Error: Channel list not found: {args.channel_list}", file=sys.stderr)
-        return 1
+    if not args.channel_list and not args.source_registry:
+        agent_cli.emit_error(
+            args,
+            code="source_input_missing",
+            message="Missing source input.",
+            retryable=False,
+            next_step="Pass a channel list or --source-registry .tgcs/sources.json.",
+        )
+        return agent_cli.EXIT_VALIDATION
+    if args.channel_list and not args.channel_list.exists():
+        agent_cli.emit_error(
+            args,
+            code="channel_list_not_found",
+            message=f"Channel list not found: {args.channel_list}",
+            retryable=False,
+            next_step="Create the channel list or pass --source-registry.",
+        )
+        return agent_cli.EXIT_VALIDATION
 
     return asyncio.run(_run_scan(args))
 

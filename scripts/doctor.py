@@ -15,11 +15,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 try:
+    from scripts import agent_cli, source_registry
     from scripts.profile_schema import parse_profile_config
 except ModuleNotFoundError:
     _PROJECT_ROOT = str(Path(__file__).resolve().parent.parent)
     if _PROJECT_ROOT not in sys.path:
         sys.path.insert(0, _PROJECT_ROOT)
+    from scripts import agent_cli, source_registry
     from scripts.profile_schema import parse_profile_config
 
 
@@ -170,6 +172,51 @@ def check_channel_list(path: Path) -> CheckResult:
     return _pass("channel_list", f"Channel list has {len(channels)} sources.", details={"count": len(channels)})
 
 
+def check_source_registry(path: Path) -> CheckResult:
+    if not path.exists():
+        return _fail(
+            "source_registry",
+            f"Source registry not found: {path}",
+            "Import a channel list or create .tgcs/sources.json.",
+        )
+    try:
+        payload = source_registry.load_registry(path)
+        issues = source_registry.validate_registry(payload)
+    except Exception as exc:
+        return _fail(
+            "source_registry",
+            f"Source registry cannot be read: {exc}",
+            "Run scripts/source_registry.py validate and fix the registry.",
+        )
+    if issues:
+        return _fail(
+            "source_registry",
+            source_registry.validation_message(issues),
+            "Run scripts/source_registry.py validate and fix the registry.",
+            details={"issues": issues, "path": str(path)},
+        )
+    enabled_count = len(source_registry.enabled_sources(payload))
+    return _pass(
+        "source_registry",
+        f"Source registry has {enabled_count} enabled sources.",
+        details={
+            "path": str(path),
+            "source_count": len(payload.get("sources", [])),
+            "enabled_count": enabled_count,
+        },
+    )
+
+
+def check_source_input(channel_list: Path | None, registry_path: Path | None) -> CheckResult:
+    if channel_list or registry_path:
+        return _pass("source_input", "Source input is configured.")
+    return _fail(
+        "source_input",
+        "No source input was provided.",
+        "Pass --source-registry .tgcs/sources.json or --channel-list channel_lists/example.txt.",
+    )
+
+
 def check_profile(path: Path) -> CheckResult:
     if not path.exists():
         return _fail("profile", f"Profile not found: {path}", "Copy one of profiles/templates/*.md and customize it.")
@@ -262,13 +309,15 @@ def check_online_telegram(config_path: Path, session_path: Path) -> CheckResult:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Check first-run TG Channel Scanner prerequisites.")
-    parser.add_argument("--channel-list", required=True, type=Path)
+    parser.add_argument("--channel-list", type=Path)
+    parser.add_argument("--source-registry", type=Path)
     parser.add_argument("--profile", required=True, type=Path)
     parser.add_argument("--output-dir", type=Path, default=Path("output"))
     parser.add_argument("--config-path", type=Path, default=DEFAULT_CONFIG_PATH)
     parser.add_argument("--session-path", type=Path, default=DEFAULT_SESSION_PATH)
     parser.add_argument("--online-telegram", action="store_true", help="Check Telegram authorization without prompting for login.")
     parser.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
+    agent_cli.add_format_argument(parser)
     return parser
 
 
@@ -279,12 +328,16 @@ def run_checks(args) -> list[CheckResult]:
         check_import("openai_dependency", "openai", False, "Install requirements-llm.txt before LLM report generation."),
         check_credentials(args.config_path),
         check_session(args.session_path),
-        check_channel_list(args.channel_list),
+        check_source_input(args.channel_list, args.source_registry),
         check_profile(args.profile),
         check_llm_provider(),
         check_media_dependencies(),
         check_output_directory(args.output_dir),
     ]
+    if args.channel_list:
+        checks.append(check_channel_list(args.channel_list))
+    if args.source_registry:
+        checks.append(check_source_registry(args.source_registry))
     if args.online_telegram:
         checks.append(check_online_telegram(args.config_path, args.session_path))
     return checks
@@ -310,9 +363,37 @@ def print_text(payload: dict) -> None:
             print(f"  Next: {check['next_step']}")
 
 
+def agent_failure_code(payload: dict) -> tuple[str, int]:
+    checks = payload.get("checks", {})
+    auth_failures = {
+        "telegram_credentials",
+        "telegram_session",
+        "telegram_online",
+    }
+    for name in auth_failures:
+        if checks.get(name, {}).get("status") == "fail":
+            return "doctor_auth_failed", agent_cli.EXIT_AUTH
+    return "doctor_failed", agent_cli.EXIT_VALIDATION
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     payload = payload_for_checks(run_checks(args))
+    if agent_cli.is_json_format(args):
+        if payload["ok"]:
+            agent_cli.print_json(agent_cli.envelope_success(payload))
+            return agent_cli.EXIT_SUCCESS
+        error_code, exit_code = agent_failure_code(payload)
+        agent_cli.print_json(
+            agent_cli.envelope_error(
+                code=error_code,
+                message="One or more first-run checks failed.",
+                retryable=False,
+                next_step="Fix failed checks, then rerun doctor.",
+                details=payload,
+            )
+        )
+        return exit_code
     if args.json:
         print(json.dumps(payload, ensure_ascii=False, indent=2))
     else:
