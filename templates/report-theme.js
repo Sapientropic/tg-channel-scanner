@@ -144,6 +144,119 @@
     }
   }
 
+  function setupFeedback() {
+    var page = document.querySelector("[data-report-id]");
+    if (!page) {
+      return;
+    }
+    var feedbackKey = "tgcs-feedback-v1:" + page.getAttribute("data-report-id");
+    var status = document.querySelector("[data-feedback-status]");
+
+    function readEntries() {
+      try {
+        return JSON.parse(window.localStorage.getItem(feedbackKey) || "[]");
+      } catch (error) {
+        return [];
+      }
+    }
+
+    function writeEntries(entries) {
+      try {
+        window.localStorage.setItem(feedbackKey, JSON.stringify(entries));
+        return true;
+      } catch (error) {
+        return false;
+      }
+    }
+
+    function setStatus(text) {
+      if (status) {
+        status.textContent = text;
+      }
+    }
+
+    function payloadForCard(card) {
+      try {
+        return JSON.parse(card.getAttribute("data-feedback-payload") || "{}");
+      } catch (error) {
+        return {};
+      }
+    }
+
+    function appendEntry(entry) {
+      var entries = readEntries();
+      entries.push(entry);
+      if (writeEntries(entries)) {
+        setStatus(entries.length + " feedback rows saved locally.");
+      } else {
+        setStatus("Feedback could not be saved in this browser.");
+      }
+    }
+
+    function makeEntry(feedback, card, note) {
+      var payload = card ? payloadForCard(card) : {};
+      return {
+        schema_version: "v1",
+        created_at: new Date().toISOString(),
+        report_id: page.getAttribute("data-report-id") || "",
+        profile_label: page.getAttribute("data-profile-label") || "",
+        source_message_refs: payload.source_message_refs || [],
+        feedback: feedback,
+        note: note || "",
+        item_title: card ? card.getAttribute("data-item-title") || "" : "Manual false negative"
+      };
+    }
+
+    document.querySelectorAll("[data-feedback-value]").forEach(function (button) {
+      button.addEventListener("click", function () {
+        var card = button.closest("[data-feedback-card]");
+        if (!card) {
+          return;
+        }
+        appendEntry(makeEntry(button.getAttribute("data-feedback-value"), card, ""));
+        card.querySelectorAll("[data-feedback-value]").forEach(function (peer) {
+          peer.classList.toggle("selected", peer === button);
+        });
+      });
+    });
+
+    var falseNegative = document.querySelector("[data-feedback-false-negative]");
+    if (falseNegative) {
+      falseNegative.addEventListener("click", function () {
+        var note = document.querySelector("[data-feedback-note]");
+        var text = note ? note.value.trim() : "";
+        appendEntry(makeEntry("false_negative", null, text));
+        if (note) {
+          note.value = "";
+        }
+      });
+    }
+
+    var exportButton = document.querySelector("[data-feedback-export]");
+    if (exportButton) {
+      exportButton.addEventListener("click", function () {
+        var entries = readEntries();
+        var jsonl = entries.map(function (entry) {
+          return JSON.stringify(entry);
+        }).join("\n");
+        if (jsonl) {
+          jsonl += "\n";
+        }
+        var blob = new Blob([jsonl], { type: "application/x-ndjson" });
+        var link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.download = (page.getAttribute("data-report-id") || "tgcs-report") + "-feedback.jsonl";
+        document.body.appendChild(link);
+        link.click();
+        window.setTimeout(function () {
+          URL.revokeObjectURL(link.href);
+          link.remove();
+        }, 0);
+        setStatus(entries.length + " feedback rows exported.");
+      });
+    }
+  }
+
   applyTheme(storedTheme() || systemTheme());
 
   document.addEventListener("DOMContentLoaded", function () {
@@ -181,5 +294,6 @@
     });
 
     setupScrollCards();
+    setupFeedback();
   });
 })();

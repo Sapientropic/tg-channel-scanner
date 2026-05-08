@@ -1,0 +1,324 @@
+"""First-run environment diagnostics for TG Channel Scanner."""
+
+from __future__ import annotations
+
+import argparse
+import asyncio
+import importlib.util
+import json
+import os
+import shutil
+import sys
+import tempfile
+import tomllib
+from dataclasses import dataclass, field
+from pathlib import Path
+
+try:
+    from scripts.profile_schema import parse_profile_config
+except ModuleNotFoundError:
+    _PROJECT_ROOT = str(Path(__file__).resolve().parent.parent)
+    if _PROJECT_ROOT not in sys.path:
+        sys.path.insert(0, _PROJECT_ROOT)
+    from scripts.profile_schema import parse_profile_config
+
+
+DEFAULT_CONFIG_DIR = Path(
+    os.environ.get("TG_SCANNER_CONFIG_DIR")
+    or os.environ.get("TGCLI_CONFIG_DIR")
+    or Path.home() / ".config" / "tgcli"
+)
+DEFAULT_CONFIG_PATH = DEFAULT_CONFIG_DIR / "config.toml"
+DEFAULT_SESSION_PATH = DEFAULT_CONFIG_DIR / "session"
+
+
+@dataclass
+class CheckResult:
+    name: str
+    status: str
+    message: str
+    next_step: str = ""
+    details: dict = field(default_factory=dict)
+
+    def to_json(self) -> dict:
+        payload = {
+            "status": self.status,
+            "message": self.message,
+        }
+        if self.next_step:
+            payload["next_step"] = self.next_step
+        if self.details:
+            payload["details"] = self.details
+        return payload
+
+
+def _pass(name: str, message: str, *, details: dict | None = None) -> CheckResult:
+    return CheckResult(name, "pass", message, details=details or {})
+
+
+def _warn(name: str, message: str, next_step: str = "", *, details: dict | None = None) -> CheckResult:
+    return CheckResult(name, "warn", message, next_step, details or {})
+
+
+def _fail(name: str, message: str, next_step: str = "", *, details: dict | None = None) -> CheckResult:
+    return CheckResult(name, "fail", message, next_step, details or {})
+
+
+def _read_channel_list(path: Path) -> list[str]:
+    channels = []
+    for raw in path.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        if line and not line.startswith("#"):
+            channels.append(line)
+    return channels
+
+
+def check_python_runtime() -> CheckResult:
+    version = sys.version_info
+    if version < (3, 12):
+        return _fail(
+            "python_runtime",
+            f"Python {version.major}.{version.minor} is too old.",
+            "Install Python 3.12+ or use uv to provision a supported interpreter.",
+        )
+    return _pass(
+        "python_runtime",
+        f"Python {version.major}.{version.minor}.{version.micro} is supported.",
+    )
+
+
+def check_import(name: str, module: str, required: bool, install_hint: str) -> CheckResult:
+    if importlib.util.find_spec(module):
+        return _pass(name, f"{module} is importable.")
+    if required:
+        return _fail(name, f"{module} is not importable.", install_hint)
+    return _warn(name, f"{module} is not importable.", install_hint)
+
+
+def _config_credentials(config_path: Path) -> tuple[int | None, str | None, str]:
+    api_id = None
+    api_hash = None
+    source = ""
+    if config_path.exists():
+        with config_path.open("rb") as handle:
+            cfg = tomllib.load(handle)
+        api_id = cfg.get("api_id")
+        api_hash = cfg.get("api_hash")
+        source = "config"
+
+    env_id = os.environ.get("TELEGRAM_API_ID")
+    env_hash = os.environ.get("TELEGRAM_API_HASH")
+    if env_id:
+        try:
+            api_id = int(env_id)
+        except ValueError:
+            api_id = None
+        source = "environment"
+    if env_hash:
+        api_hash = env_hash
+        source = "environment"
+    return api_id, api_hash, source
+
+
+def check_credentials(config_path: Path) -> CheckResult:
+    try:
+        api_id, api_hash, source = _config_credentials(config_path)
+    except Exception as exc:
+        return _fail(
+            "telegram_credentials",
+            f"Could not read Telegram config: {exc}",
+            "Fix config.toml or use TELEGRAM_API_ID / TELEGRAM_API_HASH.",
+        )
+    if not api_id or not api_hash or api_hash == "your_api_hash_here":
+        return _fail(
+            "telegram_credentials",
+            "Telegram API credentials were not found.",
+            "Edit config.toml or set TELEGRAM_API_ID and TELEGRAM_API_HASH.",
+            details={"config_path": str(config_path)},
+        )
+    return _pass(
+        "telegram_credentials",
+        f"Telegram API credentials found via {source}.",
+        details={"source": source, "config_path": str(config_path)},
+    )
+
+
+def check_session(session_path: Path) -> CheckResult:
+    if session_path.exists() and session_path.read_text(encoding="utf-8").strip():
+        return _pass(
+            "telegram_session",
+            "Telegram session file exists.",
+            details={"session_path": str(session_path)},
+        )
+    return _warn(
+        "telegram_session",
+        "Telegram session file is missing; the first real scan will prompt for login.",
+        "Run scripts/scan.py once after credentials are configured.",
+        details={"session_path": str(session_path)},
+    )
+
+
+def check_channel_list(path: Path) -> CheckResult:
+    if not path.exists():
+        return _fail("channel_list", f"Channel list not found: {path}", "Create a .txt file with one Telegram username per line.")
+    try:
+        channels = _read_channel_list(path)
+    except OSError as exc:
+        return _fail("channel_list", f"Channel list cannot be read: {exc}", "Check file permissions.")
+    if not channels:
+        return _fail("channel_list", f"Channel list is empty: {path}", "Add at least one Telegram username or channel id.")
+    return _pass("channel_list", f"Channel list has {len(channels)} sources.", details={"count": len(channels)})
+
+
+def check_profile(path: Path) -> CheckResult:
+    if not path.exists():
+        return _fail("profile", f"Profile not found: {path}", "Copy one of profiles/templates/*.md and customize it.")
+    text = path.read_text(encoding="utf-8")
+    if not text.strip():
+        return _fail("profile", f"Profile is empty: {path}", "Add profile rules or copy a built-in template.")
+    try:
+        config = parse_profile_config(text)
+    except Exception as exc:
+        return _fail("profile", f"Profile could not be parsed: {exc}", "Fix the Markdown profile sections.")
+    if config.mode.mode != "job" and not config.mode.fields:
+        return _fail(
+            "profile",
+            "Custom profile has no extraction fields.",
+            "Add fields under ## Extraction Schema or use a built-in template.",
+        )
+    return _pass(
+        "profile",
+        f"Profile parses as {config.mode.mode} mode.",
+        details={"mode": config.mode.mode, "output_filename": config.labels.output_filename},
+    )
+
+
+def check_llm_provider() -> CheckResult:
+    if os.environ.get("OPENAI_API_KEY") or os.environ.get("DEEPSEEK_API_KEY"):
+        return _pass("llm_provider", "LLM API key is configured.")
+    return _warn(
+        "llm_provider",
+        "No LLM API key found.",
+        "Set OPENAI_API_KEY or DEEPSEEK_API_KEY before running report generation.",
+    )
+
+
+def check_output_directory(path: Path) -> CheckResult:
+    if path.exists() and not path.is_dir():
+        return _fail("output_directory", f"Output path is not a directory: {path}", "Choose a directory path for --output-dir.")
+    try:
+        path.mkdir(parents=True, exist_ok=True)
+        with tempfile.NamedTemporaryFile(prefix=".doctor-", dir=path, delete=True):
+            pass
+    except OSError as exc:
+        return _fail("output_directory", f"Output directory is not writable: {exc}", "Fix permissions or choose another output directory.")
+    return _pass("output_directory", f"Output directory is writable: {path}")
+
+
+def check_media_dependencies() -> CheckResult:
+    if shutil.which("ffmpeg"):
+        return _pass("media_dependencies", "ffmpeg is available for full-video OCR/STT paths.")
+    return _warn(
+        "media_dependencies",
+        "ffmpeg was not found; thumbnail-only OCR can still work.",
+        "Install ffmpeg before using --ocr-full-video or full-video reprocessing.",
+    )
+
+
+async def _online_telegram_check(config_path: Path, session_path: Path) -> CheckResult:
+    try:
+        from telethon import TelegramClient
+        from telethon.sessions import StringSession
+    except ImportError:
+        return _fail("telegram_online", "Telethon is not installed.", "Install requirements.txt first.")
+
+    api_id, api_hash, _ = _config_credentials(config_path)
+    if not api_id or not api_hash:
+        return _fail("telegram_online", "Telegram credentials are missing.", "Configure credentials before online checks.")
+
+    session_string = ""
+    if session_path.exists():
+        session_string = session_path.read_text(encoding="utf-8").strip()
+    client = TelegramClient(StringSession(session_string), api_id, api_hash)
+    try:
+        await client.connect()
+        authorized = await client.is_user_authorized()
+    except Exception as exc:
+        return _warn("telegram_online", f"Telegram authorization check failed: {exc}", "Run a normal scan interactively after fixing credentials/session.")
+    finally:
+        await client.disconnect()
+    if authorized:
+        return _pass("telegram_online", "Telegram session is authorized.")
+    return _warn(
+        "telegram_online",
+        "Telegram session exists but is not authorized, or no session was provided.",
+        "Run a normal scan to complete interactive login; doctor never prompts for login.",
+    )
+
+
+def check_online_telegram(config_path: Path, session_path: Path) -> CheckResult:
+    return asyncio.run(_online_telegram_check(config_path, session_path))
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="Check first-run TG Channel Scanner prerequisites.")
+    parser.add_argument("--channel-list", required=True, type=Path)
+    parser.add_argument("--profile", required=True, type=Path)
+    parser.add_argument("--output-dir", type=Path, default=Path("output"))
+    parser.add_argument("--config-path", type=Path, default=DEFAULT_CONFIG_PATH)
+    parser.add_argument("--session-path", type=Path, default=DEFAULT_SESSION_PATH)
+    parser.add_argument("--online-telegram", action="store_true", help="Check Telegram authorization without prompting for login.")
+    parser.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
+    return parser
+
+
+def run_checks(args) -> list[CheckResult]:
+    checks = [
+        check_python_runtime(),
+        check_import("telethon_dependency", "telethon", True, "Install requirements.txt."),
+        check_import("openai_dependency", "openai", False, "Install requirements-llm.txt before LLM report generation."),
+        check_credentials(args.config_path),
+        check_session(args.session_path),
+        check_channel_list(args.channel_list),
+        check_profile(args.profile),
+        check_llm_provider(),
+        check_media_dependencies(),
+        check_output_directory(args.output_dir),
+    ]
+    if args.online_telegram:
+        checks.append(check_online_telegram(args.config_path, args.session_path))
+    return checks
+
+
+def payload_for_checks(checks: list[CheckResult]) -> dict:
+    summary = {"pass": 0, "warn": 0, "fail": 0}
+    for check in checks:
+        summary[check.status] += 1
+    return {
+        "ok": summary["fail"] == 0,
+        "summary": summary,
+        "checks": {check.name: check.to_json() for check in checks},
+    }
+
+
+def print_text(payload: dict) -> None:
+    print("TG Channel Scanner doctor")
+    print(f"Status: {'OK' if payload['ok'] else 'FAILED'}")
+    for name, check in payload["checks"].items():
+        print(f"- {check['status'].upper()} {name}: {check['message']}")
+        if check.get("next_step"):
+            print(f"  Next: {check['next_step']}")
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = build_parser().parse_args(argv)
+    payload = payload_for_checks(run_checks(args))
+    if args.json:
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
+    else:
+        print_text(payload)
+    return 0 if payload["ok"] else 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -12,7 +12,7 @@
 <style>{shared_css}</style>
 </head>
 <body>
-<div class="page">
+<div class="page" data-report-id="{report_id}" data-profile-label="{profile_label}">
   <header class="report-header">
     <div class="report-topline">
       <div class="brand-lockup">
@@ -54,7 +54,11 @@
     </div>
   </section>
 
+{diagnostics_panel}
+
 {sections}
+
+{feedback_panel}
 
   <footer class="report-footer">
     <strong>Methodology:</strong> {channel_count} Telegram job channels scanned ({scan_window}). LLM-extracted against candidate profile. Same company + role deduplicated across channels.{footer_note}

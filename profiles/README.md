@@ -2,6 +2,22 @@
 
 This directory holds Markdown files describing your filtering criteria for AI-powered report generation.
 
+## Built-in templates
+
+Copy a starter template before editing:
+
+```bash
+cp profiles/templates/jobs.md profiles/my-profile.md
+cp profiles/templates/airdrops.md profiles/my-airdrops.md
+cp profiles/templates/market-news.md profiles/my-market-news.md
+cp profiles/templates/research-leads.md profiles/my-research-leads.md
+cp profiles/templates/competitor-monitoring.md profiles/my-competitors.md
+```
+
+The templates are intentionally plain Markdown. They cover jobs, airdrops,
+market/news, research leads, and competitor monitoring without changing the
+scanner internals.
+
 ## Modes
 
 **Job mode** (default): no special sections needed. The built-in extraction schema, prompts, and report labels are used automatically. See `example.md`.
@@ -51,6 +67,9 @@ python scripts/report.py --input output/scan_XXXX.jsonl --profile profiles/my-pr
 
 # Pipeline: scan + report in one command
 python scripts/daily_report.py channel_lists/my-channels.txt --profile profiles/my-profile.md --html
+
+# First-run checks before scanning; this does not log in to Telegram
+python scripts/doctor.py --channel-list channel_lists/my-channels.txt --profile profiles/my-profile.md --output-dir output
 
 # Redact emails, phone numbers, and Telegram handles before sending to the LLM
 python scripts/report.py --input output/scan_XXXX.jsonl --profile profiles/my-profile.md --redact-contact-info

@@ -28,7 +28,7 @@ jobs:
 
       - name: Compile Python scripts
         run: |
-          python -m py_compile scripts/scan.py scripts/summarize.py scripts/media_ocr.py scripts/ocr_media.py scripts/report.py scripts/daily_report.py
+          python -m py_compile scripts/scan.py scripts/summarize.py scripts/media_ocr.py scripts/ocr_media.py scripts/report.py scripts/report_diagnostics.py scripts/daily_report.py scripts/doctor.py
 
       - name: Run Ruff
         run: |

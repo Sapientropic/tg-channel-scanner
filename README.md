@@ -74,15 +74,25 @@ chmod +x setup.sh scripts/scan.sh
 ### Configure & Run
 
 ```bash
+# 0. Try the offline demo first (no Telegram login or LLM key required)
+python scripts/report.py --input docs/demo/fixtures/demo-scan.jsonl \
+  --profile docs/demo/fixtures/demo-profile.md \
+  --html-only docs/demo/fixtures/demo-report.md \
+  --output output/demo-report.md
+
 # 1. Edit config with your Telegram API credentials
 #    (setup.sh created it at ~/.config/tgcli/config.toml)
 nano ~/.config/tgcli/config.toml
 
-# 2. Scan channels (first run prompts for login)
+# 2. Check first-run prerequisites without logging in
+python scripts/doctor.py --channel-list channel_lists/example.txt \
+  --profile profiles/templates/jobs.md --output-dir output
+
+# 3. Scan channels (first run prompts for login)
 source .venv/bin/activate
 ./scripts/scan.sh channel_lists/example.txt
 
-# 3. Generate HTML report
+# 4. Generate HTML report
 python scripts/daily_report.py channel_lists/example.txt \
   --profile profiles/example.md --html
 ```
@@ -246,7 +256,17 @@ cannot silently reuse an older `scan_*.jsonl` from the output directory.
 
 ### Profile
 
-Copy `profiles/example.md` and edit:
+Start from a built-in template, or copy `profiles/example.md` for the legacy job-focused sample:
+
+```bash
+cp profiles/templates/jobs.md profiles/my-profile.md
+cp profiles/templates/airdrops.md profiles/my-airdrops.md
+cp profiles/templates/market-news.md profiles/my-market-news.md
+```
+
+Available templates: jobs, airdrops, market/news, research leads, and competitor monitoring.
+
+Edit the copied profile:
 
 ```markdown
 ## Candidate
@@ -286,11 +306,14 @@ tg-channel-scanner/
 ├── requirements-llm.txt     # optional summarizer deps
 ├── setup.sh / setup.bat     # One-command installer
 ├── profiles/                # Filter profiles
+│   └── templates/            # Built-in starter profiles
 ├── channel_lists/           # Channel name lists
 ├── scripts/
 │   ├── scan.py              # Scanner core (Telethon)
 │   ├── export_folder.py     # Export from Telegram folders
 │   ├── report.py            # Report generator (Markdown + HTML)
+│   ├── report_diagnostics.py # Empty-result and scan-health diagnostics
+│   ├── doctor.py            # First-run environment checks
 │   ├── daily_report.py      # Scan + report pipeline
 │   └── summarize.py         # Free-form LLM summary
 ├── templates/

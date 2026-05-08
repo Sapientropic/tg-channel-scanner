@@ -228,7 +228,22 @@ system_prompt: |
         )
 
         self.assertIn("[⚠️ 需确认]", result.markdown)
+        self.assertIn("## Diagnostics", result.markdown)
         self.assertEqual(result.stats["total_messages_scanned"], 1)
+
+    def test_markdown_report_includes_feedback_jsonl_schema(self):
+        report = load_report_module(self)
+
+        result = report.build_report(
+            messages=sample_messages()[:1],
+            profile="Senior Frontend Developer",
+            raw_jobs=sample_extracted_jobs()[:1],
+            meta={"scan_date": "2026-05-06", "scan_window": "Last 24 hours"},
+        )
+
+        self.assertIn("## Feedback", result.markdown)
+        self.assertIn("schema_version", result.markdown)
+        self.assertIn("false_negative", result.markdown)
 
     def test_parse_extraction_response_rejects_invalid_json_with_raw_response(self):
         report = load_report_module(self)
@@ -452,6 +467,70 @@ section_low: "Archive"
         extract_jobs.assert_called_once()
         self.assertIn("# Job Scan Report", markdown)
         self.assertIn("<!doctype html>", html.lower())
+
+    def test_html_report_includes_feedback_controls_and_jsonl_export(self):
+        report = load_report_module(self)
+        raw_jobs = [
+            {
+                "source_message_refs": [{"channel": "React Job", "id": 1}],
+                "company": "Signal Co",
+                "role": "Senior React Developer",
+                "location": "Remote",
+                "source": "React Job",
+                "rating": "high",
+                "why": "Matches profile",
+            }
+        ]
+        result = report.build_report(
+            messages=sample_messages()[:1],
+            profile="Senior Frontend Developer",
+            raw_jobs=raw_jobs,
+            meta={"scan_date": "2026-05-06", "scan_window": "Last 24 hours"},
+        )
+
+        html = report.render_html(
+            result,
+            "Senior Frontend Developer",
+            {"scan_date": "2026-05-06", "scan_window": "Last 24 hours"},
+            SimpleNamespace(next_scan_note=""),
+            sample_messages()[:1],
+            report.parse_profile_config("Senior Frontend Developer"),
+        )
+
+        self.assertIn("data-report-id=", html)
+        self.assertIn("data-feedback-card", html)
+        self.assertIn('data-feedback-value="keep"', html)
+        self.assertIn('data-feedback-value="skip"', html)
+        self.assertIn('data-feedback-value="false_positive"', html)
+        self.assertIn("false_negative", html)
+        self.assertIn("tgcs-feedback-v1", html)
+        self.assertIn("application/x-ndjson", html)
+        self.assertIn("&quot;source_message_refs&quot;", html)
+
+    def test_demo_fixture_html_only_runs_without_llm_or_telegram(self):
+        report = load_report_module(self)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            output_path = Path(tmp) / "demo-report.md"
+
+            with patch.object(report, "extract_jobs") as extract_jobs:
+                exit_code = report.main(
+                    [
+                        "--input",
+                        "docs/demo/fixtures/demo-scan.jsonl",
+                        "--profile",
+                        "docs/demo/fixtures/demo-profile.md",
+                        "--html-only",
+                        "docs/demo/fixtures/demo-report.md",
+                        "--output",
+                        str(output_path),
+                    ]
+                )
+
+            html_path = output_path.with_suffix(".html")
+            self.assertEqual(exit_code, 0)
+            extract_jobs.assert_not_called()
+            self.assertTrue(html_path.exists())
 
 
 if __name__ == "__main__":

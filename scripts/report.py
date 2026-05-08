@@ -8,6 +8,7 @@ Job-mode is the default; custom modes are activated via the
 from __future__ import annotations
 
 import argparse
+import hashlib
 import html
 import json
 import os
@@ -20,6 +21,7 @@ from typing import Iterable
 from urllib.parse import urlparse
 
 try:
+    from scripts import report_diagnostics
     from scripts.profile_schema import ProfileConfig, build_json_schema_prompt, parse_profile_config
     from scripts.summarize import (
         positive_int,
@@ -31,6 +33,7 @@ except ModuleNotFoundError:
     _PROJECT_ROOT = str(Path(__file__).resolve().parent.parent)
     if _PROJECT_ROOT not in sys.path:
         sys.path.insert(0, _PROJECT_ROOT)
+    from scripts import report_diagnostics
     from scripts.profile_schema import ProfileConfig, build_json_schema_prompt, parse_profile_config
     from scripts.summarize import (
         positive_int,
@@ -63,6 +66,7 @@ class ReportResult:
     markdown: str
     stats: dict
     warnings: list[str]
+    diagnostics: list[dict] | None = None
     jobs: list[dict] | None = None
 
 
@@ -416,6 +420,13 @@ def build_report(
 ) -> ReportResult:
     dedup_fields = profile_config.mode.dedup_fields if profile_config else None
     jobs, duplicates_removed = deduplicate_jobs(raw_jobs, messages, dedup_fields)
+    diagnostics = report_diagnostics.build_diagnostics(
+        messages=messages,
+        raw_items=raw_jobs,
+        meta=meta,
+        ocr_enabled=bool(meta.get("ocr_enabled")) if meta else False,
+        llm_available=True,
+    )
     counts = rating_counts(jobs)
     total_messages = (
         int(meta["total_messages_collected"])
@@ -469,6 +480,9 @@ def build_report(
     warning_block = "\n".join(warnings)
     if warning_block:
         warning_block = f"\n{warning_block}\n"
+    diagnostic_block = report_diagnostics.render_markdown(diagnostics)
+    if diagnostic_block:
+        diagnostic_block = f"\n{diagnostic_block}\n---\n"
 
     footer = "*Generated automatically.*"
     if next_scan_note:
@@ -481,6 +495,20 @@ def build_report(
     dedup_desc = "Same normalized " + " + ".join(
         f"**{f}**" for f in (dedup_fields or ["company", "role"])
     ) + " treated as one entry regardless of source channel."
+    feedback_schema = json.dumps(
+        {
+            "schema_version": "v1",
+            "created_at": "2026-05-06T09:00:00Z",
+            "report_id": "report-id",
+            "profile_label": "profile",
+            "source_message_refs": [{"channel": "channel", "id": 123}],
+            "feedback": "keep",
+            "note": "",
+            "item_title": "item title",
+        },
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
 
     markdown = f"""# {report_title} -- Telegram Channels
 
@@ -497,6 +525,8 @@ def build_report(
 {profile_summary(profile, is_job_mode=is_job)}
 
 ---
+
+{diagnostic_block}
 
 {high_section}
 
@@ -533,9 +563,30 @@ def build_report(
 
 ---
 
+## Feedback
+
+HTML reports let you mark `keep`, `skip`, and `false_positive` locally, then export
+JSONL. For Markdown-only workflows, append one JSON object per line with this v1
+schema:
+
+```json
+{feedback_schema}
+```
+
+Use `false_negative` with an empty `source_message_refs` list when the report missed
+something that should have appeared.
+
+---
+
 {footer}
 """
-    return ReportResult(markdown=markdown, stats=stats, warnings=warnings, jobs=jobs)
+    return ReportResult(
+        markdown=markdown,
+        stats=stats,
+        warnings=warnings,
+        diagnostics=diagnostics,
+        jobs=jobs,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -1266,6 +1317,61 @@ def _render_profile_items(profile: str) -> str:
     return "\n".join(lines)
 
 
+def build_report_id(meta: dict | None, profile: str) -> str:
+    date = (meta or {}).get("scan_date") or datetime.now(UTC).date().isoformat()
+    basis = json.dumps(
+        {
+            "date": date,
+            "started_at": (meta or {}).get("scan_started_at", ""),
+            "channel_list": (meta or {}).get("channel_list_path", ""),
+            "profile": profile[:240],
+        },
+        ensure_ascii=False,
+        sort_keys=True,
+    )
+    digest = hashlib.sha1(basis.encode("utf-8")).hexdigest()[:10]
+    return f"tgcs-{date}-{digest}"
+
+
+def _data_json(value: object) -> str:
+    return html.escape(json.dumps(value, ensure_ascii=False, separators=(",", ":")), quote=True)
+
+
+def _feedback_attrs(item: dict, item_title: str, message_lookup: dict | None) -> str:
+    payload = {"source_message_refs": source_refs_for_job(item, message_lookup)}
+    return (
+        'data-feedback-card '
+        f'data-item-title="{_esc(item_title)}" '
+        f'data-feedback-payload="{_data_json(payload)}"'
+    )
+
+
+def _feedback_controls() -> str:
+    return """
+      <div class="feedback-controls" aria-label="Local feedback">
+        <span class="feedback-label">Feedback</span>
+        <button type="button" data-feedback-value="keep">Keep</button>
+        <button type="button" data-feedback-value="skip">Skip</button>
+        <button type="button" data-feedback-value="false_positive">False positive</button>
+      </div>"""
+
+
+def _render_feedback_panel() -> str:
+    return """
+  <section class="feedback-panel" aria-label="Local report feedback">
+    <h2 class="feedback-title">Feedback</h2>
+    <p class="feedback-copy">Feedback stays in this browser until you export JSONL.</p>
+    <div class="feedback-note-row">
+      <textarea data-feedback-note rows="3" placeholder="Missed item, false negative, or short note"></textarea>
+      <button type="button" data-feedback-false-negative>Add false negative</button>
+    </div>
+    <div class="feedback-actions">
+      <button type="button" data-feedback-export>Export JSONL</button>
+      <output data-feedback-status aria-live="polite"></output>
+    </div>
+  </section>"""
+
+
 def _render_generic_card(
     item: dict,
     index: int,
@@ -1337,8 +1443,10 @@ def _render_generic_card(
         {detail_block}
       </div>""" if detail_block else ""
 
+    item_title = " - ".join(part for part in title_parts[:2] if part.strip()) or "Unknown item"
+
     return f"""
-    <article class="item-card {rating}">
+    <article class="item-card {rating}" {_feedback_attrs(item, item_title, message_lookup)}>
       <div class="item-card-head">
         <div>
           <div class="item-number">Dispatch {index:02d}</div>
@@ -1353,6 +1461,7 @@ def _render_generic_card(
       {f'<ul class="tag-list">{tags}</ul>' if stack else ''}
       {f'<ul class="concern-list">{concern_items}</ul>' if concerns else ''}
       {raw_section}
+      {_feedback_controls()}
     </article>"""
 
 
@@ -1426,8 +1535,10 @@ def _render_job_card(
     tags = "\n".join(f'<li class="tag">{_esc(t)}</li>' for t in stack)
     concern_items = "\n".join(f"<li>{_esc(c)}</li>" for c in concerns)
 
+    item_title = f"{role} - {company}"
+
     return f"""
-    <article class="job-card {rating}">
+    <article class="job-card {rating}" {_feedback_attrs(job, item_title, message_lookup)}>
       <div class="job-card-head">
         <div>
           <div class="job-number">Dispatch {index:02d}</div>
@@ -1448,6 +1559,7 @@ def _render_job_card(
       {f'<ul class="tag-list">{tags}</ul>' if stack else ''}
       {f'<ul class="concern-list">{concern_items}</ul>' if concerns else ''}
       {raw_section}{origin_line}
+      {_feedback_controls()}
     </article>"""
 
 
@@ -1511,6 +1623,9 @@ def render_html(
 
     profile_items = _render_profile_items(profile)
     footer_note = args.next_scan_note if hasattr(args, "next_scan_note") else ""
+    report_id = build_report_id(meta, profile)
+    diagnostics_panel = report_diagnostics.render_html(result.diagnostics or [])
+    feedback_panel = _render_feedback_panel()
 
     if is_job:
         # job template: original hardcoded format, only standard placeholders
@@ -1530,6 +1645,10 @@ def render_html(
             profile_items=profile_items,
             sections="\n\n".join(sections),
             footer_note=f" {_esc(footer_note)}" if footer_note else "",
+            report_id=_esc(report_id),
+            profile_label="Job Scan Report",
+            diagnostics_panel=diagnostics_panel,
+            feedback_panel=feedback_panel,
         )
 
     # generic template: all labels driven by profile_config
@@ -1563,6 +1682,10 @@ def render_html(
         profile_items=profile_items,
         sections="\n\n".join(sections),
         footer_note=f" {_esc(footer_note)}" if footer_note else "",
+        report_id=_esc(report_id),
+        profile_label=_esc(report_title),
+        diagnostics_panel=diagnostics_panel,
+        feedback_panel=feedback_panel,
     )
 
 
