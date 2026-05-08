@@ -67,7 +67,7 @@ https://github.com/user-attachments/assets/d3a6fd44-7140-4843-86af-b32325abae33
 ```bash
 git clone https://github.com/Sapientropic/tg-channel-scanner.git
 cd tg-channel-scanner
-chmod +x setup.sh scripts/scan.sh
+chmod +x setup.sh tgcs scripts/scan.sh
 ./setup.sh
 ```
 
@@ -75,34 +75,34 @@ chmod +x setup.sh scripts/scan.sh
 
 ```bash
 # 0. Try the offline demo first (no Telegram login or LLM key required)
-python scripts/report.py --input docs/demo/fixtures/demo-scan.jsonl \
-  --profile docs/demo/fixtures/demo-profile.md \
-  --html-only docs/demo/fixtures/demo-report.md \
-  --output output/demo-report.md
+./tgcs demo
 
 # 1. Edit config with your Telegram API credentials
 #    (setup.sh created it at ~/.config/tgcli/config.toml)
 nano ~/.config/tgcli/config.toml
 
-# 2. Check first-run prerequisites without logging in
-python scripts/doctor.py --channel-list channel_lists/example.txt \
-  --profile profiles/templates/jobs.md --output-dir output
+# 2. Create local defaults and check first-run prerequisites
+./tgcs init
+./tgcs doctor
 
-# 3. Scan channels (first run prompts for login)
-source .venv/bin/activate
-./scripts/scan.sh channel_lists/example.txt
+# 3. Complete Telegram login once
+./tgcs login
 
-# 4. Generate HTML report
-python scripts/daily_report.py channel_lists/example.txt \
-  --profile profiles/example.md --html
+# 4. Scan and generate today's HTML report
+./tgcs run
 ```
+
+On Windows, use `tgcs.bat` instead of `./tgcs`. The human facade defaults to
+the `market-news` profile, `.tgcs/sources.json`, `output/`, HTML output, and
+v0.4 local decision memory at `.tgcs/state`. Use `tgcs run --no-state` when
+you need a stateless run.
 
 ### Agent-Native Mode
 
 The repository also ships a root [SKILL.md](SKILL.md) and a structured
-[agent CLI contract](docs/agent-cli-contract.md). Human commands remain
-compatible, but agents should prefer JSON output and the private source
-registry at `.tgcs/sources.json`:
+[agent CLI contract](docs/agent-cli-contract.md). The short `tgcs` command is
+for humans. Agents should prefer the explicit JSON contract and the private
+source registry at `.tgcs/sources.json`:
 
 ```bash
 python scripts/source_registry.py import-list channel_lists/example.txt \
@@ -178,6 +178,12 @@ python scripts/export_folder.py --folder "Jobs" --output channel_lists/jobs.txt
 ### Generate Reports
 
 ```bash
+# Human default: market-news + HTML + .tgcs/state
+./tgcs run
+
+# Human alternate profile
+./tgcs run --profile jobs --hours 72
+
 # Markdown + HTML report
 python scripts/daily_report.py channel_lists/example.txt \
   --profile profiles/example.md --html
@@ -371,6 +377,7 @@ schema shape.
 tg-channel-scanner/
 ├── SKILL.md                 # Agent-facing operating guide
 ├── agents/openai.yaml       # Skill metadata for agent installers
+├── tgcs / tgcs.bat          # Human-friendly command facade
 ├── config.example.toml      # Template (actual config at ~/.config/tgcli/)
 ├── requirements.txt         # telethon
 ├── requirements-llm.txt     # optional summarizer deps
@@ -380,6 +387,7 @@ tg-channel-scanner/
 ├── channel_lists/           # Channel name lists
 ├── scripts/
 │   ├── agent_cli.py         # JSON envelope and exit-code helpers
+│   ├── tgcs.py              # Human-friendly command facade implementation
 │   ├── scan.py              # Scanner core (Telethon)
 │   ├── source_registry.py   # Source registry import/list/export/validate
 │   ├── export_folder.py     # Export from Telegram folders
@@ -420,7 +428,7 @@ See [docs/tos-risk-analysis.md](docs/tos-risk-analysis.md) for details.
 | `.sh` scripts `Permission denied` | `chmod +x setup.sh scripts/scan.sh` |
 | my.telegram.org shows ERROR | [docs/getting-api-credentials.md](docs/getting-api-credentials.md) |
 | 0 messages collected | Check `output/*.errors.log` |
-| Session expired | Delete `~/.config/tgcli/session`, re-run |
+| Session expired | Run `./tgcs login` again, or delete `~/.config/tgcli/session` and rerun |
 
 ## License
 

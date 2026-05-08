@@ -67,7 +67,7 @@ https://github.com/user-attachments/assets/d3a6fd44-7140-4843-86af-b32325abae33
 ```bash
 git clone https://github.com/Sapientropic/tg-channel-scanner.git
 cd tg-channel-scanner
-chmod +x setup.sh scripts/scan.sh
+chmod +x setup.sh tgcs scripts/scan.sh
 ./setup.sh
 ```
 
@@ -75,33 +75,32 @@ chmod +x setup.sh scripts/scan.sh
 
 ```bash
 # 0. 先跑离线 demo（不需要 Telegram 登录，也不需要 LLM key）
-python scripts/report.py --input docs/demo/fixtures/demo-scan.jsonl \
-  --profile docs/demo/fixtures/demo-profile.md \
-  --html-only docs/demo/fixtures/demo-report.md \
-  --output output/demo-report.md
+./tgcs demo
 
 # 1. 编辑配置，填入 Telegram API 凭证
 #    （setup.sh 已创建在 ~/.config/tgcli/config.toml）
 nano ~/.config/tgcli/config.toml
 
-# 2. 先做 first-run 检查，不会触发 Telegram 登录
-python scripts/doctor.py --channel-list channel_lists/example.txt \
-  --profile profiles/templates/jobs.md --output-dir output
+# 2. 创建本地默认配置，并做 first-run 检查
+./tgcs init
+./tgcs doctor
 
-# 3. 扫描频道（首次运行引导登录）
-source .venv/bin/activate
-./scripts/scan.sh channel_lists/example.txt
+# 3. 单独完成 Telegram 登录
+./tgcs login
 
-# 4. 生成 HTML 报告
-python scripts/daily_report.py channel_lists/example.txt \
-  --profile profiles/example.md --html
+# 4. 扫描并生成今天的 HTML 报告
+./tgcs run
 ```
+
+Windows 下使用 `tgcs.bat`。这个人类入口默认使用 `market-news` profile、
+`.tgcs/sources.json`、`output/`、HTML 输出，并默认启用 v0.4 本地决策记忆
+`.tgcs/state`。需要无状态运行时使用 `tgcs run --no-state`。
 
 ### Agent 原生模式
 
 仓库根目录提供 [SKILL.md](SKILL.md) 和结构化
-[agent CLI 合同](docs/agent-cli-contract.md)。给人用的命令继续兼容；agent 调用时优先使用
-JSON 输出和私有 source registry（默认 `.tgcs/sources.json`）：
+[agent CLI 合同](docs/agent-cli-contract.md)。短命令 `tgcs` 给人类使用；agent 调用时优先使用
+显式 JSON 合同和私有 source registry（默认 `.tgcs/sources.json`）：
 
 ```bash
 python scripts/source_registry.py import-list channel_lists/example.txt \
@@ -175,6 +174,12 @@ python scripts/export_folder.py --folder "Jobs" --output channel_lists/jobs.txt
 ### 生成报告
 
 ```bash
+# 人类默认入口：market-news + HTML + .tgcs/state
+./tgcs run
+
+# 人类入口也可以换 profile 和时间窗口
+./tgcs run --profile jobs --hours 72
+
 # Markdown + HTML 报告
 python scripts/daily_report.py channel_lists/example.txt \
   --profile profiles/example.md --html
@@ -363,6 +368,7 @@ python scripts/source_registry.py list \
 tg-channel-scanner/
 ├── SKILL.md                 # agent 调用指南
 ├── agents/openai.yaml       # skill 安装元数据
+├── tgcs / tgcs.bat          # 人类友好的短命令入口
 ├── config.example.toml      # 配置模板（实际配置在 ~/.config/tgcli/）
 ├── requirements.txt         # telethon
 ├── requirements-llm.txt     # 可选摘要依赖
@@ -372,6 +378,7 @@ tg-channel-scanner/
 ├── channel_lists/           # 频道名称列表
 ├── scripts/
 │   ├── agent_cli.py         # JSON envelope 和退出码 helper
+│   ├── tgcs.py              # 人类短命令 facade 实现
 │   ├── scan.py              # 扫描核心（Telethon）
 │   ├── source_registry.py   # source registry 导入/列出/导出/校验
 │   ├── export_folder.py     # 从 Telegram 文件夹导出
@@ -412,7 +419,7 @@ tg-channel-scanner/
 | `.sh` 脚本 `Permission denied` | `chmod +x setup.sh scripts/scan.sh` |
 | my.telegram.org 显示 ERROR | [获取凭证指南](docs/getting-api-credentials.md) |
 | 扫描到 0 条消息 | 检查 `output/*.errors.log` |
-| Session 过期 | 删除 `~/.config/tgcli/session`，重新运行 |
+| Session 过期 | 重新运行 `./tgcs login`，或删除 `~/.config/tgcli/session` 后再登录 |
 
 ## 许可证
 

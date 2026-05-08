@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+if [ -x "$ROOT_DIR/.venv/bin/python" ]; then
+  PYTHON="$ROOT_DIR/.venv/bin/python"
+elif [ -x "$ROOT_DIR/.venv/Scripts/python.exe" ]; then
+  PYTHON="$ROOT_DIR/.venv/Scripts/python.exe"
+else
+  PYTHON="python"
+fi
+
+exec "$PYTHON" "$ROOT_DIR/scripts/tgcs.py" "$@"

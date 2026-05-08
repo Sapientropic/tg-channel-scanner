@@ -50,6 +50,8 @@ DEFAULT_XAI_OCR_MODEL = "grok-4.1-fast"
 DEFAULT_OPENAI_OCR_MODEL = "gpt-4o-mini"
 DEFAULT_STT_MODEL = "whisper-1"
 DEFAULT_VIDEO_FRAMES = 3
+LOGIN_QUIT_COMMANDS = {"q", "quit", "exit", "cancel"}
+LOGIN_RESEND_COMMANDS = {"r", "resend"}
 
 CONFIG_DIR = Path(
     os.environ.get("TG_SCANNER_CONFIG_DIR")
@@ -476,24 +478,85 @@ def _make_ocr_config(args) -> OcrConfig | None:
     )
 
 
-async def interactive_login(client: TelegramClient) -> None:
-    print("No active Telegram session. Starting interactive login...")
-    phone = input("Enter your phone number (with country code): ").strip()
-    if not phone:
-        raise ScanError("Phone number required for login.")
-
-    await client.send_code_request(phone)
-    code = input("Enter the verification code sent to your Telegram: ").strip()
-    if not code:
-        raise ScanError("Verification code required.")
-
+def _read_login_value(prompt: str, *, secret: bool = False) -> str:
     try:
-        await client.sign_in(phone, code)
-    except SessionPasswordNeededError:
-        password = getpass.getpass("Enter your Telegram 2FA password: ").strip()
+        value = getpass.getpass(prompt) if secret else input(prompt)
+    except (EOFError, KeyboardInterrupt) as exc:
+        raise ScanError("Login cancelled.") from exc
+    value = value.strip()
+    if value.casefold() in LOGIN_QUIT_COMMANDS:
+        raise ScanError("Login cancelled.")
+    return value
+
+
+async def _prompt_phone_and_send_code(client: TelegramClient, max_attempts: int) -> str:
+    for _attempt in range(max_attempts):
+        phone = _read_login_value("Enter your phone number with country code (or q to quit): ")
+        if not phone:
+            print("Phone number cannot be empty. Try again or type q to quit.", file=sys.stderr)
+            continue
+        try:
+            await client.send_code_request(phone)
+        except Exception as exc:
+            print(f"Telegram rejected that phone number: {exc}", file=sys.stderr)
+            continue
+        return phone
+    raise ScanError("Could not send Telegram login code after multiple attempts.")
+
+
+async def _prompt_two_factor_password(client: TelegramClient, max_attempts: int) -> None:
+    for _attempt in range(max_attempts):
+        password = _read_login_value("Enter your Telegram 2FA password (or q to quit): ", secret=True)
         if not password:
-            raise ScanError("Two-factor password required for login.") from None
-        await client.sign_in(password=password)
+            print("Two-factor password cannot be empty. Try again or type q to quit.", file=sys.stderr)
+            continue
+        try:
+            await client.sign_in(password=password)
+        except Exception as exc:
+            print(f"Telegram rejected that 2FA password: {exc}", file=sys.stderr)
+            continue
+        return
+    raise ScanError("Could not complete Telegram 2FA after multiple attempts.")
+
+
+async def _prompt_code_and_sign_in(
+    client: TelegramClient,
+    phone: str,
+    max_attempts: int,
+) -> None:
+    for _attempt in range(max_attempts):
+        code = _read_login_value(
+            "Enter the Telegram verification code, or type resend to request a new code: "
+        )
+        if not code:
+            print("Verification code cannot be empty. Try again or type resend.", file=sys.stderr)
+            continue
+        if code.casefold() in LOGIN_RESEND_COMMANDS:
+            try:
+                await client.send_code_request(phone)
+            except Exception as exc:
+                print(f"Could not resend Telegram code: {exc}", file=sys.stderr)
+            else:
+                print("Telegram code resent.", file=sys.stderr)
+            continue
+        try:
+            await client.sign_in(phone, code)
+        except SessionPasswordNeededError:
+            await _prompt_two_factor_password(client, max_attempts)
+            return
+        except Exception as exc:
+            print(f"Telegram rejected that verification code: {exc}", file=sys.stderr)
+            continue
+        return
+    raise ScanError("Could not complete Telegram login after multiple verification attempts.")
+
+
+async def interactive_login(client: TelegramClient, *, max_attempts: int = 3) -> None:
+    print("No active Telegram session. Starting interactive login...")
+    print("Type q at any prompt to cancel.", file=sys.stderr)
+
+    phone = await _prompt_phone_and_send_code(client, max_attempts)
+    await _prompt_code_and_sign_in(client, phone, max_attempts)
 
     session_string = StringSession.save(client.session)
     SESSION_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -714,6 +777,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--hours", dest="hours_flag", type=positive_int)
     parser.add_argument("--source-registry", type=Path, help="Private source registry JSON.")
+    parser.add_argument(
+        "--login-only",
+        action="store_true",
+        help="Complete interactive Telegram login and exit without scanning.",
+    )
     parser.add_argument("--since", type=parse_since, help="Precise ISO-8601 cutoff.")
     parser.add_argument(
         "--initial-limit",
@@ -851,30 +919,36 @@ def _health_from_failure(source: ScanSource, exc: Exception) -> dict:
 
 async def _run_scan(args) -> int:
     json_mode = agent_cli.is_json_format(args)
+    login_only = getattr(args, "login_only", False)
 
-    try:
-        sources, registry_payload = load_scan_sources(args)
-    except (OSError, source_registry.RegistryError, ScanError) as exc:
-        agent_cli.emit_error(
-            args,
-            code="source_input_invalid",
-            message=str(exc),
-            retryable=False,
-            next_step="Fix --source-registry or channel list, then rerun scan.",
-        )
-        return agent_cli.EXIT_VALIDATION
-    if not sources:
-        message = "No enabled sources to scan."
-        agent_cli.emit_error(
-            args,
-            code="source_input_empty",
-            message=message,
-            retryable=False,
-            next_step="Enable at least one source or add channels to the list.",
-        )
-        return agent_cli.EXIT_VALIDATION if json_mode else 1
+    if login_only:
+        sources: list[ScanSource] = []
+        registry_payload = None
+        channels: list[str] = []
+    else:
+        try:
+            sources, registry_payload = load_scan_sources(args)
+        except (OSError, source_registry.RegistryError, ScanError) as exc:
+            agent_cli.emit_error(
+                args,
+                code="source_input_invalid",
+                message=str(exc),
+                retryable=False,
+                next_step="Fix --source-registry or channel list, then rerun scan.",
+            )
+            return agent_cli.EXIT_VALIDATION
+        if not sources:
+            message = "No enabled sources to scan."
+            agent_cli.emit_error(
+                args,
+                code="source_input_empty",
+                message=message,
+                retryable=False,
+                next_step="Enable at least one source or add channels to the list.",
+            )
+            return agent_cli.EXIT_VALIDATION if json_mode else 1
 
-    channels = [source.channel for source in sources]
+        channels = [source.channel for source in sources]
 
     try:
         config = load_config()
@@ -898,6 +972,16 @@ async def _run_scan(args) -> int:
 
     try:
         if not await client.is_user_authorized():
+            if login_only and json_mode:
+                await client.disconnect()
+                agent_cli.emit_error(
+                    args,
+                    code="telegram_login_interactive_required",
+                    message="Telegram login requires an interactive terminal.",
+                    retryable=False,
+                    next_step="Run tgcs login in a terminal.",
+                )
+                return agent_cli.EXIT_AUTH
             if json_mode:
                 await client.disconnect()
                 agent_cli.emit_error(
@@ -908,10 +992,28 @@ async def _run_scan(args) -> int:
                     next_step="Run a human-mode scan once to complete Telegram login.",
                 )
                 return agent_cli.EXIT_AUTH
+            if not sys.stdin.isatty():
+                await client.disconnect()
+                agent_cli.emit_error(
+                    args,
+                    code="telegram_login_interactive_required",
+                    message="Telegram login requires an interactive terminal.",
+                    retryable=False,
+                    next_step="Run tgcs login in a terminal.",
+                )
+                return agent_cli.EXIT_AUTH
             await interactive_login(client)
     except ScanError:
         await client.disconnect()
         raise
+
+    if login_only:
+        await client.disconnect()
+        if json_mode:
+            agent_cli.emit_success(args, {"status": "authorized"})
+        else:
+            print("Telegram session is ready.")
+        return agent_cli.EXIT_SUCCESS
 
     try:
         ocr = _make_ocr_config(args)
@@ -1136,7 +1238,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     warn_deprecated_options(argv, args)
 
-    if not args.channel_list and not args.source_registry:
+    if not args.login_only and not args.channel_list and not args.source_registry:
         agent_cli.emit_error(
             args,
             code="source_input_missing",
@@ -1145,7 +1247,7 @@ def main(argv: list[str] | None = None) -> int:
             next_step="Pass a channel list or --source-registry .tgcs/sources.json.",
         )
         return agent_cli.EXIT_VALIDATION
-    if args.channel_list and not args.channel_list.exists():
+    if not args.login_only and args.channel_list and not args.channel_list.exists():
         agent_cli.emit_error(
             args,
             code="channel_list_not_found",
@@ -1155,7 +1257,17 @@ def main(argv: list[str] | None = None) -> int:
         )
         return agent_cli.EXIT_VALIDATION
 
-    return asyncio.run(_run_scan(args))
+    try:
+        return asyncio.run(_run_scan(args))
+    except ScanError as exc:
+        agent_cli.emit_error(
+            args,
+            code="telegram_login_failed" if args.login_only else "scan_failed",
+            message=str(exc),
+            retryable=False,
+            next_step="Run tgcs login again in an interactive terminal.",
+        )
+        return agent_cli.EXIT_AUTH if args.login_only else agent_cli.EXIT_RUNTIME
 
 
 if __name__ == "__main__":

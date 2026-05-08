@@ -96,16 +96,17 @@ if [ ! -f "$TGCLI_CONFIG" ]; then
     echo "   Get your api_id and api_hash from: https://my.telegram.org/apps"
     echo "   (If the form shows ERROR, see docs/getting-api-credentials.md)"
     echo ""
-    echo "2. Run a scan (first run will prompt for login if no session):"
-    echo "   source .venv/bin/activate"
-    echo "   ./scripts/scan.sh channel_lists/example.txt"
+    echo "2. Initialize local defaults, log in, then run a report:"
+    echo "   ./tgcs init"
+    echo "   ./tgcs login"
+    echo "   ./tgcs run"
 else
     echo "Scanner config already exists at $TGCLI_CONFIG — skipping."
     echo "To reconfigure, edit: $TGCLI_CONFIG"
 fi
 
 # Make scripts executable (macOS/Linux)
-chmod +x scripts/scan.sh 2>/dev/null || true
+chmod +x tgcs scripts/scan.sh 2>/dev/null || true
 
 # Create output dir
 mkdir -p output
@@ -113,4 +114,4 @@ mkdir -p output
 echo ""
 echo "Setup complete. Next: edit config and run a scan"
 echo "  Config:  $TGCLI_CONFIG"
-echo "  Scan:    source .venv/bin/activate && ./scripts/scan.sh channel_lists/example.txt"
+echo "  Run:     ./tgcs init && ./tgcs login && ./tgcs run"

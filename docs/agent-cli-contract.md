@@ -2,6 +2,8 @@
 
 This document is the stable agent-facing contract for TG Channel Scanner v0.4.
 Human output remains best-effort prose; agents should use `--format json`.
+The short `tgcs` facade is for humans and keeps defaults convenient; it does not
+replace the explicit agent contract below.
 
 ## Envelope: `agent_envelope_v1`
 
@@ -81,6 +83,21 @@ Default path resolution:
 
 ## Commands
 
+Human-oriented facade:
+
+```powershell
+tgcs init
+tgcs login
+tgcs run
+tgcs run --profile market-news --hours 72
+tgcs run --no-state
+tgcs sources import channel_lists/example.txt
+```
+
+`tgcs run` defaults to `.tgcs/sources.json` when present, the `market-news`
+profile, HTML output, `output/`, and v0.4 decision memory at `.tgcs/state`.
+Agents should call the lower-level commands when they need stable JSON output:
+
 ```powershell
 python scripts/source_registry.py import-list channel_lists/example.txt --source-registry .tgcs/sources.json --format json --dry-run
 python scripts/source_registry.py validate --source-registry .tgcs/sources.json --format json
@@ -93,6 +110,22 @@ python scripts/report.py --input output/scan.jsonl --profile profiles/templates/
 python scripts/report.py --input output/scan.jsonl --profile profiles/templates/market-news.md --items-json output/extracted-items.json --state-dir .tgcs/state --feedback-jsonl output/report-feedback.jsonl --format json
 python scripts/daily_report.py --source-registry .tgcs/sources.json --profile profiles/templates/market-news.md --html --state-dir .tgcs/state --format json
 ```
+
+## Human Login Boundary
+
+Interactive Telegram login is a human-owned bootstrap step. Agents should not
+try to answer phone/code/password prompts. When a JSON command returns
+`telegram_session_unauthorized` or `telegram_login_interactive_required`, route
+the task back to the human with:
+
+```powershell
+tgcs login
+```
+
+`tgcs login` delegates to `scan.py --login-only`. In human mode it retries empty
+or rejected phone numbers, verification codes, and 2FA passwords; typing `q`,
+`quit`, `exit`, or `cancel` exits cleanly. In JSON mode, login never blocks on
+stdin and returns an auth error instead.
 
 ## Agent Semantic Fallback
 
@@ -178,9 +211,10 @@ hints: `dormant`, `access_failed`, `incomplete`, `noisy_current_run`,
 
 ## Decision Intelligence State
 
-Decision intelligence is explicit opt-in. Agents pass `--state-dir .tgcs/state`
-to `report.py` or `daily_report.py` when cross-run memory is desired. The
-default remains stateless.
+Decision intelligence is explicit opt-in for low-level agent commands. Agents
+pass `--state-dir .tgcs/state` to `report.py` or `daily_report.py` when cross-run
+memory is desired. The low-level default remains stateless. The human `tgcs run`
+facade supplies `.tgcs/state` by default, with `--no-state` as the escape hatch.
 
 Additional flags:
 

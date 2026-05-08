@@ -51,17 +51,16 @@ api_id = 12345678
 api_hash = "your_api_hash_here"
 ```
 
-Then run a scan. If no saved Telethon session exists, `scripts/scan.py` will
-prompt for your phone number and Telegram verification code:
+Then run the login helper. If no saved Telethon session exists, it will prompt
+for your phone number and Telegram verification code, and will let you retry
+empty or rejected input instead of failing after the first mistake:
 
 ```bash
 # Mac/Linux
-source .venv/bin/activate
-./scripts/scan.sh channel_lists/example.txt
+./tgcs login
 
 # Windows
-call .venv\Scripts\activate.bat
-scripts\scan.bat channel_lists\example.txt
+tgcs.bat login
 ```
 
 If your Telegram account has two-factor authentication enabled, the scanner

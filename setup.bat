@@ -97,9 +97,10 @@ echo    %TGCLI_CONFIG%
 echo    Get your api_id and api_hash from: https://my.telegram.org/apps
 echo    ^(If the form shows ERROR, see docs\getting-api-credentials.md^)
 echo.
-echo 2. Run a scan ^(first run will prompt for login if no session^):
-echo    call .venv\Scripts\activate.bat
-echo    scripts\scan.bat channel_lists\example.txt
+echo 2. Initialize local defaults, log in, then run a report:
+echo    tgcs.bat init
+echo    tgcs.bat login
+echo    tgcs.bat run
 goto config_done
 
 :config_exists
@@ -113,4 +114,4 @@ if not exist "output" mkdir output
 echo.
 echo Setup complete. Next: edit config and run a scan
 echo   Config:  %TGCLI_CONFIG%
-echo   Scan:    call .venv\Scripts\activate.bat ^&^& scripts\scan.bat channel_lists\example.txt
+echo   Run:     tgcs.bat init ^&^& tgcs.bat login ^&^& tgcs.bat run

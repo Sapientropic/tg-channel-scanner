@@ -3,6 +3,7 @@ import getpass
 import io
 import json
 import os
+import sys
 import tempfile
 import unittest
 from datetime import datetime, timezone
@@ -404,6 +405,99 @@ class ScanTests(unittest.TestCase):
         self.assertEqual(client.sign_in.await_args_list[0].args, ("+15550000000", "12345"))
         self.assertEqual(client.sign_in.await_args_list[1].kwargs, {"password": "2fa-secret"})
         self.assertEqual(saved_session, "saved-session")
+
+    def test_interactive_login_retries_empty_and_rejected_phone(self):
+        client = MagicMock()
+        client.send_code_request = AsyncMock(side_effect=[Exception("bad phone"), None])
+        client.sign_in = AsyncMock()
+        client.session = "session"
+
+        with tempfile.TemporaryDirectory() as tmp:
+            session_path = Path(tmp) / "session"
+            stderr = io.StringIO()
+            with patch.object(scan, "SESSION_PATH", session_path):
+                with patch("builtins.input", side_effect=["", "+bad", "+15550000000", "12345"]):
+                    with patch.object(scan.StringSession, "save", return_value="saved-session"):
+                        with patch("sys.stderr", stderr):
+                            asyncio.run(scan.interactive_login(client))
+
+        self.assertEqual(client.send_code_request.await_args_list[0].args, ("+bad",))
+        self.assertEqual(client.send_code_request.await_args_list[1].args, ("+15550000000",))
+        self.assertEqual(client.sign_in.await_args.args, ("+15550000000", "12345"))
+        self.assertIn("Phone number cannot be empty", stderr.getvalue())
+        self.assertIn("Telegram rejected that phone number", stderr.getvalue())
+
+    def test_login_only_does_not_require_source_input(self):
+        class FakeClient:
+            def __init__(self, session, api_id, api_hash, *, flood_sleep_threshold):
+                pass
+
+            async def connect(self):
+                return None
+
+            async def is_user_authorized(self):
+                return False
+
+            async def disconnect(self):
+                return None
+
+        parser = scan.build_parser()
+        args = parser.parse_args(["--login-only"])
+
+        with patch.object(scan, "load_config", return_value=scan.ScannerConfig(1, "hash", "")):
+            with patch.object(scan, "StringSession", return_value="fake-session"):
+                with patch.object(scan, "TelegramClient", FakeClient):
+                    with patch.object(scan, "interactive_login", new_callable=AsyncMock) as login_mock:
+                        with patch.object(sys.stdin, "isatty", return_value=True):
+                            exit_code = asyncio.run(scan._run_scan(args))
+
+        self.assertEqual(exit_code, 0)
+        login_mock.assert_awaited_once()
+
+    def test_login_only_json_mode_returns_auth_error_without_prompting(self):
+        class FakeClient:
+            def __init__(self, session, api_id, api_hash, *, flood_sleep_threshold):
+                pass
+
+            async def connect(self):
+                return None
+
+            async def is_user_authorized(self):
+                return False
+
+            async def disconnect(self):
+                return None
+
+        parser = scan.build_parser()
+        args = parser.parse_args(["--login-only", "--format", "json"])
+        stdout = io.StringIO()
+
+        with patch.object(scan, "load_config", return_value=scan.ScannerConfig(1, "hash", "")):
+            with patch.object(scan, "StringSession", return_value="fake-session"):
+                with patch.object(scan, "TelegramClient", FakeClient):
+                    with patch.object(scan, "interactive_login", new_callable=AsyncMock) as login_mock:
+                        with patch("sys.stdout", stdout):
+                            exit_code = asyncio.run(scan._run_scan(args))
+
+        payload = json.loads(stdout.getvalue())
+        self.assertEqual(exit_code, scan.agent_cli.EXIT_AUTH)
+        self.assertFalse(payload["ok"])
+        self.assertEqual(payload["error"]["code"], "telegram_login_interactive_required")
+        login_mock.assert_not_awaited()
+
+    def test_main_reports_login_error_without_traceback(self):
+        stderr = io.StringIO()
+
+        async def fake_run_scan(args):
+            raise scan.ScanError("Login cancelled.")
+
+        with patch.object(scan, "_run_scan", new=fake_run_scan):
+            with patch("sys.stderr", stderr):
+                exit_code = scan.main(["--login-only"])
+
+        self.assertEqual(exit_code, scan.agent_cli.EXIT_AUTH)
+        self.assertIn("Login cancelled.", stderr.getvalue())
+        self.assertNotIn("Traceback", stderr.getvalue())
 
     def test_scan_metadata_sidecar_path_and_fields_are_stable(self):
         started = datetime(2026, 5, 6, 8, 0, tzinfo=timezone.utc)

@@ -6,6 +6,8 @@ description: Use when Codex needs to run TG Channel Scanner workflows: diagnose 
 # TG Channel Scanner Agent Workflow
 
 Use the JSON contract for agent calls. Human progress is not a stable API.
+For a human at a terminal, prefer the short facade commands: `tgcs init`,
+`tgcs login`, and `tgcs run`. Do not treat `tgcs` human output as the agent API.
 
 ## Safe Order
 
@@ -33,6 +35,9 @@ Use the JSON contract for agent calls. Human progress is not a stable API.
 ## Safety Boundaries
 
 - Do not perform interactive Telegram login. If JSON output returns an auth/session error, ask the user to run a human-mode scan once.
+- For human handoff, ask the user to run `tgcs login`; it retries empty or
+  rejected phone/code/password input and writes the normal local Telethon
+  session.
 - Do not print API keys, Telegram session strings, channel lists from private `.tgcs/`, or raw local paths unless needed for the current run.
 - Treat `.tgcs/sources.json` as private local state. It is ignored by git.
 - Prefer source registry for source maintenance, but keep legacy `channel_lists/*.txt` commands valid.
@@ -41,6 +46,8 @@ Use the JSON contract for agent calls. Human progress is not a stable API.
   `item_memory_v1` file stores item keys, refs, counters, fingerprints, rating
   history, and feedback counts; never persist raw Telegram text or feedback note
   bodies there.
+- `tgcs run` is a human convenience layer and supplies `--state-dir .tgcs/state`
+  by default. Low-level agent calls remain explicit.
 - When no LLM key exists, prefer the agent fallback request instead of asking the user to configure a key.
 - `--extractor agent` never calls an external LLM provider; it writes a local extraction request for the current agent to handle.
 - Agent-produced items must preserve `source_message_refs`; do not invent refs or bind refs across channels.
