@@ -24,6 +24,9 @@ dashboard/dist/
 output/
 .tgcs/
 
+# Private strategy notes
+docs/productization-strategy-report.md
+
 # OS
 .DS_Store
 Thumbs.db

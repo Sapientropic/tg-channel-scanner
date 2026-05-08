@@ -5,7 +5,9 @@ from __future__ import annotations
 import argparse
 import json
 import mimetypes
+import subprocess
 import sys
+from datetime import UTC, datetime
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -21,6 +23,133 @@ except ModuleNotFoundError:
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
+GIT_TIMEOUT_SECONDS = 25
+
+
+class DashboardGitError(Exception):
+    """Raised when repository update checks or pulls cannot be completed safely."""
+
+
+def _utc_now() -> str:
+    return datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def _run_git(args: list[str], *, timeout: int = GIT_TIMEOUT_SECONDS) -> subprocess.CompletedProcess[str]:
+    try:
+        return subprocess.run(
+            ["git", *args],
+            cwd=PROJECT_ROOT,
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired as exc:
+        command = " ".join(["git", *args])
+        raise DashboardGitError(f"{command} timed out after {timeout} second(s).") from exc
+    except OSError as exc:
+        raise DashboardGitError(f"Unable to run git: {exc}") from exc
+
+
+def _git_value(args: list[str]) -> str | None:
+    completed = _run_git(args)
+    if completed.returncode != 0:
+        return None
+    value = completed.stdout.strip()
+    return value or None
+
+
+def _repo_web_url(remote_url: str | None) -> str | None:
+    if not remote_url:
+        return None
+    if remote_url.startswith("git@github.com:"):
+        remote_url = "https://github.com/" + remote_url.removeprefix("git@github.com:")
+    if remote_url.endswith(".git"):
+        remote_url = remote_url[:-4]
+    return remote_url
+
+
+def _git_update_status(*, fetch: bool) -> dict:
+    branch = _git_value(["rev-parse", "--abbrev-ref", "HEAD"]) or "unknown"
+    upstream = _git_value(["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"])
+    remote_url = _git_value(["config", "--get", "remote.origin.url"])
+    dirty_output = _git_value(["status", "--porcelain"]) or ""
+    dirty_count = len([line for line in dirty_output.splitlines() if line.strip()])
+    fetch_error = ""
+
+    if fetch:
+        completed = _run_git(["fetch", "--prune", "origin"], timeout=45)
+        if completed.returncode != 0:
+            fetch_error = (completed.stderr or completed.stdout or "git fetch failed").strip()
+
+    head = _git_value(["rev-parse", "--short", "HEAD"])
+    remote_head = _git_value(["rev-parse", "--short", upstream]) if upstream else None
+    ahead = 0
+    behind = 0
+    status = "no_upstream"
+    message = "No upstream branch is configured for this local branch."
+    pull_allowed = False
+
+    if fetch_error:
+        status = "fetch_failed"
+        message = fetch_error
+    elif upstream:
+        compare = _git_value(["rev-list", "--left-right", "--count", f"HEAD...{upstream}"])
+        if compare:
+            parts = compare.split()
+            if len(parts) == 2:
+                ahead, behind = int(parts[0]), int(parts[1])
+        if ahead == 0 and behind == 0:
+            status = "up_to_date"
+            message = "Local branch is up to date with upstream."
+        elif ahead == 0 and behind > 0:
+            status = "behind"
+            message = f"{behind} upstream commit(s) available."
+            pull_allowed = dirty_count == 0
+        elif ahead > 0 and behind == 0:
+            status = "ahead"
+            message = f"Local branch is ahead of upstream by {ahead} commit(s)."
+        else:
+            status = "diverged"
+            message = f"Local branch diverged: {ahead} ahead, {behind} behind."
+
+    if dirty_count:
+        pull_allowed = False
+        if status == "behind":
+            message = f"{message} Commit or stash {dirty_count} local change(s) before pulling."
+
+    return {
+        "schema_version": "git_update_status_v1",
+        "status": status,
+        "message": message,
+        "branch": branch,
+        "upstream": upstream,
+        "repo_url": _repo_web_url(remote_url),
+        "remote_url": remote_url,
+        "head": head,
+        "remote_head": remote_head,
+        "ahead": ahead,
+        "behind": behind,
+        "dirty": dirty_count > 0,
+        "dirty_count": dirty_count,
+        "pull_allowed": pull_allowed,
+        "fetched": fetch and not fetch_error,
+        "checked_at": _utc_now(),
+    }
+
+
+def _git_pull_latest() -> dict:
+    before = _git_update_status(fetch=True)
+    if before["dirty"]:
+        raise DashboardGitError("Working tree has local changes. Commit or stash them before pulling.")
+    if before["status"] != "behind" or not before["pull_allowed"]:
+        raise DashboardGitError(before["message"])
+    completed = _run_git(["pull", "--ff-only"], timeout=60)
+    if completed.returncode != 0:
+        raise DashboardGitError((completed.stderr or completed.stdout or "git pull --ff-only failed").strip())
+    after = _git_update_status(fetch=False)
+    after["pull_output"] = (completed.stdout or "").strip()
+    return after
 
 
 class DashboardHandler(BaseHTTPRequestHandler):
@@ -63,6 +192,14 @@ class DashboardHandler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         try:
             body = self._read_json_body()
+            if parsed.path == "/api/git/check-updates":
+                self._json(HTTPStatus.OK, {"ok": True, "git": _git_update_status(fetch=True)})
+                return
+            if parsed.path == "/api/git/pull-latest":
+                if body.get("confirm") is not True:
+                    raise DashboardGitError("Pull latest requires explicit confirmation.")
+                self._json(HTTPStatus.OK, {"ok": True, "git": _git_pull_latest()})
+                return
             if parsed.path.startswith("/api/review-cards/") and parsed.path.endswith("/action"):
                 card_id = unquote(parsed.path.split("/")[3])
                 with self._connect() as conn:
@@ -81,7 +218,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 self._json(HTTPStatus.OK, {"ok": True, "result": result})
                 return
             self._json(HTTPStatus.NOT_FOUND, {"ok": False, "error": "not_found"})
-        except (ValueError, json.JSONDecodeError, monitor_state.MonitorStateError) as exc:
+        except (ValueError, json.JSONDecodeError, DashboardGitError, monitor_state.MonitorStateError) as exc:
             self._json(HTTPStatus.BAD_REQUEST, {"ok": False, "error": str(exc)})
 
     def _serve_static(self, request_path: str) -> None:
