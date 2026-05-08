@@ -1,6 +1,6 @@
 # Agent CLI Contract
 
-This document is the stable agent-facing contract for TG Channel Scanner v0.3.
+This document is the stable agent-facing contract for TG Channel Scanner v0.4.
 Human output remains best-effort prose; agents should use `--format json`.
 
 ## Envelope: `agent_envelope_v1`
@@ -90,7 +90,8 @@ python scripts/source_registry.py export-list --source-registry .tgcs/sources.js
 python scripts/doctor.py --source-registry .tgcs/sources.json --profile profiles/templates/market-news.md --output-dir output --format json
 python scripts/scan.py --source-registry .tgcs/sources.json --hours 24 --output output/scan.jsonl --format json
 python scripts/report.py --input output/scan.jsonl --profile profiles/templates/market-news.md --output output/report.md --html-output output/report.html --source-registry .tgcs/sources.json --format json
-python scripts/daily_report.py --source-registry .tgcs/sources.json --profile profiles/templates/market-news.md --html --format json
+python scripts/report.py --input output/scan.jsonl --profile profiles/templates/market-news.md --items-json output/extracted-items.json --state-dir .tgcs/state --feedback-jsonl output/report-feedback.jsonl --format json
+python scripts/daily_report.py --source-registry .tgcs/sources.json --profile profiles/templates/market-news.md --html --state-dir .tgcs/state --format json
 ```
 
 ## Agent Semantic Fallback
@@ -174,3 +175,91 @@ single-run evidence only:
 `report.py` can combine scan meta and the registry to produce single-run pruning
 hints: `dormant`, `access_failed`, `incomplete`, `noisy_current_run`,
 `duplicate_heavy_current_run`, and `valuable_current_run`.
+
+## Decision Intelligence State
+
+Decision intelligence is explicit opt-in. Agents pass `--state-dir .tgcs/state`
+to `report.py` or `daily_report.py` when cross-run memory is desired. The
+default remains stateless.
+
+Additional flags:
+
+- `--state-dir PATH`: load and update local item memory at
+  `PATH/item-memory.json`.
+- `--state-read-only`: use local memory for labels and explanations, but do not
+  write updates.
+- `--feedback-jsonl PATH`: import exported `tgcs-feedback-v1` JSONL feedback.
+  Repeat the flag for multiple files. This requires `--state-dir`.
+
+The state file uses `item_memory_v1`:
+
+```json
+{
+  "schema_version": "item_memory_v1",
+  "updated_at": "2026-05-08T09:00:00Z",
+  "items": {
+    "profile:abc:topic:coinbase|event:exchange-outage": {
+      "item_key": "profile:abc:topic:coinbase|event:exchange-outage",
+      "profile_key": "profile:abc",
+      "source_message_refs": [{"channel": "cointelegraph", "id": 101}],
+      "first_seen_at": "2026-05-08T09:00:00Z",
+      "last_seen_at": "2026-05-08T09:00:00Z",
+      "seen_count": 1,
+      "rating_history": [{"at": "2026-05-08T09:00:00Z", "rating": "high"}],
+      "fingerprint": "sha256",
+      "feedback_counts": {"keep": 1}
+    }
+  }
+}
+```
+
+It must not contain raw Telegram message text, API keys, Telegram sessions, or
+feedback note bodies.
+
+Each enriched item can include `decision_state_v1`:
+
+```json
+{
+  "schema_version": "decision_state_v1",
+  "status": "new",
+  "signals": ["new"],
+  "semantic_cluster": "profile:abc:topic:coinbase|event:exchange-outage",
+  "first_seen_at": "2026-05-08T09:00:00Z",
+  "last_seen_at": "2026-05-08T09:00:00Z",
+  "seen_count": 1,
+  "explanations": {
+    "novelty": "new",
+    "match_confidence": "high",
+    "urgency": "today",
+    "source_priority": "high",
+    "negative_evidence": "No official postmortem yet."
+  }
+}
+```
+
+Possible `status` values: `new`, `seen`, `changed`, `recurring`, and `expired`.
+JSON report envelopes add `data.state_summary` and `data.items[*].decision_state`,
+for example:
+
+```json
+{
+  "state_summary": {
+    "new": 1,
+    "seen": 0,
+    "changed": 0,
+    "recurring": 0,
+    "expired": 0,
+    "total": 1
+  },
+  "items": [
+    {
+      "topic": "Coinbase",
+      "event": "Exchange outage",
+      "decision_state": {
+        "schema_version": "decision_state_v1",
+        "status": "new"
+      }
+    }
+  ]
+}
+```

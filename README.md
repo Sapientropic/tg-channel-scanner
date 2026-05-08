@@ -118,11 +118,27 @@ python scripts/report.py --input output/scan.jsonl \
   --profile profiles/templates/market-news.md \
   --output output/report.md --html-output output/report.html \
   --source-registry .tgcs/sources.json --format json
+
+# Optional v0.4 decision memory and feedback import
+python scripts/report.py --input output/scan.jsonl \
+  --profile profiles/templates/market-news.md \
+  --items-json output/extracted-items.json \
+  --output output/report.md --html-output output/report.html \
+  --source-registry .tgcs/sources.json \
+  --state-dir .tgcs/state \
+  --feedback-jsonl output/report-feedback.jsonl \
+  --format json
 ```
 
 If no LLM provider key exists, `report.py --extractor auto` returns
 `agent_extraction_required`; the agent can read the local extraction request,
 write `semantic_items_v1`, then rerun `report.py` with `--items-json`.
+
+Passing `--state-dir .tgcs/state` turns on local decision intelligence:
+items are marked as new, seen, changed, recurring, or expired across runs.
+The state file stores only item keys, source refs, counters, fingerprints,
+rating history, and feedback counts. It does not store raw Telegram message
+text or feedback note bodies.
 
 ### Scan Options
 

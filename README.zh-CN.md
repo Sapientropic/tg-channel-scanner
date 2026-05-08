@@ -117,11 +117,25 @@ python scripts/report.py --input output/scan.jsonl \
   --profile profiles/templates/market-news.md \
   --output output/report.md --html-output output/report.html \
   --source-registry .tgcs/sources.json --format json
+
+# 可选：启用 v0.4 本地决策记忆并导入反馈
+python scripts/report.py --input output/scan.jsonl \
+  --profile profiles/templates/market-news.md \
+  --items-json output/extracted-items.json \
+  --output output/report.md --html-output output/report.html \
+  --source-registry .tgcs/sources.json \
+  --state-dir .tgcs/state \
+  --feedback-jsonl output/report-feedback.jsonl \
+  --format json
 ```
 
 如果本机没有 LLM provider key，`report.py --extractor auto` 会返回
 `agent_extraction_required`；agent 读取本地 extraction request，写出
 `semantic_items_v1`，再用 `--items-json` 重跑 `report.py`。
+
+传入 `--state-dir .tgcs/state` 会启用本地 decision intelligence：报告会跨运行标记
+new、seen、changed、recurring、expired。状态文件只保存 item key、source refs、
+计数、fingerprint、rating history 和反馈计数，不保存 Telegram 原文或反馈 note 正文。
 
 ### 扫描选项
 

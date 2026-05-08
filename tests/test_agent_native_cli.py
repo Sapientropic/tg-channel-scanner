@@ -229,6 +229,15 @@ class AgentNativeCliTests(unittest.TestCase):
         self.assertIn("--format", calls[0])
         self.assertIn("--format", calls[1])
 
+    def test_agent_contract_documents_decision_intelligence_state(self):
+        contract = Path("docs/agent-cli-contract.md").read_text(encoding="utf-8")
+
+        self.assertIn("--state-dir", contract)
+        self.assertIn("--feedback-jsonl", contract)
+        self.assertIn("item_memory_v1", contract)
+        self.assertIn("decision_state_v1", contract)
+        self.assertIn("state_summary", contract)
+
 
 if __name__ == "__main__":
     unittest.main()

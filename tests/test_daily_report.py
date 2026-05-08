@@ -189,6 +189,49 @@ class DailyReportTests(unittest.TestCase):
         self.assertIn("--html-output", calls[1])
         self.assertIn(str(html_file), calls[1])
 
+    def test_main_passes_state_and_feedback_flags_to_report_only(self):
+        daily_report = load_daily_report_module(self)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            output_dir = root / "output"
+            output_dir.mkdir()
+            state_dir = root / ".tgcs" / "state"
+            feedback_path = root / "feedback.jsonl"
+            feedback_path.write_text("", encoding="utf-8")
+            calls = []
+
+            def fake_run(cmd, **kwargs):
+                calls.append(cmd)
+                if "scan.py" in str(cmd[1]):
+                    scan_file = Path(cmd[cmd.index("--output") + 1])
+                    scan_file.write_text("{}", encoding="utf-8")
+                return None
+
+            with patch.object(daily_report.subprocess, "run", side_effect=fake_run):
+                exit_code = daily_report.main(
+                    [
+                        "channel_lists/example.txt",
+                        "--profile",
+                        "profiles/example.md",
+                        "--output-dir",
+                        str(output_dir),
+                        "--state-dir",
+                        str(state_dir),
+                        "--state-read-only",
+                        "--feedback-jsonl",
+                        str(feedback_path),
+                    ]
+                )
+
+        self.assertEqual(exit_code, 0)
+        self.assertNotIn("--state-dir", calls[0])
+        self.assertIn("--state-dir", calls[1])
+        self.assertIn(str(state_dir), calls[1])
+        self.assertIn("--state-read-only", calls[1])
+        self.assertIn("--feedback-jsonl", calls[1])
+        self.assertIn(str(feedback_path), calls[1])
+
 
 if __name__ == "__main__":
     unittest.main()

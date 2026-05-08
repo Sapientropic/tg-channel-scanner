@@ -26,6 +26,12 @@ fields:
     required: true
   - name: market_impact
   - name: urgency
+  - name: entities
+    type: list
+  - name: decision_factors
+    type: list
+  - name: negative_evidence
+  - name: deadline_or_time
   - name: rating
     values: [high, medium, low]
   - name: why

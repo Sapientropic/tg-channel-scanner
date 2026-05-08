@@ -72,6 +72,15 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--redact-contact-info", action="store_true")
     parser.add_argument("--next-scan-note")
     parser.add_argument("--allow-incomplete", action="store_true")
+    parser.add_argument("--state-dir", type=Path, help="Opt-in local item memory directory for report.py.")
+    parser.add_argument("--state-read-only", action="store_true", help="Read item memory without writing updates.")
+    parser.add_argument(
+        "--feedback-jsonl",
+        action="append",
+        type=Path,
+        default=[],
+        help="Import exported report feedback JSONL into report.py. Repeat for multiple files.",
+    )
     agent_cli.add_format_argument(parser)
     return parser
 
@@ -168,6 +177,12 @@ def main(argv: list[str] | None = None) -> int:
         report_cmd.append("--redact-contact-info")
     if args.next_scan_note:
         report_cmd.extend(["--next-scan-note", args.next_scan_note])
+    if args.state_dir:
+        report_cmd.extend(["--state-dir", str(args.state_dir)])
+    if args.state_read_only:
+        report_cmd.append("--state-read-only")
+    for feedback_path in args.feedback_jsonl:
+        report_cmd.extend(["--feedback-jsonl", str(feedback_path)])
     if args.html:
         html_output = report_output.with_suffix(".html")
         report_cmd.extend(["--html-output", str(html_output)])
@@ -214,6 +229,7 @@ def main(argv: list[str] | None = None) -> int:
                     "source_health": scan_data.get("source_health"),
                     "report_stats": report_data.get("stats"),
                     "source_summary": report_data.get("source_summary"),
+                    "state_summary": report_data.get("state_summary"),
                     "extraction_request_path": report_data.get("request_path"),
                     "items_output_path": report_data.get("items_output_path"),
                 }

@@ -887,6 +887,42 @@ html.scroll-motion .item-card.in-scroll-view::after {
   background: var(--c-low-soft);
 }
 
+.decision-state-badge {
+  justify-self: start;
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  max-width: 100%;
+  padding: 3px 8px;
+  border: 2px solid var(--c-border);
+  color: var(--c-ink);
+  background: var(--c-surface-strong);
+  box-shadow: 3px 3px 0 var(--c-shadow-edge);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: uppercase;
+  overflow-wrap: anywhere;
+}
+
+.decision-state-badge.changed,
+.decision-state-badge.new {
+  border-color: var(--c-high-text);
+  color: var(--c-high-text);
+  background: var(--c-high-soft);
+}
+
+.decision-state-badge.expired {
+  border-color: var(--c-vermilion);
+  color: var(--c-vermilion);
+}
+
+.decision-state-badge.seen,
+.decision-state-badge.recurring {
+  color: var(--c-muted);
+  background: var(--c-low-soft);
+}
+
 .job-details,
 .item-details {
   display: grid;
@@ -953,6 +989,33 @@ html.scroll-motion .item-card.in-scroll-view::after {
 .item-notes strong {
   color: var(--c-ink);
   font-weight: 700;
+}
+
+.decision-factors {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: var(--space-xs);
+}
+
+.decision-factor {
+  display: grid;
+  gap: 2px;
+  padding: 8px 10px;
+  border: 1px solid var(--c-border-soft);
+  background: color-mix(in oklch, var(--c-surface-strong) 60%, transparent);
+}
+
+.decision-factor span {
+  color: var(--c-faint);
+  font-size: 0.68rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.decision-factor strong {
+  color: var(--c-ink-soft);
+  font-size: 0.82rem;
+  overflow-wrap: anywhere;
 }
 
 .tag-list {

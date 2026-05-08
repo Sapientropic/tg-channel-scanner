@@ -21,7 +21,7 @@ from typing import Iterable
 from urllib.parse import urlparse
 
 try:
-    from scripts import agent_cli, report_diagnostics, source_registry
+    from scripts import agent_cli, decision_intelligence, report_diagnostics, source_registry, state_store
     from scripts.profile_schema import ProfileConfig, build_json_schema_prompt, parse_profile_config
     from scripts.summarize import (
         positive_int,
@@ -33,7 +33,7 @@ except ModuleNotFoundError:
     _PROJECT_ROOT = str(Path(__file__).resolve().parent.parent)
     if _PROJECT_ROOT not in sys.path:
         sys.path.insert(0, _PROJECT_ROOT)
-    from scripts import agent_cli, report_diagnostics, source_registry
+    from scripts import agent_cli, decision_intelligence, report_diagnostics, source_registry, state_store
     from scripts.profile_schema import ProfileConfig, build_json_schema_prompt, parse_profile_config
     from scripts.summarize import (
         positive_int,
@@ -73,6 +73,8 @@ class ReportResult:
     diagnostics: list[dict] | None = None
     jobs: list[dict] | None = None
     source_summary: dict | None = None
+    state_summary: dict | None = None
+    state: dict | None = None
 
 
 def load_jsonl(path: Path) -> list[dict]:
@@ -339,6 +341,39 @@ def rating_counts(jobs: list[dict]) -> dict[str, int]:
     return counts
 
 
+_STATE_SORT_ORDER = {"changed": 0, "new": 1, "expired": 2, "seen": 3, "recurring": 4}
+
+
+def decision_status(item: dict) -> str:
+    state = item.get("decision_state") if isinstance(item, dict) else None
+    if isinstance(state, dict):
+        return str(state.get("status") or "").strip().casefold()
+    return ""
+
+
+def decision_status_label(item: dict) -> str:
+    status = decision_status(item)
+    if not status:
+        return ""
+    return {
+        "new": "New",
+        "seen": "Seen",
+        "changed": "Changed",
+        "recurring": "Recurring",
+        "expired": "Expired",
+    }.get(status, status.replace("_", " ").title())
+
+
+def sort_items_for_report(items: list[dict]) -> list[dict]:
+    return sorted(
+        items,
+        key=lambda item: (
+            _STATE_SORT_ORDER.get(decision_status(item), 9),
+            normalize_key(item.get("why") or ""),
+        ),
+    )
+
+
 def _registry_source_for_channel(registry: dict | None, channel: str) -> dict | None:
     lookup = source_registry.source_lookup_by_channel(registry)
     return lookup.get(channel) or lookup.get(channel.casefold())
@@ -568,6 +603,7 @@ def render_job(job: dict, index: int, profile_config: ProfileConfig | None = Non
 
     rating = normalize_rating(job.get("rating"))
     action = action_for_rating(job, rating, profile_config)
+    state_label = decision_status_label(job)
 
     # Build table rows from profile fields (custom) or hardcoded (job default)
     if profile_config and profile_config.mode.mode != "job":
@@ -581,7 +617,8 @@ def render_job(job: dict, index: int, profile_config: ProfileConfig | None = Non
                 val = contact_value
             elif f.name == "source":
                 val = sources
-            table_rows.append(f"| **{f.name.title()}** | {table_value(val)} |")
+            label = "Negative evidence" if f.name == "negative_evidence" else f.name.replace("_", " ").title()
+            table_rows.append(f"| **{label}** | {table_value(val)} |")
         table_block = "\n".join(table_rows) or "| **Item** | See details above |"
     else:
         table_block = f"""| **Company** | {table_value(job.get("company"))} |
@@ -590,6 +627,13 @@ def render_job(job: dict, index: int, profile_config: ProfileConfig | None = Non
 | **Salary** | {table_value(job.get("salary"))} |
 | **Contact** | {table_value(contact_value)} |
 | **Source** | {table_value(sources)} |"""
+    state_block = f"\n**Decision state: {state_label}**\n" if state_label else ""
+    negative_evidence = job.get("negative_evidence")
+    negative_block = (
+        f"\n**Negative evidence**: {table_value(negative_evidence)}\n"
+        if negative_evidence and not (profile_config and profile_config.mode.mode != "job")
+        else ""
+    )
 
     return f"""### {index}. {title}
 
@@ -606,6 +650,7 @@ def render_job(job: dict, index: int, profile_config: ProfileConfig | None = Non
 {bullet_list(job.get("concerns") or [])}
 
 **Action**: **{action}**
+{state_block}{negative_block}
 """
 
 
@@ -630,9 +675,24 @@ def build_report(
     considered_message_count: int | None = None,
     profile_config: ProfileConfig | None = None,
     source_registry: dict | None = None,
+    state: dict | None = None,
+    feedback_entries: list[dict] | None = None,
+    state_observed_at: str | None = None,
 ) -> ReportResult:
     dedup_fields = profile_config.mode.dedup_fields if profile_config else None
     jobs, duplicates_removed = deduplicate_jobs(raw_jobs, messages, dedup_fields)
+    state_summary = None
+    if state is not None:
+        observed_at = state_observed_at or (str(meta.get("scan_date")) if meta and meta.get("scan_date") else None)
+        jobs, state, state_summary = decision_intelligence.enrich_items(
+            jobs,
+            profile=profile,
+            profile_config=profile_config or parse_profile_config(profile),
+            state=state,
+            feedback_entries=feedback_entries or [],
+            observed_at=observed_at,
+            source_registry=source_registry,
+        )
     diagnostics = report_diagnostics.build_diagnostics(
         messages=messages,
         raw_items=raw_jobs,
@@ -677,9 +737,9 @@ def build_report(
     labels = profile_config.labels if profile_config else None
     is_job = (profile_config.mode.mode == "job") if profile_config else True
 
-    high_jobs = [job for job in jobs if normalize_rating(job.get("rating")) == "high"]
-    medium_jobs = [job for job in jobs if normalize_rating(job.get("rating")) == "medium"]
-    low_jobs = [job for job in jobs if normalize_rating(job.get("rating")) == "low"]
+    high_jobs = sort_items_for_report([job for job in jobs if normalize_rating(job.get("rating")) == "high"])
+    medium_jobs = sort_items_for_report([job for job in jobs if normalize_rating(job.get("rating")) == "medium"])
+    low_jobs = sort_items_for_report([job for job in jobs if normalize_rating(job.get("rating")) == "low"])
 
     high_section, next_index = render_group(
         (labels or _default_labels()).section_high, high_jobs, 1, profile_config
@@ -800,6 +860,8 @@ something that should have appeared.
         diagnostics=diagnostics,
         jobs=jobs,
         source_summary=build_source_summary(jobs, messages, meta, source_registry),
+        state_summary=state_summary,
+        state=state,
     )
 
 
@@ -1389,6 +1451,15 @@ def build_parser() -> argparse.ArgumentParser:
         help="Write agent_extraction_request_v1 JSON here when --extractor agent is used.",
     )
     parser.add_argument("--next-scan-note", help="Optional footer note, e.g. 'Next scan scheduled for tomorrow.'")
+    parser.add_argument("--state-dir", type=Path, help="Opt-in local item memory directory.")
+    parser.add_argument("--state-read-only", action="store_true", help="Read state without writing updates.")
+    parser.add_argument(
+        "--feedback-jsonl",
+        action="append",
+        type=Path,
+        default=[],
+        help="Import exported tgcs-feedback-v1 JSONL. Repeat for multiple files.",
+    )
     agent_cli.add_format_argument(parser)
     return parser
 
@@ -1434,6 +1505,31 @@ def main(argv: list[str] | None = None, *, extract_jobs_override=None) -> int:
                 message=str(exc),
                 retryable=False,
                 next_step="Run source_registry.py validate and fix the registry.",
+            )
+            return agent_cli.EXIT_VALIDATION
+
+    local_state = None
+    feedback_entries: list[dict] = []
+    if args.feedback_jsonl and not args.state_dir:
+        agent_cli.emit_error(
+            args,
+            code="state_dir_required",
+            message="--feedback-jsonl requires --state-dir so feedback has a local memory target.",
+            retryable=False,
+            next_step="Pass --state-dir .tgcs/state or omit --feedback-jsonl.",
+        )
+        return agent_cli.EXIT_VALIDATION
+    if args.state_dir:
+        try:
+            local_state = state_store.load_item_memory(args.state_dir)
+            feedback_entries = state_store.load_feedback_jsonl(args.feedback_jsonl)
+        except state_store.StateStoreError as exc:
+            agent_cli.emit_error(
+                args,
+                code="state_invalid",
+                message=str(exc),
+                retryable=False,
+                next_step="Fix or remove the local state/feedback file, then rerun report.py.",
             )
             return agent_cli.EXIT_VALIDATION
 
@@ -1569,6 +1665,8 @@ def main(argv: list[str] | None = None, *, extract_jobs_override=None) -> int:
         considered_message_count=min(len(messages), args.max_messages),
         profile_config=profile_config,
         source_registry=source_registry_payload,
+        state=local_state,
+        feedback_entries=feedback_entries,
     )
 
     markdown_path = Path(args.output) if args.output and not args.html else None
@@ -1596,6 +1694,18 @@ def main(argv: list[str] | None = None, *, extract_jobs_override=None) -> int:
             args.html_output.write_text(html_output, encoding="utf-8")
             html_path = args.html_output
             print(f"HTML report saved to {args.html_output}", file=sys.stderr)
+    if args.state_dir and result.state is not None and not args.state_read_only:
+        try:
+            state_store.save_item_memory(args.state_dir, result.state)
+        except state_store.StateStoreError as exc:
+            agent_cli.emit_error(
+                args,
+                code="state_write_failed",
+                message=str(exc),
+                retryable=True,
+                next_step="Check local state directory permissions and rerun report.py.",
+            )
+            return agent_cli.EXIT_RUNTIME
     if agent_cli.is_json_format(args):
         data = {
             "input_path": str(args.input),
@@ -1604,6 +1714,8 @@ def main(argv: list[str] | None = None, *, extract_jobs_override=None) -> int:
             "stats": result.stats,
             "diagnostics": result.diagnostics,
             "source_summary": result.source_summary,
+            "state_summary": result.state_summary,
+            "items": result.jobs or [],
         }
         if not args.output and not args.html and not args.html_output:
             data["markdown"] = result.markdown
@@ -1889,6 +2001,33 @@ def _render_feedback_panel() -> str:
   </section>"""
 
 
+def _decision_badge(item: dict) -> str:
+    label = decision_status_label(item)
+    status = decision_status(item)
+    if not label:
+        return ""
+    return f'<span class="decision-state-badge {status}">{_esc(label)}</span>'
+
+
+def _decision_explanation_html(item: dict) -> str:
+    state = item.get("decision_state")
+    if not isinstance(state, dict):
+        return ""
+    explanations = state.get("explanations") if isinstance(state.get("explanations"), dict) else {}
+    rows = []
+    for key in ("novelty", "match_confidence", "urgency", "source_priority", "negative_evidence"):
+        value = explanations.get(key)
+        if value in (None, "", []):
+            continue
+        label = key.replace("_", " ").title()
+        rows.append(
+            f'<div class="decision-factor"><span>{_esc(label)}</span><strong>{_esc(table_value(value))}</strong></div>'
+        )
+    if not rows:
+        return ""
+    return f'<div class="decision-factors">{"".join(rows)}</div>'
+
+
 def _render_generic_card(
     item: dict,
     index: int,
@@ -1973,8 +2112,10 @@ def _render_generic_card(
         </div>
         <span class="item-action {rating}">{_esc(action)}</span>
       </div>
+      {_decision_badge(item)}
       {detail_block_html}
       <div class="item-notes"><strong>Why:</strong> {_esc(why)}</div>
+      {_decision_explanation_html(item)}
       {f'<ul class="tag-list">{tags}</ul>' if stack else ''}
       {f'<ul class="concern-list">{concern_items}</ul>' if concerns else ''}
       {raw_section}
@@ -2066,6 +2207,7 @@ def _render_job_card(
         </div>
         <span class="job-action {rating}">{_esc(action)}</span>
       </div>
+      {_decision_badge(job)}
       <div class="job-details">
         <div class="job-detail"><span class="job-detail-key">Location</span><span class="job-detail-value">{_esc(location)}</span></div>
         <div class="job-detail"><span class="job-detail-key">Salary</span><span class="job-detail-value">{_esc(salary)}</span></div>
@@ -2073,6 +2215,7 @@ def _render_job_card(
         <div class="job-detail"><span class="job-detail-key">Source</span><span class="job-detail-value">{_source_links(sources)}</span></div>
       </div>
       <div class="job-extras"><strong>Why:</strong> {_esc(why)}</div>
+      {_decision_explanation_html(job)}
       {f'<ul class="tag-list">{tags}</ul>' if stack else ''}
       {f'<ul class="concern-list">{concern_items}</ul>' if concerns else ''}
       {raw_section}{origin_line}
@@ -2109,9 +2252,9 @@ def render_html(
 
     stats = result.stats
 
-    high_jobs = [j for j in _get_jobs_from_result(result) if normalize_rating(j.get("rating")) == "high"]
-    medium_jobs = [j for j in _get_jobs_from_result(result) if normalize_rating(j.get("rating")) == "medium"]
-    low_jobs = [j for j in _get_jobs_from_result(result) if normalize_rating(j.get("rating")) == "low"]
+    high_jobs = sort_items_for_report([j for j in _get_jobs_from_result(result) if normalize_rating(j.get("rating")) == "high"])
+    medium_jobs = sort_items_for_report([j for j in _get_jobs_from_result(result) if normalize_rating(j.get("rating")) == "medium"])
+    low_jobs = sort_items_for_report([j for j in _get_jobs_from_result(result) if normalize_rating(j.get("rating")) == "low"])
 
     sections = []
     idx = 1
