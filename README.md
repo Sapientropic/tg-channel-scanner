@@ -72,9 +72,10 @@ On Windows, open the app-style local dashboard first:
 
 The first launch creates the local Python environment, initializes the jobs
 starter workspace, builds dashboard assets when Node/npm is available, and opens
-Signal Desk on `127.0.0.1`. After that, use the `Start` tab for setup, Telegram
-login, demo runs, source checks, first dry-run scans, feedback export, and
-schedule previews.
+Signal Desk on `127.0.0.1`. If 8765 is already a compatible Signal Desk, the
+launcher opens it; if another app is using 8765, Signal Desk tries 8766-8799.
+After that, use the `Start` tab for setup, Telegram login, demo runs, source
+checks, first dry-run scans, feedback export, and schedule previews.
 
 If you prefer the terminal install path:
 
@@ -185,8 +186,9 @@ surface; these commands are the expert/agent fallback:
 Monitor runs write artifacts under `output/runs/<run_id>/`, update a
 `run_manifest_v1`, and store dashboard state in `.tgcs/tgcs.db`. High-priority
 new or changed items become alert candidates and pending review cards. Telegram
-Bot delivery reads `TGCS_TELEGRAM_BOT_TOKEN` from the environment and never
-stores the token in SQLite, manifests, or docs.
+Bot delivery resolves tokens in this order: `TGCS_TELEGRAM_BOT_TOKEN`, then the
+Windows Credential Manager token saved from Signal Desk Settings. Tokens are
+never stored in SQLite, manifests, reports, or docs.
 
 Signal Desk's `Start` tab wraps the safe repo-local setup and dry-run flows as
 guided controls: jobs init, offline demo, doctor, source validation and import,
@@ -197,19 +199,20 @@ Settings notification editor directly instead of asking the user to copy a
 command.
 `Settings` lets a non-CLI user paste Telegram source handles or `t.me` links,
 preview the import, save them into `.tgcs/sources.json`, review saved sources,
-filter saved sources by topic, pause or resume individual channels, edit the
-default Telegram notification chat ID, mute or enable notifications, and run a
-dry-run notification test.
+filter saved sources by topic, page through large source libraries, pause or
+resume individual channels, edit the default Telegram notification chat ID,
+save or clear the local bot token on Windows, mute or enable notifications, and
+run a dry-run notification test.
 `Profiles` lets the same user pause or re-enable a monitor profile, change its
 scan window, and adjust the per-run item limit from the Desk before the next
 run, without editing profile TOML.
 Signal Desk hides copyable commands behind troubleshooting details instead of
 making CLI copy the primary action. The only Desk-created system schedule is
 the confirmed Windows Task Scheduler dry-run task for `jobs-fast`; the Desk
-status check only queries whether that fixed task exists. Live delivery
-schedules, bot tokens, sessions, and raw Telegram messages remain
-guarded human-owned boundaries. Tokens, sessions, and raw Telegram messages are
-never echoed into the UI.
+status check only queries whether that fixed task exists. Live schedules,
+Telegram sessions, and raw Telegram messages remain guarded human-owned
+boundaries. Non-Windows token keychain support is not claimed in this alpha.
+Tokens, sessions, and raw Telegram messages are never echoed into the UI.
 
 The built-in `jobs-fast` monitor keeps developer opportunity alerts separate from the daily audit
 report. It scans a 2-hour catch-up window, but only interrupts for high-priority

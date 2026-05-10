@@ -129,14 +129,20 @@ profile remains `market-news`.
 merges them into existing matching sources; use `--topic jobs` before running
 the `jobs-fast` profile against a topic-filtered registry.
 `tgcs dashboard` serves the local Signal Desk dashboard and auto-builds the default
-`dashboard/dist` assets when they are missing. `--no-build` skips this for
-packaged/offline environments or custom static asset handling. `--open` opens
-Signal Desk in the default browser after the server starts. On Windows,
-`Signal Desk.bat` is the no-command-line launcher for first setup and repeated
-use.
+`dashboard/dist` assets when they are missing. When `--port` is omitted, it
+uses `/api/desk/health` to reuse an existing compatible Signal Desk on 8765 or
+auto-select the next free port through 8799. An explicit `--port` is strict and
+fails with a human-readable error when occupied. `--no-build` skips asset
+building for packaged/offline environments or custom static asset handling.
+`--open` opens Signal Desk in the default browser after the server starts. On
+Windows, `Signal Desk.bat` is the no-command-line launcher for first setup and
+repeated use.
 Signal Desk `Start` is the primary human surface. It exposes a small dashboard
 action API for human-friendly wrappers around fixed local commands:
 
+- `GET /api/desk/health` returns `desk_health_v1` with app id, version, URL,
+  and capability names. Launchers use it only to identify compatible local
+  instances; it is not an agent execution contract.
 - `GET /api/desk/actions` returns `desk_actions_v1`.
 - `POST /api/desk/actions/<action_id>/run` returns `desk_action_result_v1`.
 - Action IDs are server-side allowlist entries; request bodies are not command
@@ -154,6 +160,13 @@ action API for human-friendly wrappers around fixed local commands:
   `/api/desk/telegram-credentials`, `/api/desk/telegram-login/send-code`,
   `/api/desk/telegram-login/verify-code`, and
   `/api/desk/telegram-login/cancel`.
+- Dedicated notification token endpoints handle bot token presence without ever
+  returning the token: `GET /api/desk/notification-token/status` returns
+  configured/source/update metadata, and `POST /api/desk/notification-token`
+  accepts only `{ "token": "..." }` or `{ "clear": true }`. Mutation requires
+  loopback access. Windows alpha stores the token in Windows Credential Manager;
+  non-Windows keychain support is `[⚠️ 需确认]` and remains an expert/env
+  boundary.
 - Dedicated notification target endpoints handle the default Telegram Bot target
   without accepting command strings or tokens:
   `/api/desk/delivery-targets/telegram-bot-default` saves `chat_id/enabled`,
@@ -181,7 +194,7 @@ action API for human-friendly wrappers around fixed local commands:
   registry, and returns the refreshed source list. It does not accept registry
   paths, commands, argv, tokens, or raw Telegram message data.
 - Live delivery, live scheduler installation, non-Windows scheduler
-  installation, token/session access, and raw Telegram message operations return
+  installation, session access, and raw Telegram message operations return
   guarded preview / `needs_human` or remain outside the action API.
 - Sensitive Start endpoints require loopback access; non-loopback clients are
   blocked from running Desk actions, Telegram setup/login, notification target
@@ -573,14 +586,16 @@ relative; external input paths are reduced to file names, with short hash
 suffixes only when duplicate basenames would collide. They must not copy raw
 Telegram message text or contact handles.
 
-Telegram Bot delivery reads the token from `TGCS_TELEGRAM_BOT_TOKEN`. Use
-`--delivery-mode dry-run` for tests and `--delivery-mode live` only when the
-target chat id and environment token are intentionally configured.
+Telegram Bot delivery resolves the token from `TGCS_TELEGRAM_BOT_TOKEN` first,
+then from the Windows Credential Manager entry saved by Signal Desk Settings.
+Use `--delivery-mode dry-run` for tests and `--delivery-mode live` only when the
+target chat id and token are intentionally configured.
 Signal Desk `Settings` can save the default target `chat_id` and enabled/muted
 state to local SQLite for non-CLI users. Monitor runs merge this Desk override
 before writing targets back to SQLite, so a saved Desk target is not overwritten
-by `.tgcs/profiles.toml` defaults. Signal Desk never accepts or persists a bot
-token; live token setup remains a guarded human-owned boundary in this slice.
+by `.tgcs/profiles.toml` defaults. Signal Desk may save or clear the bot token
+only through the local credential store API and never echoes token text in
+responses, SQLite, manifests, reports, or docs.
 
 Signal Desk `Settings` can also import sources from pasted text. The browser
 body is limited to `sources` and `topic`; source registry paths are fixed to
