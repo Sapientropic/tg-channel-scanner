@@ -1,0 +1,197 @@
+.feedback-export-row {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.feedback-breakdown {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: var(--badge-weight);
+  text-transform: uppercase;
+}
+
+.feedback-breakdown span {
+  padding: 4px 7px;
+  border: 1px solid var(--wash-paper-16);
+  background: var(--wash-paper-6);
+}
+
+.feedback-breakdown span.muted {
+  color: color-mix(in oklch, var(--muted) 72%, transparent);
+}
+
+.feedback-next-action {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid color-mix(in oklch, var(--signal-medium) 28%, transparent);
+  background: color-mix(in oklch, var(--signal-medium) 8%, transparent);
+}
+
+.feedback-next-action strong,
+.feedback-next-action small {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.feedback-next-action strong {
+  color: var(--paper);
+  font-size: 14px;
+  line-height: 1.2;
+}
+
+.feedback-next-action small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: var(--badge-weight);
+  line-height: 1.4;
+}
+
+.feedback-scope-note {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  padding: 9px;
+  border: 1px solid color-mix(in oklch, var(--signal-high) 20%, transparent);
+  background: color-mix(in oklch, var(--signal-high) 7%, transparent);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: var(--badge-weight);
+  line-height: 1.45;
+}
+
+.feedback-scope-note span,
+.feedback-scope-note small {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.feedback-scope-note small {
+  color: var(--amber);
+  font-size: 11px;
+  font-weight: var(--badge-weight);
+  text-transform: uppercase;
+}
+
+.feedback-flow {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.feedback-flow span {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  padding: 9px;
+  border: 1px solid var(--wash-paper-14);
+  background: var(--wash-paper-6);
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: var(--badge-weight);
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.feedback-flow strong {
+  color: var(--paper);
+  font-family: var(--font-display);
+  font-size: 28px;
+  line-height: 0.9;
+}
+
+.feedback-impact-list {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+}
+
+.feedback-impact {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid var(--wash-paper-14);
+  background: var(--wash-paper-5);
+}
+
+.feedback-impact.ready,
+.feedback-impact.applied {
+  border-color: color-mix(in oklch, var(--signal-high) 32%, transparent);
+}
+
+.feedback-impact.pending {
+  border-color: color-mix(in oklch, var(--signal-medium) 36%, transparent);
+}
+
+.feedback-impact.reverted,
+.feedback-impact.missing {
+  border-color: color-mix(in oklch, var(--signal-danger) 32%, transparent);
+}
+
+.feedback-impact span,
+.feedback-impact strong,
+.feedback-impact small {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.feedback-impact span {
+  color: var(--amber);
+  font-size: 10px;
+  font-weight: var(--badge-weight);
+  line-height: 1.1;
+  text-transform: uppercase;
+}
+
+.feedback-impact strong {
+  color: var(--paper);
+  font-size: 12px;
+  line-height: 1.25;
+}
+
+.feedback-impact small {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: var(--badge-weight);
+  line-height: 1.25;
+  text-transform: uppercase;
+}
+
+.list-overflow-note {
+  min-width: 0;
+  padding: 8px;
+  border: 1px dashed var(--wash-paper-18);
+  background: var(--wash-paper-5);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: var(--badge-weight);
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+  text-transform: uppercase;
+}
+
+.feedback-export-row .text-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.feedback-export-row .artifact-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 34px;
+  padding: 8px;
+  border: 1px solid color-mix(in oklch, var(--signal-high) 24%, transparent);
+  background: color-mix(in oklch, var(--signal-high) 8%, transparent);
+  color: var(--signal-high);
+  font-size: 12px;
+  font-weight: var(--badge-weight);
+  text-transform: uppercase;
+}
+

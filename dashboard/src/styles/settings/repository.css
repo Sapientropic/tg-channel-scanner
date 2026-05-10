@@ -1,0 +1,116 @@
+
+
+.repository-toolbar {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 8px;
+  align-items: start;
+}
+
+.repository-panel {
+  margin-top: 14px;
+  border-color: color-mix(in oklch, var(--signal-danger) 30%, var(--line));
+  background:
+    linear-gradient(135deg, color-mix(in oklch, var(--signal-danger) 5%, transparent) 0 12px, transparent 12px 24px),
+    color-mix(in oklch, var(--ink) 94%, transparent);
+  background-size: 24px 24px, auto;
+}
+
+.repository-panel .panel-title {
+  color: color-mix(in oklch, var(--signal-danger) 32%, var(--paper));
+}
+
+.status-line {
+  display: grid;
+  grid-template-columns: 0.78fr minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  min-height: 30px;
+  padding: 0 8px;
+  border: 1px solid var(--wash-paper-11);
+  background: var(--wash-paper-5);
+}
+
+.status-line span {
+  color: var(--muted);
+  font-size: 11px;
+  text-transform: uppercase;
+}
+
+.status-line strong {
+  min-width: 0;
+  color: var(--paper);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+  text-align: right;
+}
+
+.git-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 0;
+}
+
+.git-actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 36px;
+  border: 1px solid var(--line);
+  border-radius: 0;
+  background: var(--paper);
+  color: var(--ink);
+  box-shadow: var(--shadow-hard);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: var(--badge-weight);
+  transition:
+    transform 140ms ease,
+    box-shadow 140ms ease,
+    opacity 140ms ease;
+}
+
+.git-actions button:hover:not(:disabled) {
+  transform: translate(1px, 1px);
+  box-shadow: var(--shadow-hard);
+}
+
+.git-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
+.git-actions .danger-action {
+  border-color: color-mix(in oklch, var(--signal-danger) 42%, var(--line));
+  background: var(--tone-danger-bg);
+  color: var(--tone-danger-text);
+}
+
+.git-message {
+  grid-column: 1 / -1;
+  margin: 2px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: var(--badge-weight);
+  line-height: 1.45;
+}
+
+.git-message.behind {
+  color: var(--amber);
+}
+
+.git-message.fetch_failed,
+.git-message.diverged {
+  color: var(--rust);
+}
+
+.git-message.up_to_date {
+  color: var(--teal);
+}
+
+.git-message.unchecked {
+  color: var(--muted);
+}
+

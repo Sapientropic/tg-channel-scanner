@@ -123,6 +123,20 @@ export type DeskSourcesResult = {
   sources: DeskSource[];
 };
 
+export type DeskNotificationTokenStatus = {
+  schema_version?: "desk_notification_token_status_v1";
+  configured: boolean;
+  source: string;
+  updated_at?: string | null;
+  env_configured: boolean;
+  local_store_supported: boolean;
+  local_store_configured: boolean;
+  can_save: boolean;
+  can_clear: boolean;
+  platform: string;
+  detail: string;
+};
+
 export type DashboardNextAction = {
   label?: string;
   detail?: string;

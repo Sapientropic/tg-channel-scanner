@@ -2,6 +2,7 @@ import {
   sanitizeDashboardState,
   sanitizeDeskActions,
   sanitizeDeskActionResult,
+  sanitizeDeskNotificationTokenStatus,
   sanitizeDeskSchedulerStatus,
   sanitizeDeskSourcesResult,
   sanitizeDeskTelegramStatus,
@@ -14,6 +15,7 @@ import type {
   DashboardState,
   DeskAction,
   DeskActionResult,
+  DeskNotificationTokenStatus,
   DeskSchedulerStatus,
   DeskSourcesResult,
   DeskTelegramStatus,
@@ -126,6 +128,34 @@ export async function loadDeskSchedulerStatus(signal?: AbortSignal): Promise<Des
   const result = sanitizeDeskSchedulerStatus(payload.scheduler);
   if (!result) {
     throw new Error("Invalid scheduler status response");
+  }
+  return result;
+}
+
+export async function loadDeskNotificationTokenStatus(signal?: AbortSignal): Promise<DeskNotificationTokenStatus> {
+  const response = await fetch("/api/desk/notification-token/status", { signal });
+  const payload = await readJson(response);
+  const result = sanitizeDeskNotificationTokenStatus(payload.token);
+  if (!result) {
+    throw new Error("Invalid notification token response");
+  }
+  return result;
+}
+
+export async function saveDeskNotificationToken(token: string): Promise<DeskNotificationTokenStatus> {
+  const payload = await postJson("/api/desk/notification-token", { token });
+  const result = sanitizeDeskNotificationTokenStatus(payload.token);
+  if (!result) {
+    throw new Error("Invalid notification token response");
+  }
+  return result;
+}
+
+export async function clearDeskNotificationToken(): Promise<DeskNotificationTokenStatus> {
+  const payload = await postJson("/api/desk/notification-token", { clear: true });
+  const result = sanitizeDeskNotificationTokenStatus(payload.token);
+  if (!result) {
+    throw new Error("Invalid notification token response");
   }
   return result;
 }

@@ -10,9 +10,11 @@ import {
 import {
   applyProfilePatch,
   checkGitUpdates as checkGitUpdatesRequest,
+  clearDeskNotificationToken as clearDeskNotificationTokenRequest,
   errorMessage,
   exportFeedback as exportFeedbackRequest,
   importDeskSources,
+  loadDeskNotificationTokenStatus,
   loadDeskSources,
   loadDeskSchedulerStatus,
   postReviewCardAction,
@@ -20,6 +22,7 @@ import {
   pullLatestGit,
   revertProfilePatch,
   saveDeskDeliveryTarget,
+  saveDeskNotificationToken as saveDeskNotificationTokenRequest,
   setDeskSourceEnabled as setDeskSourceEnabledRequest,
   setDeskSourceTopics as setDeskSourceTopicsRequest,
   setProfileAlertMode,
@@ -48,6 +51,7 @@ import { useDeskActions } from "./hooks/use-desk-actions";
 import { useDeskTelegram } from "./hooks/use-desk-telegram";
 import type {
   DeliveryTestResult,
+  DeskNotificationTokenStatus,
   DeskSchedulerStatus,
   DeskSourcesResult,
   FeedbackExportResult,
@@ -90,6 +94,8 @@ function App() {
   const [gitStatus, setGitStatus] = useState<GitUpdateStatus | null>(null);
   const [feedbackExport, setFeedbackExport] = useState<FeedbackExportResult | null>(null);
   const [deliveryTest, setDeliveryTest] = useState<DeliveryTestResult | null>(null);
+  const [notificationTokenStatus, setNotificationTokenStatus] = useState<DeskNotificationTokenStatus | null>(null);
+  const [notificationTokenError, setNotificationTokenError] = useState<string | null>(null);
   const [sourceImportResult, setSourceImportResult] = useState<SourceImportResult | null>(null);
   const [deskSources, setDeskSources] = useState<DeskSourcesResult | null>(null);
   const [deskSourcesError, setDeskSourcesError] = useState<string | null>(null);
@@ -142,6 +148,21 @@ function App() {
     return () => controller.abort();
   }, []);
 
+  useEffect(() => {
+    const controller = new AbortController();
+    loadDeskNotificationTokenStatus(controller.signal)
+      .then((token) => {
+        setNotificationTokenStatus(token);
+        setNotificationTokenError(null);
+      })
+      .catch((error) => {
+        if (!controller.signal.aborted) {
+          setNotificationTokenError(errorMessage(error));
+        }
+      });
+    return () => controller.abort();
+  }, []);
+
   async function refreshDeskSources() {
     const sources = await loadDeskSources();
     setDeskSources(sources);
@@ -156,11 +177,19 @@ function App() {
     return scheduler;
   }
 
+  async function refreshNotificationTokenStatus() {
+    const token = await loadDeskNotificationTokenStatus();
+    setNotificationTokenStatus(token);
+    setNotificationTokenError(null);
+    return token;
+  }
+
   async function refreshNow() {
     setBusy(true);
     try {
       await refresh();
       await refreshDeskSchedulerStatus().catch((error) => setDeskSchedulerError(errorMessage(error)));
+      await refreshNotificationTokenStatus().catch((error) => setNotificationTokenError(errorMessage(error)));
       setNotice({ tone: "success", text: "State refreshed" });
     } catch (error) {
       setNotice({ tone: "error", text: errorMessage(error) });
@@ -304,6 +333,42 @@ function App() {
       setNotice({ tone: result.ok ? "success" : "error", text: result.detail || result.status });
     } catch (error) {
       setNotice({ tone: "error", text: errorMessage(error) });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function saveNotificationToken(token: string) {
+    setBusy(true);
+    setNotice(null);
+    try {
+      const status = await saveDeskNotificationTokenRequest(token);
+      setNotificationTokenStatus(status);
+      setNotificationTokenError(null);
+      setNotice({ tone: "success", text: "Notification token saved" });
+    } catch (error) {
+      const message = errorMessage(error);
+      setNotificationTokenError(message);
+      setNotice({ tone: "error", text: message });
+      throw error;
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function clearNotificationToken() {
+    setBusy(true);
+    setNotice(null);
+    try {
+      const status = await clearDeskNotificationTokenRequest();
+      setNotificationTokenStatus(status);
+      setNotificationTokenError(null);
+      setNotice({ tone: "success", text: "Saved notification token cleared" });
+    } catch (error) {
+      const message = errorMessage(error);
+      setNotificationTokenError(message);
+      setNotice({ tone: "error", text: message });
+      throw error;
     } finally {
       setBusy(false);
     }
@@ -541,10 +606,14 @@ function App() {
                   feedbackExport={feedbackExport}
                   exportFeedback={exportFeedback}
                   deliveryTest={deliveryTest}
+                  notificationTokenStatus={notificationTokenStatus}
+                  notificationTokenError={notificationTokenError}
                   sourceLibrary={deskSources}
                   sourceLibraryError={deskSourcesError}
                   sourceImportResult={sourceImportResult}
                   saveDeliveryTarget={saveDeliveryTarget}
+                  saveNotificationToken={saveNotificationToken}
+                  clearNotificationToken={clearNotificationToken}
                   testDeliveryTarget={testDeliveryTarget}
                   previewSourceImport={previewSourceImport}
                   importSources={importSources}

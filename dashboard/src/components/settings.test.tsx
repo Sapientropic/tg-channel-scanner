@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { filterDeskSourcesByQuery, sourceTopicsEditState } from "./settings";
+import { SOURCE_LIBRARY_PAGE_SIZE, filterDeskSourcesByQuery, paginatedDeskSources, sourceTopicsEditState } from "./settings";
 import type { DeskSource } from "../domain/types";
 
 function source(overrides: Partial<DeskSource>): DeskSource {
@@ -65,5 +65,14 @@ describe("Settings source topic editor", () => {
       "telegram:remote_jobs",
       "telegram:market_news",
     ]);
+  });
+
+  it("defaults saved source rendering to the first page", () => {
+    const sources = Array.from({ length: SOURCE_LIBRARY_PAGE_SIZE + 3 }, (_, index) =>
+      source({ source_id: `telegram:source_${index}`, label: `Source ${index}`, channel: `source_${index}` }),
+    );
+
+    expect(paginatedDeskSources(sources).map((item) => item.source_id)).toHaveLength(SOURCE_LIBRARY_PAGE_SIZE);
+    expect(paginatedDeskSources(sources, SOURCE_LIBRARY_PAGE_SIZE + 24)).toHaveLength(SOURCE_LIBRARY_PAGE_SIZE + 3);
   });
 });

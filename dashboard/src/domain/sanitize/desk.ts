@@ -1,0 +1,339 @@
+import type {
+  DeskAction,
+  DeskActionResult,
+  DeskNotificationTokenStatus,
+  DeskSchedulerStatus,
+  DeskSource,
+  DeskSourcesResult,
+  DeskTelegramStatus,
+  DeliveryTestResult,
+  FeedbackExportResult,
+  GitUpdateStatus,
+  SourceImportResult,
+} from "../types";
+
+export function sanitizeGitUpdateStatus(value: unknown): GitUpdateStatus | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+  const status = optionalString(value.status);
+  const branch = optionalString(value.branch);
+  if (!status || !branch) {
+    return null;
+  }
+  return {
+    schema_version: "git_update_status_v1",
+    status,
+    message: typeof value.message === "string" ? value.message.trim() : "",
+    branch,
+    upstream: optionalStringOrNull(value.upstream),
+    repo_url: optionalStringOrNull(value.repo_url),
+    head: optionalStringOrNull(value.head),
+    remote_head: optionalStringOrNull(value.remote_head),
+    ahead: nonNegativeIntegerOrDefault(value.ahead, 0),
+    behind: nonNegativeIntegerOrDefault(value.behind, 0),
+    dirty: typeof value.dirty === "boolean" ? value.dirty : false,
+    dirty_count: nonNegativeIntegerOrDefault(value.dirty_count, 0),
+    pull_allowed: typeof value.pull_allowed === "boolean" ? value.pull_allowed : false,
+    checked_at: optionalString(value.checked_at) ?? "",
+  };
+}
+
+export function sanitizeFeedbackExportResult(value: unknown): FeedbackExportResult | null {
+  if (!isRecord(value) || typeof value.output_path !== "string" || !value.output_path.trim()) {
+    return null;
+  }
+  const feedbackCount = value.feedback_count;
+  if (typeof feedbackCount !== "number" || !Number.isInteger(feedbackCount) || feedbackCount < 0) {
+    return null;
+  }
+  return {
+    schema_version: "feedback_export_result_v1",
+    feedback_count: feedbackCount,
+    output_path: value.output_path.trim(),
+  };
+}
+
+export function sanitizeDeskActions(value: unknown): DeskAction[] {
+  const payload = isRecord(value) ? value : {};
+  return sanitizeObjectArray(payload.actions, "desk_actions.actions").flatMap((record, index) => {
+    const actionId = optionalString(record.action_id);
+    const group = optionalString(record.group);
+    const title = optionalString(record.title);
+    const detail = optionalString(record.detail);
+    const runMode = optionalString(record.run_mode);
+    const displayCommand = optionalString(record.display_command);
+    const nextAction = optionalString(record.next_action);
+    if (!actionId || !group || !title || !detail || !runMode || !displayCommand || !nextAction) {
+      console.warn(`[tgcs dashboard schema] desk_actions.actions[${index}] missing required display field`, record);
+      return [];
+    }
+    return [
+      {
+        schema_version: "desk_action_v1",
+        action_id: actionId,
+        group,
+        title,
+        detail,
+        run_mode: runMode,
+        display_command: displayCommand,
+        next_action: nextAction,
+      },
+    ];
+  });
+}
+
+export function sanitizeDeskActionResult(value: unknown): DeskActionResult | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+  const actionId = optionalString(value.action_id);
+  const status = optionalString(value.status);
+  const title = optionalString(value.title);
+  const displayCommand = optionalString(value.display_command);
+  if (!actionId || !status || !title || !displayCommand) {
+    return null;
+  }
+  const exitCode = typeof value.exit_code === "number" && Number.isInteger(value.exit_code) ? value.exit_code : null;
+  return {
+    schema_version: "desk_action_result_v1",
+    action_id: actionId,
+    status,
+    title,
+    detail: optionalString(value.detail) ?? "",
+    display_command: displayCommand,
+    exit_code: exitCode,
+    artifact_path: optionalString(value.artifact_path) ?? "",
+    next_action: optionalString(value.next_action) ?? "",
+    finished_at: optionalString(value.finished_at) ?? "",
+  };
+}
+
+export function sanitizeDeskSchedulerStatus(value: unknown): DeskSchedulerStatus | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+  const status = optionalString(value.status);
+  const taskLabel = optionalString(value.task_label);
+  const detail = optionalString(value.detail);
+  const nextAction = optionalString(value.next_action);
+  const checkedAt = optionalString(value.checked_at);
+  const intervalMinutes =
+    typeof value.interval_minutes === "number" && Number.isInteger(value.interval_minutes)
+      ? Math.max(0, value.interval_minutes)
+      : 0;
+  if (!status || !taskLabel || !detail || !nextAction || !checkedAt) {
+    return null;
+  }
+  return {
+    schema_version: "desk_scheduler_status_v1",
+    available: value.available === true,
+    installed: value.installed === true,
+    status,
+    task_label: taskLabel,
+    interval_minutes: intervalMinutes,
+    detail,
+    next_action: nextAction,
+    checked_at: checkedAt,
+  };
+}
+
+export function sanitizeDeskTelegramStatus(value: unknown): DeskTelegramStatus | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+  const loginState = optionalString(value.login_state);
+  if (!loginState) {
+    return null;
+  }
+  return {
+    schema_version: "desk_telegram_status_v1",
+    credentials_ready: value.credentials_ready === true,
+    session_ready: value.session_ready === true,
+    login_state: loginState,
+    detail: optionalString(value.detail) ?? "",
+    next_step: optionalString(value.next_step) ?? "",
+    config_path: optionalString(value.config_path) ?? "",
+    session_path: optionalString(value.session_path) ?? "",
+  };
+}
+
+export function sanitizeDeskNotificationTokenStatus(value: unknown): DeskNotificationTokenStatus | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+  const source = optionalString(value.source);
+  if (!source) {
+    return null;
+  }
+  return {
+    schema_version: "desk_notification_token_status_v1",
+    configured: value.configured === true,
+    source,
+    updated_at: optionalStringOrNull(value.updated_at),
+    env_configured: value.env_configured === true,
+    local_store_supported: value.local_store_supported === true,
+    local_store_configured: value.local_store_configured === true,
+    can_save: value.can_save === true,
+    can_clear: value.can_clear === true,
+    platform: optionalString(value.platform) ?? "",
+    detail: optionalString(value.detail) ?? "",
+  };
+}
+
+export function sanitizeDeliveryTestResult(value: unknown): DeliveryTestResult | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+  const targetId = optionalString(value.target_id);
+  const targetType = optionalString(value.target_type);
+  const status = optionalString(value.status);
+  if (!targetId || !targetType || !status) {
+    return null;
+  }
+  return {
+    schema_version: "desk_delivery_test_result_v1",
+    target_id: targetId,
+    target_type: targetType,
+    mode: "dry-run",
+    ok: value.ok === true,
+    status,
+    title: optionalString(value.title),
+    detail: optionalString(value.detail),
+    error: optionalString(value.error),
+    finished_at: optionalString(value.finished_at),
+  };
+}
+
+export function sanitizeSourceImportResult(value: unknown): SourceImportResult | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+  const topic = optionalString(value.topic);
+  const registryPath = optionalString(value.registry_path);
+  if (!topic || !registryPath) {
+    return null;
+  }
+  return {
+    schema_version: value.schema_version === "desk_source_import_result_v1" ? value.schema_version : undefined,
+    dry_run: value.dry_run === true,
+    written: value.written === true,
+    topic,
+    added_count: nonNegativeIntegerOrDefault(value.added_count, 0),
+    updated_count: nonNegativeIntegerOrDefault(value.updated_count, 0),
+    unchanged_count: nonNegativeIntegerOrDefault(value.unchanged_count, 0),
+    source_count: nonNegativeIntegerOrDefault(value.source_count, 0),
+    registry_path: registryPath,
+    preview_sources: sanitizeSourceImportPreviewSources(value.preview_sources),
+    preview_truncated_count: nonNegativeIntegerOrDefault(value.preview_truncated_count, 0),
+    title: optionalString(value.title),
+    detail: optionalString(value.detail),
+    next_action: optionalString(value.next_action),
+    finished_at: optionalString(value.finished_at),
+  };
+}
+
+export function sanitizeDeskSourcesResult(value: unknown): DeskSourcesResult | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+  const registryPath = optionalString(value.registry_path);
+  if (!registryPath) {
+    return null;
+  }
+  return {
+    schema_version: value.schema_version === "desk_sources_v1" ? value.schema_version : undefined,
+    source_count: nonNegativeIntegerOrDefault(value.source_count, 0),
+    enabled_count: nonNegativeIntegerOrDefault(value.enabled_count, 0),
+    topics: stringArray(value.topics),
+    registry_path: registryPath,
+    sources: sanitizeDeskSources(value.sources),
+  };
+}
+
+function sanitizeDeskSources(value: unknown): DeskSource[] {
+  return sanitizeObjectArray(value, "desk_sources.sources").flatMap((record, index) => {
+    const sourceId = optionalString(record.source_id);
+    const label = optionalString(record.label);
+    const channel = optionalString(record.channel);
+    if (!sourceId || !label || !channel) {
+      console.warn(`[tgcs dashboard schema] desk_sources.sources[${index}] missing required field`, record);
+      return [];
+    }
+    return [
+      {
+        schema_version: record.schema_version === "desk_source_v1" ? record.schema_version : undefined,
+        source_id: sourceId,
+        label,
+        channel,
+        enabled: record.enabled !== false,
+        topics: stringArray(record.topics),
+        priority: optionalString(record.priority) ?? "normal",
+        scan_window_hours: nonNegativeIntegerOrDefault(record.scan_window_hours, 24),
+      },
+    ];
+  });
+}
+
+function sanitizeSourceImportPreviewSources(value: unknown): SourceImportResult["preview_sources"] {
+  return sanitizeObjectArray(value, "source_import.preview_sources").flatMap((record) => {
+    const label = optionalString(record.label);
+    const sourceId = optionalString(record.source_id);
+    return label && sourceId ? [{ label, source_id: sourceId }] : [];
+  });
+}
+
+function sanitizeObjectArray(value: unknown, scope: string): Record<string, unknown>[] {
+  if (!Array.isArray(value)) {
+    if (value !== undefined && value !== null) {
+      console.warn(`[tgcs dashboard schema] ${scope} expected array`, value);
+    }
+    return [];
+  }
+  return value.flatMap((item, index) => {
+    if (!isRecord(item)) {
+      console.warn(`[tgcs dashboard schema] ${scope}[${index}] expected object`, item);
+      return [];
+    }
+    return [item];
+  });
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function optionalString(value: unknown) {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+  const trimmed = value.trim();
+  return trimmed ? trimmed : undefined;
+}
+
+function optionalStringOrNull(value: unknown) {
+  if (value === null) {
+    return null;
+  }
+  return optionalString(value);
+}
+
+function numberOrDefault(value: unknown, fallback: number) {
+  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+
+function nonNegativeIntegerOrDefault(value: unknown, fallback: number) {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0 ? value : fallback;
+}
+
+function stringArray(value: unknown) {
+  return Array.isArray(value)
+    ? value.flatMap((item) => {
+        if (typeof item !== "string") {
+          return [];
+        }
+        const trimmed = item.trim();
+        return trimmed ? [trimmed] : [];
+      })
+    : [];
+}

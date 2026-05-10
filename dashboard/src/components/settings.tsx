@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
-import { Activity, Bell, CircleDashed, Database, Download, Eye, Pause, Play, Save, ShieldCheck, Upload } from "lucide-react";
+import { Activity, Bell, CircleDashed, Database, Download, Eye, KeyRound, Pause, Play, Save, ShieldCheck, Trash2, Upload } from "lucide-react";
 
 import { InlineEmpty, PanelHeader } from "./common";
 import {
@@ -17,6 +17,7 @@ import { channelDisplayName, formatPercent } from "../domain/format";
 import type {
   DashboardNextAction,
   DashboardState,
+  DeskNotificationTokenStatus,
   DeskSource,
   DeskSourcesResult,
   DeliveryTestResult,
@@ -31,6 +32,7 @@ import type {
 const SOURCE_CARD_LIMIT = 3;
 const SOURCE_HEAT_LIMIT = 72;
 const SOURCE_ACTION_LIMIT = 6;
+export const SOURCE_LIBRARY_PAGE_SIZE = 24;
 const FEEDBACK_IMPACT_LIMIT = 4;
 
 export function SettingsView({
@@ -41,10 +43,14 @@ export function SettingsView({
   feedbackExport,
   exportFeedback,
   deliveryTest,
+  notificationTokenStatus,
+  notificationTokenError,
   sourceLibrary,
   sourceLibraryError,
   sourceImportResult,
   saveDeliveryTarget,
+  saveNotificationToken,
+  clearNotificationToken,
   testDeliveryTarget,
   previewSourceImport,
   importSources,
@@ -61,10 +67,14 @@ export function SettingsView({
   feedbackExport: FeedbackExportResult | null;
   exportFeedback: () => void;
   deliveryTest: DeliveryTestResult | null;
+  notificationTokenStatus: DeskNotificationTokenStatus | null;
+  notificationTokenError: string | null;
   sourceLibrary: DeskSourcesResult | null;
   sourceLibraryError: string | null;
   sourceImportResult: SourceImportResult | null;
   saveDeliveryTarget: (targetId: string, chatId: string, enabled: boolean) => Promise<void>;
+  saveNotificationToken: (token: string) => Promise<void>;
+  clearNotificationToken: () => Promise<void>;
   testDeliveryTarget: (targetId: string, chatId: string) => Promise<void>;
   previewSourceImport: (sources: string, topic: string) => Promise<SourceImportResult>;
   importSources: (sources: string, topic: string) => Promise<SourceImportResult>;
@@ -93,65 +103,178 @@ export function SettingsView({
   }, [focusTarget, onFocusHandled]);
 
   return (
-    <section className="split-section settings-grid" aria-label="Delivery and source settings">
-      <div className="table-section delivery-targets-panel" ref={notificationsPanelRef} tabIndex={-1} aria-label="Notifications">
-        <PanelHeader icon={<Bell size={18} />} title="Notifications" count={targets.length} />
-        {targets.length ? (
-          <div className="delivery-target-list">
-            {targets.map((target) => (
-              <DeliveryTargetEditor
-                busy={busy}
-                key={target.target_id}
-                saveDeliveryTarget={saveDeliveryTarget}
-                target={target}
-                testDeliveryTarget={testDeliveryTarget}
-                testResult={deliveryTest?.target_id === target.target_id ? deliveryTest : null}
-              />
-            ))}
-          </div>
-        ) : (
-          <InlineEmpty title="No notification channels set up" />
-        )}
-      </div>
-      <SourceImportPanel
-        busy={busy}
-        importSources={importSources}
-        previewSourceImport={previewSourceImport}
-        result={sourceImportResult}
-      />
-      <SourceLibraryPanel
-        busy={busy}
-        error={sourceLibraryError}
-        library={sourceLibrary}
-        setSourceEnabled={setSourceEnabled}
-        setSourceTopics={setSourceTopics}
-      />
-      <div className="table-section source-yield-panel">
-        <PanelHeader icon={<Activity size={18} />} title="Yield History" count={sourceStats.length} />
-        {sourceStats.length ? <SourceYieldMap sources={sourceStats} /> : <InlineEmpty title="No source stats yet" />}
-      </div>
-      <div className="table-section feedback-export-panel">
-        <PanelHeader icon={<Download size={18} />} title="Feedback Export" count={exportableCount} />
-        <FeedbackBreakdown summary={feedbackSummary} exportableCount={exportableCount} />
-        {feedbackSummary?.next_action && <FeedbackNextAction action={feedbackSummary.next_action} />}
-        <FeedbackFlow summary={feedbackSummary} />
-        <FeedbackImpactList impacts={feedbackSummary?.recent_impacts ?? []} />
-        <div className="feedback-export-row">
-          <button className="text-button" type="button" onClick={exportFeedback} disabled={busy}>
-            <Download size={15} />
-            <span>{busy ? "Exporting" : "Export feedback file"}</span>
-          </button>
-          <span className="artifact-chip" title="Saved under Feedback exports">
-            Feedback export file
-          </span>
+    <section className="settings-workbench" aria-label="Settings workspace">
+      <section className="settings-section settings-section-notifications" aria-label="Notifications settings">
+        <div className="table-section delivery-targets-panel" ref={notificationsPanelRef} tabIndex={-1} aria-label="Notifications">
+          <PanelHeader icon={<Bell size={18} />} title="Notifications" count={targets.length} />
+          <NotificationTokenPanel
+            busy={busy}
+            clearNotificationToken={clearNotificationToken}
+            error={notificationTokenError}
+            saveNotificationToken={saveNotificationToken}
+            status={notificationTokenStatus}
+          />
+          {targets.length ? (
+            <div className="delivery-target-list">
+              {targets.map((target) => (
+                <DeliveryTargetEditor
+                  busy={busy}
+                  key={target.target_id}
+                  saveDeliveryTarget={saveDeliveryTarget}
+                  target={target}
+                  testDeliveryTarget={testDeliveryTarget}
+                  testResult={deliveryTest?.target_id === target.target_id ? deliveryTest : null}
+                />
+              ))}
+            </div>
+          ) : (
+            <InlineEmpty title="No notification channels set up" />
+          )}
         </div>
-      </div>
-      <div className="table-section source-actions-panel">
-        <PanelHeader icon={<ShieldCheck size={18} />} title="Source Actions" count={sourceInsights.length} />
-        {sourceInsights.length ? <SourceActionGrid insights={sourceInsights} /> : <InlineEmpty title="No source actions yet" />}
-      </div>
+      </section>
+
+      <section className="settings-section settings-section-sources" aria-label="Sources settings">
+        <div className="settings-grid sources-settings-grid">
+          <SourceImportPanel
+            busy={busy}
+            importSources={importSources}
+            previewSourceImport={previewSourceImport}
+            result={sourceImportResult}
+          />
+          <SourceLibraryPanel
+            busy={busy}
+            error={sourceLibraryError}
+            library={sourceLibrary}
+            setSourceEnabled={setSourceEnabled}
+            setSourceTopics={setSourceTopics}
+          />
+        </div>
+        <details className="settings-evidence">
+          <summary>
+            <Activity size={16} />
+            <span>Source evidence</span>
+          </summary>
+          <div className="settings-evidence-grid">
+            <div className="table-section source-yield-panel">
+              <PanelHeader icon={<Activity size={18} />} title="Yield History" count={sourceStats.length} />
+              {sourceStats.length ? <SourceYieldMap sources={sourceStats} /> : <InlineEmpty title="No source stats yet" />}
+            </div>
+            <div className="table-section source-actions-panel">
+              <PanelHeader icon={<ShieldCheck size={18} />} title="Source Actions" count={sourceInsights.length} />
+              {sourceInsights.length ? <SourceActionGrid insights={sourceInsights} /> : <InlineEmpty title="No source actions yet" />}
+            </div>
+          </div>
+        </details>
+      </section>
+
+      <section className="settings-section settings-section-feedback" aria-label="Feedback settings">
+        <div className="table-section feedback-export-panel">
+          <PanelHeader icon={<Download size={18} />} title="Feedback Export" count={exportableCount} />
+          <FeedbackBreakdown summary={feedbackSummary} exportableCount={exportableCount} />
+          {feedbackSummary?.next_action && <FeedbackNextAction action={feedbackSummary.next_action} />}
+          <FeedbackFlow summary={feedbackSummary} />
+          <FeedbackImpactList impacts={feedbackSummary?.recent_impacts ?? []} />
+          <div className="feedback-export-row">
+            <button className="text-button" type="button" onClick={exportFeedback} disabled={busy}>
+              <Download size={15} />
+              <span>{busy ? "Exporting" : "Export feedback file"}</span>
+            </button>
+            <span className="artifact-chip" title="Saved under Feedback exports">
+              Feedback export file
+            </span>
+          </div>
+        </div>
+      </section>
     </section>
   );
+}
+
+function NotificationTokenPanel({
+  status,
+  error,
+  busy,
+  saveNotificationToken,
+  clearNotificationToken,
+}: {
+  status: DeskNotificationTokenStatus | null;
+  error: string | null;
+  busy: boolean;
+  saveNotificationToken: (token: string) => Promise<void>;
+  clearNotificationToken: () => Promise<void>;
+}) {
+  const [token, setToken] = useState("");
+  const configured = status?.configured === true;
+  const sourceLabel = notificationTokenSourceLabel(status?.source);
+  const canSave = status?.can_save !== false;
+  const canClear = status?.can_clear === true;
+  return (
+    <form
+      className="notification-token-panel"
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (!token.trim() || !canSave) {
+          return;
+        }
+        void saveNotificationToken(token).then(() => setToken(""));
+      }}
+    >
+      <div className="notification-token-head">
+        <KeyRound size={16} />
+        <div>
+          <strong>Telegram bot token</strong>
+          <small>{status ? `${configured ? "Configured" : "Missing"} · ${sourceLabel}` : "Checking token status"}</small>
+        </div>
+        <span className={configured ? "status enabled" : "status disabled"}>{configured ? "Ready" : "Needed"}</span>
+      </div>
+      <label className="delivery-field">
+        <span>Bot token</span>
+        <input
+          autoComplete="new-password"
+          disabled={busy || !canSave}
+          onChange={(event) => setToken(event.target.value)}
+          placeholder={canSave ? "123456:ABC..." : "Windows Credential Manager unavailable"}
+          type="password"
+          value={token}
+        />
+      </label>
+      <p className="delivery-note">
+        Token text is never shown again. Environment variables still take priority; dry-run tests do not send Telegram messages.
+      </p>
+      {(status?.detail || error) && (
+        <p className={error ? "delivery-token-warning" : "delivery-note"} role={error ? "alert" : undefined}>
+          {error || status?.detail}
+        </p>
+      )}
+      <div className="delivery-actions">
+        <button className="text-button" disabled={busy || !canSave || !token.trim()} type="submit">
+          <Save size={15} />
+          <span>{busy ? "Saving" : "Save token"}</span>
+        </button>
+        <button
+          className="text-button secondary"
+          disabled={busy || !canClear}
+          onClick={() => void clearNotificationToken()}
+          type="button"
+        >
+          <Trash2 size={15} />
+          <span>Clear saved token</span>
+        </button>
+      </div>
+    </form>
+  );
+}
+
+function notificationTokenSourceLabel(source?: string) {
+  if (source === "environment") {
+    return "environment override";
+  }
+  if (source === "windows_credential_manager") {
+    return "Windows Credential Manager";
+  }
+  if (source === "credential_error") {
+    return "credential store error";
+  }
+  return "not configured";
 }
 
 function SourceLibraryPanel({
@@ -171,14 +294,20 @@ function SourceLibraryPanel({
   const isLoading = !library && !error;
   const [query, setQuery] = useState("");
   const [selectedTopic, setSelectedTopic] = useState("");
+  const [visibleCount, setVisibleCount] = useState(SOURCE_LIBRARY_PAGE_SIZE);
   const filteredSources = filterDeskSourcesByQuery(sources, query, selectedTopic);
-  const topicPreview = library?.topics.slice(0, 5) ?? [];
+  const visibleSources = paginatedDeskSources(filteredSources, visibleCount);
+  const hiddenSourceCount = Math.max(0, filteredSources.length - visibleSources.length);
+  const topicPreview = library?.topics.slice(0, 12) ?? [];
   const hiddenTopicCount = Math.max(0, (library?.topics.length ?? 0) - topicPreview.length);
   useEffect(() => {
     if (selectedTopic && !sources.some((source) => source.topics.includes(selectedTopic))) {
       setSelectedTopic("");
     }
   }, [selectedTopic, sources]);
+  useEffect(() => {
+    setVisibleCount(SOURCE_LIBRARY_PAGE_SIZE);
+  }, [query, selectedTopic, library?.source_count]);
   return (
     <div className="table-section source-library-panel">
       <PanelHeader icon={<Database size={18} />} title="Saved Sources" count={library?.source_count} />
@@ -229,7 +358,7 @@ function SourceLibraryPanel({
             value={query}
           />
           <small aria-live="polite">
-            {filteredSources.length} of {sources.length} shown
+            {visibleSources.length} of {filteredSources.length} shown
           </small>
         </label>
       )}
@@ -237,7 +366,7 @@ function SourceLibraryPanel({
         <InlineEmpty title="Loading saved sources" />
       ) : sources.length ? (
         <div className="source-library-list">
-          {filteredSources.map((source) => (
+          {visibleSources.map((source) => (
             <SourceLibraryRow
               busy={busy}
               key={source.source_id}
@@ -247,6 +376,16 @@ function SourceLibraryPanel({
             />
           ))}
           {!filteredSources.length && <InlineEmpty title="No saved source matches" />}
+          {hiddenSourceCount > 0 && (
+            <button
+              className="text-button secondary source-library-more"
+              onClick={() => setVisibleCount((count) => count + SOURCE_LIBRARY_PAGE_SIZE)}
+              type="button"
+            >
+              <span>Load 24 more</span>
+              <small>{hiddenSourceCount} remaining</small>
+            </button>
+          )}
         </div>
       ) : (
         !error && <InlineEmpty title="No saved sources yet" />
@@ -276,6 +415,10 @@ export function filterDeskSourcesByQuery(sources: DeskSource[], query: string, s
       .toLowerCase()
       .includes(normalizedQuery);
   });
+}
+
+export function paginatedDeskSources(sources: DeskSource[], visibleCount = SOURCE_LIBRARY_PAGE_SIZE) {
+  return sources.slice(0, Math.max(0, visibleCount));
 }
 
 function SourceLibraryRow({

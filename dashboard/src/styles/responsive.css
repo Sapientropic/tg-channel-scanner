@@ -109,6 +109,17 @@
       "yield";
   }
 
+  .sources-settings-grid,
+  .settings-evidence-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .sources-settings-grid {
+    grid-template-areas:
+      "source-import"
+      "source-library";
+  }
+
   .pulse-panel {
     border-right: 0;
     border-bottom: 1px solid var(--line);
@@ -466,6 +477,15 @@
 
   .source-library-side .text-button {
     width: 100%;
+  }
+
+  .notification-token-head {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .notification-token-head .status {
+    justify-self: start;
+    grid-column: 2;
   }
 }
 
