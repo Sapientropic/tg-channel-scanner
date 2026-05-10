@@ -188,6 +188,10 @@
   overflow-wrap: anywhere;
 }
 
+.mobile-action-strip {
+  display: none;
+}
+
 
 .reason,
 .note-line {
@@ -304,6 +308,7 @@ a.source-chip:focus-visible {
 }
 
 .action-cluster button,
+.mobile-action-strip button,
 .follow-up-submit {
   display: inline-flex;
   align-items: center;
@@ -315,6 +320,7 @@ a.source-chip:focus-visible {
 }
 
 .action-cluster button:hover,
+.mobile-action-strip button:hover,
 .follow-up-submit:hover {
   background: var(--surface-warm-strong);
 }

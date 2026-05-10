@@ -142,3 +142,27 @@ The dashboard has a strong visual language, but Settings currently fails the ord
 - Hook enforcement: manual.
 - Artifact hygiene: screenshots and `visual-audit.json` retained under the timestamped evidence folder only.
 - Next: UX slice 4, mobile Review density and long-title scan.
+
+## Iteration 4 - Mobile Review Action Visibility
+
+- Target: make the first Review card actionable within the mobile first viewport instead of making the user scroll through supporting detail first.
+- Changes:
+  - `dashboard/src/components/inbox.tsx`: added a mobile quick-action strip directly under the card title and rating.
+  - `dashboard/src/styles/inbox.css` and `dashboard/src/styles/responsive.css`: mobile cards hide the duplicate lower action rail until profile-diff mode is opened; primary actions stay 44px+.
+- Verification:
+  - `npm test -- --run`: 10 files / 71 tests passed.
+  - `npm run build`: passed.
+  - Real-browser screenshots and metrics: `output/quality-review/20260511-0250/`.
+  - Mobile Review: no horizontal overflow, zero small-target findings, and first-card actions visible above the reason/source/report detail stack.
+- External review:
+  - Addresses the ADHD/ordinary-user complaint that Review cards looked like reading material before they looked actionable.
+- Triage:
+  - Accepted: mobile users need action buttons before lower-priority evidence chips.
+  - Preserved: desktop keeps the right-hand action rail and dense comparison layout.
+- Task state: checkpoint ready.
+- `needs_human`: final taste acceptance remains user-owned.
+- Residual risk: very long private card titles may still push actions lower than desired; needs sampling with real data during acceptance.
+- Memory closeout: pending.
+- Hook enforcement: manual.
+- Artifact hygiene: screenshots and audit JSON stay in the timestamped evidence folder.
+- Next: Settings long-list disclosure and source-management copy.

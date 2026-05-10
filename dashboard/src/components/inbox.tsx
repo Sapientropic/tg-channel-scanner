@@ -111,6 +111,13 @@ function ReviewCardArticle({
           <h3>{card.title}</h3>
           <span className={`rating ${toneClass(card.rating)}`}>{card.rating}</span>
         </div>
+        <MobileActionStrip
+          act={act}
+          busy={busy}
+          card={card}
+          setShowFollowUp={setShowFollowUp}
+          showFollowUp={showFollowUp}
+        />
         <p className="reason">{card.item.why || "Decision reason unavailable."}</p>
         <div className="meta-row">
           <span>{reportProfileName(card.profile_id, profileReportNames)}</span>
@@ -129,6 +136,51 @@ function ReviewCardArticle({
       </div>
       <CardActions card={card} act={act} busy={busy} setShowFollowUp={setShowFollowUp} showFollowUp={showFollowUp} />
     </article>
+  );
+}
+
+function MobileActionStrip({
+  card,
+  act,
+  busy,
+  showFollowUp,
+  setShowFollowUp,
+}: {
+  card: ReviewCard;
+  act: (cardId: string, action: string, note?: string) => void;
+  busy: boolean;
+  showFollowUp: boolean;
+  setShowFollowUp: Dispatch<SetStateAction<boolean>>;
+}) {
+  return (
+    <div className="mobile-action-strip" aria-label="Quick review actions">
+      <button title="Keep" type="button" onClick={() => act(card.card_id, "keep")} disabled={busy}>
+        <Check size={16} />
+        <span>Keep</span>
+      </button>
+      <button title="Skip" type="button" onClick={() => act(card.card_id, "skip")} disabled={busy}>
+        <X size={16} />
+        <span>Skip</span>
+      </button>
+      <button
+        title="False positive"
+        type="button"
+        onClick={() => act(card.card_id, "false_positive")}
+        disabled={busy}
+      >
+        <Ban size={16} />
+        <span>False positive</span>
+      </button>
+      <button
+        title={showFollowUp ? "Hide profile diff note" : "Draft profile diff"}
+        type="button"
+        onClick={() => setShowFollowUp((value) => !value)}
+        disabled={busy}
+      >
+        <FileDiff size={16} />
+        <span>{showFollowUp ? "Hide diff" : "Draft diff"}</span>
+      </button>
+    </div>
   );
 }
 
