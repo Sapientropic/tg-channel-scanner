@@ -6,6 +6,7 @@ import {
   buildRunEvidenceGroups,
   buildRunHealthDecision,
   buildRunOutcome,
+  runCountScaleMax,
 } from "./runs";
 import type { Run } from "../domain/types";
 
@@ -130,5 +131,13 @@ describe("run health decision", () => {
     expect(timeline).toHaveLength(7);
     expect(timeline.map((item) => item.label)).toEqual(["05-04", "05-05", "05-06", "05-07", "05-08", "05-09", "05-10"]);
     expect(timeline[4]).toMatchObject({ tone: "danger", value: "1 fail" });
+  });
+
+  it("uses one count scale across visible run clusters", () => {
+    expect(runCountScaleMax([
+      { cards: 2, alerts: 1 },
+      { cards: 20, alerts: 10 },
+    ])).toBe(20);
+    expect(runCountScaleMax([])).toBe(1);
   });
 });

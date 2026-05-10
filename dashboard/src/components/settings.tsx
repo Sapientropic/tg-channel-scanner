@@ -240,7 +240,7 @@ function SettingsTaskSwitch({
     { id: "sources", label: "Sources", count: sourceCount, detail: "Add or manage channels" },
     { id: "notifications", label: "Alerts", count: notificationCount, detail: "Bot token and delivery" },
     { id: "learning", label: "Notes", count: feedbackCount, detail: "Export review notes" },
-    { id: "evidence", label: "Health", count: evidenceCount, detail: "Which sources found posts" },
+    { id: "evidence", label: "Yield", count: evidenceCount, detail: "Which sources found posts" },
   ];
   return (
     <div className="settings-task-switch" aria-label="Settings task switcher">

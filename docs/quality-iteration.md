@@ -24,7 +24,7 @@ Current truth for the 2026-05-11 quality loop. Product rules stay in `.frontend-
 
 Cannot claim acceptance readiness yet.
 
-The highest current blockers are interaction/information-architecture problems, not build or test failures. Runs, Settings, mobile Review, and Profiles have been materially reduced, and KIMI's latest Review/Settings P1 findings were fixed locally in Iteration 14. A follow-up reviewer gate is still required before acceptance can be claimed.
+The highest current blockers are interaction/information-architecture problems, not build or test failures. Runs, Settings, mobile Review, and Profiles have been materially reduced. Qwen's post-KIMI semantic blockers and KIMI's mobile Settings type-size P1 were fixed locally in Iteration 15. The next highest user-visible gap is mobile Start first-viewport noise.
 
 ## Repair Roadmap
 
@@ -49,10 +49,10 @@ The highest current blockers are interaction/information-architecture problems, 
    - Commit checkpoint when a slice is coherent and verified enough to roll back.
 
 5. Current next slice - reviewer follow-up and remaining app polish:
-   - Re-check Review/Settings after accepted Qwen and KIMI P0/P1 fixes.
+   - Reduce mobile Start first-viewport noise; KIMI flagged it as the largest remaining scroll trap.
    - Keep reducing first-viewport noise without hiding safety or maintenance controls.
    - Use another independent reviewer because Gemini failed again.
-   - Keep the recovered Claude Code plans report in the queue only for remaining Runs P2s; its P0/P1 items were already fixed in Iteration 10.
+   - The recovered Claude Code plans report is now P0/P1-clean locally; the count-bar P2 was handled in Iteration 15.
 
 ## Iteration 0 - Ground Truth And Plan
 
@@ -475,3 +475,43 @@ The highest current blockers are interaction/information-architecture problems, 
 - Hook enforcement: manual.
 - Artifact hygiene: screenshot evidence remains timestamped under `output/quality-review/`; no local Claude plans file was copied into project docs.
 - Next: commit checkpoint, dispatch reviewer follow-up, then decide between Start polish and Runs P2 cleanup.
+
+## Iteration 15 - Qwen Semantic Fix And Runs P2 Scale
+
+- Target: handle Qwen's post-KIMI semantic objections and finish the remaining actionable Runs P2 from the recovered Claude Code plans report.
+- Changes:
+  - `dashboard/src/components/inbox.tsx`: Review secondary actions changed from `Not a match` / `Compare` to `Wrong match` / `Tune profile`, including aria/title text and the follow-up note label.
+  - `dashboard/src/styles/inbox.css`: secondary Review actions are visually weaker than Keep/Skip so the 2x2 mobile grid has a primary/secondary hierarchy.
+  - `dashboard/src/components/settings.tsx`: Settings task label changed from `Health` to `Yield`, preserving `Which sources found posts` as the information scent.
+  - `dashboard/src/styles/responsive.css`: mobile Settings task-switcher detail text increased from 9px to 11px after KIMI flagged readability.
+  - `dashboard/src/components/runs.tsx`: visible run-count bars now share one scale across visible clusters, so low-volume and high-volume clusters are visually comparable.
+  - `dashboard/src/components/runs.test.tsx`: added coverage for the shared count scale helper.
+- Verification:
+  - `npm test -- --run src/components/runs.test.tsx`: 1 file / 10 tests passed.
+  - `npm test -- --run`: 11 files / 82 tests passed.
+  - `npm run build`: passed.
+  - `git diff --check`: passed, with only Windows line-ending warnings.
+  - Runs-only real-browser check: `output/quality-review/20260511-0440-runs-p2-scale/`.
+  - Review/Runs/Settings real-browser check: `output/quality-review/20260511-0450-qwen-followup-runs-p2/`.
+  - KIMI Settings type-size real-browser check: `output/quality-review/20260511-0500-kimi-settings-type-fix/`.
+  - Desktop Review / Runs / Settings: no horizontal overflow and zero small-target findings.
+  - Mobile Review / Runs / Settings: no horizontal overflow and zero small-target findings.
+  - Mobile Settings remains 844px; mobile Review remains 948px; mobile Runs remains 945px.
+- External review:
+  - Qwen task `9f9a00cf02de` returned `pass-with-risks`; accepted its material Review/Settings semantic findings and fixed them locally.
+  - Gemini task `fbec77e0e78b` failed with provider rate limit and is not counted as a reviewer signal.
+  - KIMI task `e218d617fb74` returned `pass-with-risks`; accepted its mobile Settings type-size P1 and fixed it locally.
+- Triage:
+  - Accepted: `Not a match` still under-explained the consequence; `Wrong match` is clearer for the false-positive decision.
+  - Accepted: `Compare` did not say what the user was doing; `Tune profile` better names the next action.
+  - Accepted: `Health` over-promised a score/quality diagnosis; `Yield` better matches source output evidence.
+  - Accepted: 9px mobile Settings detail text was too small to carry information scent; raised to 11px without increasing scroll height.
+  - Accepted: Runs count bars should use a common visible scale to avoid false visual equivalence.
+  - Deferred: Saved Sources collapsed summary still lacks production/yield totals; it needs backend-supported summary data to avoid inventing numbers.
+- Task state: local checkpoint ready after visual verification and KIMI/Qwen triage.
+- `needs_human`: final visual/taste acceptance remains user-owned.
+- Residual risk: Qwen's desired source-yield summary for collapsed Saved Sources is valid but not safely derivable from current displayed data without a new data contract.
+- Memory closeout: pending.
+- Hook enforcement: manual.
+- Artifact hygiene: reviewer packet remains in the timestamped output evidence folder; current truth remains this log and `docs/quality-task-state.md`.
+- Next: commit checkpoint, then start mobile Start first-viewport noise reduction.

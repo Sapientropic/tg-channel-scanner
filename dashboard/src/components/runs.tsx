@@ -71,8 +71,12 @@ export function RunsView({ runs }: { runs: Run[] }) {
     return <RunsEmptyState title="No runs yet" detail="Run history is empty in this database." />;
   }
   const evidenceGroups = buildRunEvidenceGroups(runs);
+  const visibleClusters = evidenceGroups.flatMap((group) => group.clusters);
+  const visibleScaleMax = runCountScaleMax(visibleClusters);
   const visibleRunCount = evidenceGroups.reduce((sum, group) => sum + group.runs.length, 0);
   const archivedRuns = runs.slice(RECENT_RUN_LIMIT);
+  const archivedClusters = archivedRuns.map((run) => buildSingleRunCluster(run));
+  const archivedScaleMax = runCountScaleMax(archivedClusters);
   return (
     <section className="table-section" aria-label="Run history">
       <PanelHeader icon={<Activity size={18} />} title="Runs" count={runs.length} />
@@ -92,7 +96,7 @@ export function RunsView({ runs }: { runs: Run[] }) {
             </div>
             <div className="table-list">
               {group.clusters.map((cluster) => (
-                <RunClusterRow key={cluster.key} cluster={cluster} />
+                <RunClusterRow key={cluster.key} cluster={cluster} scaleMax={visibleScaleMax} />
               ))}
             </div>
           </section>
@@ -102,8 +106,8 @@ export function RunsView({ runs }: { runs: Run[] }) {
         <details className="run-archive">
           <summary>Older runs ({archivedRuns.length})</summary>
           <div className="table-list">
-            {archivedRuns.map((run) => (
-              <RunClusterRow key={run.run_id} cluster={buildSingleRunCluster(run)} />
+            {archivedClusters.map((cluster) => (
+              <RunClusterRow key={cluster.key} cluster={cluster} scaleMax={archivedScaleMax} />
             ))}
           </div>
         </details>
@@ -112,7 +116,7 @@ export function RunsView({ runs }: { runs: Run[] }) {
   );
 }
 
-function RunClusterRow({ cluster }: { cluster: RunEvidenceCluster }) {
+function RunClusterRow({ cluster, scaleMax }: { cluster: RunEvidenceCluster; scaleMax: number }) {
   const run = cluster.sample;
   const artifact = run.report_artifact ?? null;
   const outcome = cluster.outcome;
@@ -130,7 +134,7 @@ function RunClusterRow({ cluster }: { cluster: RunEvidenceCluster }) {
         <span>{outcomeDetail}</span>
       </div>
       <span className={`status ${toneClass(statusLabel)}`}>{statusLabel}</span>
-      <RunCountBars cards={cluster.cards} alerts={cluster.alerts} />
+      <RunCountBars cards={cluster.cards} alerts={cluster.alerts} scaleMax={scaleMax} />
       <div className="run-health" title={runHealthDetail(run.quality)}>
         <span className={diagnosticTone(run.quality)}>{formatRunDiagnostics(run.quality)}</span>
       </div>
@@ -154,8 +158,8 @@ function RunClusterRow({ cluster }: { cluster: RunEvidenceCluster }) {
   );
 }
 
-function RunCountBars({ cards, alerts }: { cards: number; alerts: number }) {
-  const maxValue = Math.max(1, cards, alerts);
+function RunCountBars({ cards, alerts, scaleMax }: { cards: number; alerts: number; scaleMax: number }) {
+  const maxValue = Math.max(1, scaleMax, cards, alerts);
   return (
     <div className="run-count-bars" aria-label={`${cards} cards, ${alerts} alerts`}>
       <span style={{ "--bar": percentWidth(cards / maxValue) } as CSSProperties}>
@@ -170,6 +174,10 @@ function RunCountBars({ cards, alerts }: { cards: number; alerts: number }) {
       </span>
     </div>
   );
+}
+
+export function runCountScaleMax(clusters: Array<{ cards: number; alerts: number }>) {
+  return Math.max(1, ...clusters.map((cluster) => Math.max(cluster.cards, cluster.alerts)));
 }
 
 function RunHealthChart({ runs }: { runs: Run[] }) {

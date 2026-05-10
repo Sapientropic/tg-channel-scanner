@@ -236,24 +236,26 @@ function MobileActionStrip({
         <span>Skip</span>
       </button>
       <button
-        aria-label="Mark as not a match"
-        title="Mark as not a match"
+        aria-label="Mark as wrong match"
+        className="secondary-action"
+        title="Mark as wrong match"
         type="button"
         onClick={() => act(card.card_id, "false_positive")}
         disabled={busy}
       >
         <Ban size={16} />
-        <span>Not a match</span>
+        <span>Wrong match</span>
       </button>
       <button
-        aria-label={showFollowUp ? "Hide compare note" : "Compare profile change"}
-        title={showFollowUp ? "Hide compare note" : "Compare profile change"}
+        aria-label={showFollowUp ? "Hide profile tuning note" : "Tune profile from this card"}
+        className="secondary-action"
+        title={showFollowUp ? "Hide profile tuning note" : "Tune profile from this card"}
         type="button"
         onClick={() => setShowFollowUp((value) => !value)}
         disabled={busy}
       >
         <FileDiff size={16} />
-        <span>{showFollowUp ? "Hide" : "Compare"}</span>
+        <span>{showFollowUp ? "Hide" : "Tune profile"}</span>
       </button>
     </div>
   );
@@ -394,28 +396,35 @@ function CardActions({
           <span>Skip</span>
         </button>
         <button
-          title="Mark as not a match"
+          className="secondary-action"
+          title="Mark as wrong match"
           type="button"
           onClick={() => act(card.card_id, "false_positive")}
           disabled={busy}
         >
           <Ban size={16} />
-          <span>Not a match</span>
+          <span>Wrong match</span>
         </button>
         {!showFollowUp && (
-          <button title="Compare profile change" type="button" onClick={() => setShowFollowUp(true)} disabled={busy}>
+          <button
+            className="secondary-action"
+            title="Tune profile from this card"
+            type="button"
+            onClick={() => setShowFollowUp(true)}
+            disabled={busy}
+          >
             <FileDiff size={16} />
-            <span>Compare</span>
+            <span>Tune profile</span>
           </button>
         )}
       </div>
       {showFollowUp && (
         <div className="follow-up">
           <div className="follow-up-head">
-            <label htmlFor={noteId}>Compare note</label>
+            <label htmlFor={noteId}>Profile tuning note</label>
             <button
               className="follow-up-close"
-              title="Hide compare note"
+              title="Hide profile tuning note"
               type="button"
               onClick={() => setShowFollowUp(false)}
               disabled={busy}
@@ -428,7 +437,7 @@ function CardActions({
             <textarea
               id={noteId}
               ref={textareaRef}
-              aria-label="Compare note"
+              aria-label="Profile tuning note"
               value={note}
               onChange={(event) => setNote(event.target.value)}
               placeholder="Describe what future matches should change"

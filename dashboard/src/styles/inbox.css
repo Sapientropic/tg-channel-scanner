@@ -435,6 +435,20 @@ a.source-chip:focus-visible {
   background: var(--surface-warm-strong);
 }
 
+.action-cluster button.secondary-action,
+.mobile-action-strip button.secondary-action {
+  border-color: color-mix(in oklch, var(--paper-3) 74%, var(--ink-warm));
+  background: color-mix(in oklch, var(--surface-warm) 76%, var(--paper-2));
+  color: var(--ink-warm);
+  box-shadow: none;
+}
+
+.action-cluster button.secondary-action:hover,
+.mobile-action-strip button.secondary-action:hover {
+  background: var(--surface-warm-strong);
+  color: var(--ink);
+}
+
 .action-cluster-label,
 .follow-up-head > label {
   color: var(--ink-warm);
