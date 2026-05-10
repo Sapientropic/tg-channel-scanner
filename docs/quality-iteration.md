@@ -52,7 +52,7 @@ Latest deterministic checks:
 - `e8b1d23` - Profiles hides the empty `Preference Drafts = 0` panel and returns mobile Profiles to one viewport.
 - `53af224` - Runs compact timeline no longer repeats `none` on empty days; the no-scan meaning remains in `aria-label` / tooltip.
 - `c039f8a` - Mobile Review triage is a compact filter row and the first card fits in one viewport.
-- Current slice - Mobile Runs is compacted to one viewport without reintroducing unreadable timeline labels.
+- `bfe8065` - Mobile Runs is compacted to one viewport without reintroducing unreadable timeline labels.
 
 ## Latest Fixes
 
@@ -99,6 +99,7 @@ Accepted and fixed:
 Degraded:
 - Gemini task `fbec77e0e78b` failed from provider rate limit.
 - DeepSeek task `7355855bc0fc` had no repo access; rated weak/no-count instead of treated as a reviewer pass.
+- Final KIMI all-one-screen gate `96bfffa790b1` is still running and is not counted yet.
 
 ## Residual Risk
 
@@ -107,6 +108,6 @@ Degraded:
 
 ## Next Action
 
-1. Commit the all-mobile-one-screen checkpoint.
+1. Poll and triage final KIMI task `96bfffa790b1`.
 2. Continue reviewer-driven polish only where evidence shows user-visible noise or interaction friction.
 3. Near 2026-05-11 13:00 +08:00, stop opening new work and produce a concise evidence-backed handoff.
