@@ -150,6 +150,27 @@ class SourceRegistryTests(unittest.TestCase):
         self.assertEqual(payload["sources"][0]["topics"], ["jobs", "remote-work"])
         self.assertEqual(payload["sources"][1]["topics"], ["jobs", "remote-work"])
 
+    def test_import_channels_from_text_preview_does_not_write_registry(self):
+        source_registry = load_registry_module(self)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            registry_path = root / "sources.json"
+
+            channels = source_registry.load_channel_text("@remote_jobs\nhttps://t.me/s/miniapps_jobs\n# skip\n")
+            result = source_registry.import_channels(
+                channels,
+                registry_path,
+                dry_run=True,
+                topics=["jobs"],
+            )
+
+        self.assertEqual(channels, ["remote_jobs", "miniapps_jobs"])
+        self.assertTrue(result["dry_run"])
+        self.assertEqual(result["added_count"], 2)
+        self.assertEqual(result["unchanged_count"], 0)
+        self.assertFalse(registry_path.exists())
+
     def test_list_and_export_can_filter_by_topic(self):
         source_registry = load_registry_module(self)
 
@@ -228,6 +249,95 @@ class SourceRegistryTests(unittest.TestCase):
         self.assertEqual(listed["data"]["topics"], ["jobs"])
         self.assertEqual(listed["data"]["sources"][0]["username"], "remote_jobs")
         self.assertEqual(exported, "remote_jobs")
+
+    def test_registry_sources_and_enabled_update_share_registry_logic(self):
+        source_registry = load_registry_module(self)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            registry_path = Path(tmp) / "sources.json"
+            source_registry.import_channels(["remote_jobs"], registry_path, topics=["jobs"])
+            source_registry.update_source_enabled(
+                registry_path,
+                source_id="telegram:remote_jobs",
+                enabled=False,
+            )
+            result = source_registry.registry_sources(registry_path)
+
+        self.assertEqual(result["source_count"], 1)
+        self.assertEqual(result["enabled_count"], 0)
+        self.assertEqual(result["topics"], ["jobs"])
+        self.assertFalse(result["sources"][0]["enabled"])
+
+    def test_update_source_topics_replaces_topics_without_touching_other_fields(self):
+        source_registry = load_registry_module(self)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            registry_path = Path(tmp) / "sources.json"
+            source_registry.import_channels(["remote_jobs"], registry_path, topics=["jobs"])
+            updated = source_registry.update_source_topics(
+                registry_path,
+                source_id="telegram:remote_jobs",
+                topics=["remote-work", "jobs", "remote-work"],
+            )
+            result = source_registry.registry_sources(registry_path)
+
+        self.assertEqual(updated["topics"], ["remote-work", "jobs"])
+        self.assertTrue(updated["enabled"])
+        self.assertEqual(result["topics"], ["jobs", "remote-work"])
+        self.assertEqual(result["sources"][0]["source_id"], "telegram:remote_jobs")
+
+    def test_update_source_topics_rejects_invalid_tags_before_writing(self):
+        source_registry = load_registry_module(self)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            registry_path = Path(tmp) / "sources.json"
+            source_registry.import_channels(["remote_jobs"], registry_path, topics=["jobs"])
+
+            invalid_cases = [
+                ["../private"],
+                ["x"],
+                ["unicode-工作"],
+                [123],
+                ["jobs", "topic_2", "topic-3", "topic4", "topic5", "topic6", "topic7", "topic8", "topic9"],
+            ]
+            for topics in invalid_cases:
+                with self.subTest(topics=topics):
+                    with self.assertRaises(source_registry.RegistryError):
+                        source_registry.update_source_topics(
+                            registry_path,
+                            source_id="telegram:remote_jobs",
+                            topics=topics,
+                        )
+
+            result = source_registry.registry_sources(registry_path)
+
+        self.assertEqual(result["sources"][0]["topics"], ["jobs"])
+
+    def test_validate_rejects_invalid_source_ids_and_stored_topics(self):
+        source_registry = load_registry_module(self)
+
+        issues = source_registry.validate_registry(
+            {
+                "schema_version": "source_registry_v1",
+                "sources": [
+                    {
+                        "source_id": "../private",
+                        "username": "remote_jobs",
+                        "channel_id": None,
+                        "label": "remote_jobs",
+                        "topics": ["<script>"],
+                        "priority": "normal",
+                        "expected_language": "",
+                        "scan_window_hours": 24,
+                        "enabled": True,
+                        "notes": "",
+                    }
+                ],
+            }
+        )
+
+        self.assertTrue(any("source_id" in issue for issue in issues))
+        self.assertTrue(any("topics" in issue for issue in issues))
 
     def test_validate_rejects_duplicate_ids_and_invalid_fields(self):
         source_registry = load_registry_module(self)

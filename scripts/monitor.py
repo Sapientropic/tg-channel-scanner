@@ -864,6 +864,40 @@ def delivery_targets_for_profile(config: MonitorConfig, profile: dict[str, Any])
     return [target for target in config.delivery_targets.values() if target.get("type") == "telegram_bot"]
 
 
+def apply_delivery_runtime_overrides(conn, config: MonitorConfig) -> MonitorConfig:
+    """Merge local Desk notification edits into the loaded monitor config.
+
+    `.tgcs/profiles.toml` remains the portable profile contract, but Signal Desk
+    edits are stored in SQLite so a non-CLI user can set or mute notifications
+    without hand-editing TOML.  Apply these overrides before writing targets
+    back to SQLite; otherwise the next monitor run would overwrite the user's
+    Desk edits with the file defaults.
+    """
+
+    rows = conn.execute("SELECT * FROM delivery_targets ORDER BY target_id").fetchall()
+    if not rows:
+        return config
+    targets = {target_id: dict(target) for target_id, target in config.delivery_targets.items()}
+    for row in rows:
+        target_id = str(row["target_id"] or "").strip()
+        if not target_id:
+            continue
+        target_type = str(row["target_type"] or targets.get(target_id, {}).get("type") or "telegram_bot")
+        if target_type != "telegram_bot":
+            continue
+        persisted = monitor_state.parse_json(row["config_json"], {})
+        if not isinstance(persisted, dict):
+            persisted = {}
+        merged = {**targets.get(target_id, {}), **persisted}
+        merged["id"] = target_id
+        merged["type"] = target_type
+        merged["enabled"] = bool(row["enabled"])
+        merged.pop("token", None)
+        merged.pop("bot_token", None)
+        targets[target_id] = merged
+    return MonitorConfig(path=config.path, profiles=config.profiles, delivery_targets=targets, defaults=config.defaults)
+
+
 def run_delivery(
     *,
     conn,
@@ -953,13 +987,18 @@ def run_profile(args: argparse.Namespace) -> int:
             next_step="Add the profile to .tgcs/profiles.toml or choose an existing profile id.",
         )
         return agent_cli.EXIT_VALIDATION
+    db_path = root_path(args.db or config.defaults.get("database", ".tgcs/tgcs.db"))
+    conn = monitor_state.connect(db_path)
+    config = apply_delivery_runtime_overrides(conn, config)
+    profile = monitor_state.apply_profile_runtime_overrides(conn, profile)
     if not profile.get("enabled", True):
+        conn.close()
         agent_cli.emit_error(
             args,
             code="profile_disabled",
             message=f"Profile is disabled: {args.profile_id}",
-            retryable=False,
-            next_step="Enable the profile before running it.",
+            retryable=True,
+            next_step="Enable the profile in Signal Desk Profiles before running it.",
         )
         return agent_cli.EXIT_VALIDATION
 
@@ -970,6 +1009,7 @@ def run_profile(args: argparse.Namespace) -> int:
     try:
         run_dir.mkdir(parents=True, exist_ok=False)
     except FileExistsError:
+        conn.close()
         agent_cli.emit_error(
             args,
             code="run_id_exists",
@@ -979,10 +1019,7 @@ def run_profile(args: argparse.Namespace) -> int:
         )
         return agent_cli.EXIT_VALIDATION
     state_dir = root_path(args.state_dir or config.defaults.get("state_dir", ".tgcs/state"))
-    db_path = root_path(args.db or config.defaults.get("database", ".tgcs/tgcs.db"))
     dashboard_url = args.dashboard_url or str(config.defaults.get("dashboard_url") or DEFAULT_DASHBOARD_URL)
-    conn = monitor_state.connect(db_path)
-    profile = monitor_state.apply_profile_runtime_overrides(conn, profile)
     profile_file = profile_path(profile)
     if not profile_file.exists():
         conn.close()
@@ -1153,6 +1190,9 @@ def run_profile(args: argparse.Namespace) -> int:
     items = report_data.get("items") if isinstance(report_data.get("items"), list) else []
     items = annotate_items_with_source_freshness(items, scan_path)
 
+    # Keep this after apply_profile_runtime_overrides() and before run writeback:
+    # upsert_profile() replaces config_json, so the profile dict must already
+    # include Desk runtime settings such as enabled and alert_schedule_mode.
     monitor_state.upsert_profile(conn, {**profile, "path": str(profile_file)})
     for target in config.delivery_targets.values():
         monitor_state.upsert_delivery_target(conn, target)

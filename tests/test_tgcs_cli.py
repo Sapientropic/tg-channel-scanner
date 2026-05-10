@@ -358,6 +358,25 @@ class TgcsCliTests(unittest.TestCase):
         self.assertIn("--host", cmd)
         self.assertIn("127.0.0.1", cmd)
 
+    def test_dashboard_open_flag_delegates_to_dashboard_server(self):
+        tgcs = load_tgcs_module(self)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "dashboard" / "dist").mkdir(parents=True)
+            (root / "dashboard" / "dist" / "index.html").write_text("<html></html>", encoding="utf-8")
+
+            def fake_run(cmd, check=False):
+                return subprocess.CompletedProcess(cmd, 0)
+
+            with patch.object(tgcs, "PROJECT_ROOT", root):
+                with patch.object(tgcs.subprocess, "run", side_effect=fake_run) as run_mock:
+                    exit_code = tgcs.main(["dashboard", "--open"])
+
+        self.assertEqual(exit_code, 0)
+        cmd = [str(part) for part in run_mock.call_args.args[0]]
+        self.assertIn("--open", cmd)
+
     def test_dashboard_auto_builds_missing_static_assets_before_serving(self):
         tgcs = load_tgcs_module(self)
 

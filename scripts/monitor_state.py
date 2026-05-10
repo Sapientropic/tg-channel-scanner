@@ -30,6 +30,10 @@ ALERT_EVENT_SCHEMA_VERSION = "alert_event_v1"
 PROFILE_PATCH_SCHEMA_VERSION = "profile_patch_suggestion_v1"
 DELIVERY_TARGET_SCHEMA_VERSION = "delivery_target_v1"
 ALERT_SCHEDULE_MODES = {"work_hours", "all_day", "muted"}
+PROFILE_RUNTIME_SETTING_LIMITS = {
+    "scan_window_hours": (1, 168),
+    "semantic_max_messages": (1, 500),
+}
 
 PENDING_STATUS = "pending"
 HANDLED_STATUSES = {"kept", "skipped", "false_positive", "follow_up"}
@@ -105,6 +109,8 @@ def connect(db_path: Path | str) -> sqlite3.Connection:
     conn = sqlite3.connect(path)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
+    conn.execute("PRAGMA busy_timeout = 5000")
+    conn.execute("PRAGMA journal_mode = WAL")
     init_db(conn)
     return conn
 
@@ -361,6 +367,60 @@ def update_profile_alert_mode(conn: sqlite3.Connection, *, profile_id: str, mode
     return _profile_from_row(updated)
 
 
+def update_profile_enabled(conn: sqlite3.Connection, *, profile_id: str, enabled: bool) -> dict[str, Any]:
+    row = conn.execute("SELECT * FROM profiles WHERE profile_id = ?", (profile_id,)).fetchone()
+    if not row:
+        raise MonitorStateError(f"Profile is not registered: {profile_id}")
+    config = parse_json(row["config_json"], {})
+    if not isinstance(config, dict):
+        config = {}
+    # Store the Desk toggle as a runtime override beside the profile snapshot.
+    # Monitor runs merge this before the disabled-profile gate, so a user can
+    # pause a profile from the Desk without editing TOML or profile templates.
+    config["enabled"] = enabled
+    now = utc_now()
+    conn.execute(
+        "UPDATE profiles SET enabled = ?, config_json = ?, updated_at = ? WHERE profile_id = ?",
+        (1 if enabled else 0, stable_json(config), now, profile_id),
+    )
+    conn.commit()
+    updated = conn.execute("SELECT * FROM profiles WHERE profile_id = ?", (profile_id,)).fetchone()
+    return _profile_from_row(updated)
+
+
+def update_profile_runtime_settings(
+    conn: sqlite3.Connection,
+    *,
+    profile_id: str,
+    settings: dict[str, Any],
+) -> dict[str, Any]:
+    row = conn.execute("SELECT * FROM profiles WHERE profile_id = ?", (profile_id,)).fetchone()
+    if not row:
+        raise MonitorStateError(f"Profile is not registered: {profile_id}")
+    if not settings:
+        raise MonitorStateError("At least one profile setting is required.")
+    config = parse_json(row["config_json"], {})
+    if not isinstance(config, dict):
+        config = {}
+    for key, value in settings.items():
+        if key not in PROFILE_RUNTIME_SETTING_LIMITS:
+            raise MonitorStateError(f"Unsupported profile setting field: {key}")
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise MonitorStateError(f"{key} must be an integer.")
+        lower, upper = PROFILE_RUNTIME_SETTING_LIMITS[key]
+        if value < lower or value > upper:
+            raise MonitorStateError(f"{key} must be between {lower} and {upper}.")
+        config[key] = value
+    now = utc_now()
+    conn.execute(
+        "UPDATE profiles SET config_json = ?, updated_at = ? WHERE profile_id = ?",
+        (stable_json(config), now, profile_id),
+    )
+    conn.commit()
+    updated = conn.execute("SELECT * FROM profiles WHERE profile_id = ?", (profile_id,)).fetchone()
+    return _profile_from_row(updated)
+
+
 def apply_profile_runtime_overrides(conn: sqlite3.Connection, profile: dict[str, Any]) -> dict[str, Any]:
     row = conn.execute("SELECT config_json FROM profiles WHERE profile_id = ?", (profile.get("id"),)).fetchone()
     if not row:
@@ -368,11 +428,18 @@ def apply_profile_runtime_overrides(conn: sqlite3.Connection, profile: dict[str,
     config = parse_json(row["config_json"], {})
     if not isinstance(config, dict):
         return profile
-    mode = config.get("alert_schedule_mode")
-    if mode not in ALERT_SCHEDULE_MODES:
-        return profile
     merged = dict(profile)
-    merged["alert_schedule_mode"] = mode
+    enabled = config.get("enabled")
+    if isinstance(enabled, bool):
+        merged["enabled"] = enabled
+    mode = config.get("alert_schedule_mode")
+    if mode in ALERT_SCHEDULE_MODES:
+        merged["alert_schedule_mode"] = mode
+    for key in PROFILE_RUNTIME_SETTING_LIMITS:
+        value = config.get(key)
+        lower, upper = PROFILE_RUNTIME_SETTING_LIMITS[key]
+        if isinstance(value, int) and not isinstance(value, bool) and lower <= value <= upper:
+            merged[key] = value
     return merged
 
 
@@ -1463,6 +1530,8 @@ def delivery_target_from_row(row: sqlite3.Row) -> dict[str, Any]:
     config = parse_json(row["config_json"], {})
     if not isinstance(config, dict):
         config = {}
+    config.pop("token", None)
+    config.pop("bot_token", None)
     display_name = delivery_target_display_name(target_type, str(row["target_id"] or ""))
     return {
         "schema_version": DELIVERY_TARGET_SCHEMA_VERSION,
@@ -2252,7 +2321,7 @@ def source_value_insights_from_stats(stats: list[dict[str, Any]]) -> list[dict[s
                     priority=60 + alert_count,
                     stats=item,
                     confidence="low",
-                    next_action_label="Collect more runs",
+                    next_action_label="Need more data",
                     next_action_detail="Keep the source for a few more runs; one high signal is not enough to promote cadence.",
                 )
             )

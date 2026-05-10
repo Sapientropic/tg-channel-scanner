@@ -656,6 +656,8 @@ def run_dashboard(args: argparse.Namespace) -> int:
     ]
     if args.static_dir:
         cmd.extend(["--static-dir", _root_path(args.static_dir)])
+    if args.open:
+        cmd.append("--open")
     return _run(cmd)
 
 
@@ -887,6 +889,7 @@ def build_parser() -> argparse.ArgumentParser:
     dashboard.add_argument("--db")
     dashboard.add_argument("--static-dir")
     dashboard.add_argument("--no-build", action="store_true", help="Do not auto-build dashboard/dist before serving.")
+    dashboard.add_argument("--open", action="store_true", help="Open Signal Desk in the default browser after the server starts.")
     dashboard.set_defaults(func=run_dashboard)
 
     feedback = subparsers.add_parser("feedback", help="Export reusable feedback from the local dashboard.")

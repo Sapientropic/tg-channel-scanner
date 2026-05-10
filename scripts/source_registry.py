@@ -28,6 +28,9 @@ VALID_PRIORITIES = {"low", "normal", "high"}
 DEFAULT_SCAN_WINDOW_HOURS = 24
 DEFAULT_REGISTRY_RELATIVE_PATH = Path(".tgcs") / "sources.json"
 _TME_URL_RE = re.compile(r"^(?:https?://)?t\.me/(?:s/)?([^/?#]+)", re.IGNORECASE)
+_SOURCE_ID_RE = re.compile(r"^telegram:(?:[A-Za-z0-9_]{5,64}|-?[0-9]{5,20})$")
+_TOPIC_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{1,40}$")
+MAX_TOPICS = 8
 
 
 class RegistryError(Exception):
@@ -57,6 +60,16 @@ def load_channel_list(path: Path) -> list[str]:
             if not line or line.startswith("#"):
                 continue
             channels.append(line)
+    return channels
+
+
+def load_channel_text(text: str) -> list[str]:
+    channels: list[str] = []
+    for raw in text.splitlines():
+        line = normalize_channel_name(raw)
+        if not line or line.startswith("#"):
+            continue
+        channels.append(line)
     return channels
 
 
@@ -96,11 +109,17 @@ def normalize_topics(values: list[str] | None) -> list[str]:
     topics: list[str] = []
     seen: set[str] = set()
     for value in values or []:
-        topic = str(value or "").strip().casefold()
+        if not isinstance(value, str):
+            raise RegistryError("Topic tags must be strings")
+        topic = value.strip().casefold()
         if not topic or topic in seen:
             continue
+        if not _TOPIC_RE.fullmatch(topic):
+            raise RegistryError(f"Invalid topic tag: {topic}")
         seen.add(topic)
         topics.append(topic)
+        if len(topics) > MAX_TOPICS:
+            raise RegistryError(f"Use no more than {MAX_TOPICS} topic tags")
     return topics
 
 
@@ -121,10 +140,20 @@ def load_registry(path: Path | None = None, *, missing_ok: bool = False) -> dict
 
 def save_registry(path: Path, payload: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
-        encoding="utf-8",
-    )
+    serialized = json.dumps(payload, ensure_ascii=False, indent=2) + "\n"
+    temp_path = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+    try:
+        with temp_path.open("w", encoding="utf-8") as handle:
+            handle.write(serialized)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temp_path, path)
+    finally:
+        if temp_path.exists():
+            try:
+                temp_path.unlink()
+            except OSError:
+                pass
 
 
 def validate_registry(payload: dict) -> list[str]:
@@ -148,6 +177,8 @@ def validate_registry(payload: dict) -> list[str]:
         channel_id = source.get("channel_id")
         if not isinstance(source_id, str) or not source_id.strip():
             issues.append(f"{prefix}.source_id is required")
+        elif not _SOURCE_ID_RE.fullmatch(source_id.strip()):
+            issues.append(f"{prefix}.source_id must be a Telegram source id")
         elif source_id in seen:
             duplicates.add(source_id)
         else:
@@ -160,8 +191,14 @@ def validate_registry(payload: dict) -> list[str]:
             issues.append(f"{prefix}.channel_id must be an integer or null")
         if source.get("priority") not in VALID_PRIORITIES:
             issues.append(f"{prefix}.priority must be one of {sorted(VALID_PRIORITIES)}")
-        if not isinstance(source.get("topics", []), list):
+        topics_value = source.get("topics", [])
+        if not isinstance(topics_value, list):
             issues.append(f"{prefix}.topics must be a list")
+        else:
+            try:
+                normalize_topics(topics_value)
+            except RegistryError as exc:
+                issues.append(f"{prefix}.topics {exc}")
         if not isinstance(source.get("expected_language", ""), str):
             issues.append(f"{prefix}.expected_language must be a string")
         window = source.get("scan_window_hours")
@@ -240,6 +277,23 @@ def import_channel_list(
     topics: list[str] | None = None,
 ) -> dict:
     channels = load_channel_list(path)
+    return import_channels(
+        channels,
+        registry_path,
+        dry_run=dry_run,
+        topics=topics,
+        input_path=str(path),
+    )
+
+
+def import_channels(
+    channels: list[str],
+    registry_path: Path,
+    *,
+    dry_run: bool = False,
+    topics: list[str] | None = None,
+    input_path: str = "pasted sources",
+) -> dict:
     normalized_topics = normalize_topics(topics)
     payload = load_registry(registry_path, missing_ok=True)
     existing = {
@@ -249,6 +303,7 @@ def import_channel_list(
     }
     added: list[dict] = []
     updated: list[dict] = []
+    unchanged: list[dict] = []
     for channel in channels:
         source = source_from_channel(channel)
         if normalized_topics:
@@ -257,6 +312,8 @@ def import_channel_list(
         if existing_source:
             if merge_source_topics(existing_source, normalized_topics):
                 updated.append(existing_source)
+            else:
+                unchanged.append(existing_source)
             continue
         payload.setdefault("sources", []).append(source)
         existing[source["source_id"]] = source
@@ -269,12 +326,15 @@ def import_channel_list(
     return {
         "dry_run": dry_run,
         "registry_path": str(registry_path),
-        "input_path": str(path),
+        "input_path": input_path,
         "added_count": len(added),
         "updated_count": len(updated),
+        "unchanged_count": len(unchanged),
         "source_count": len(payload.get("sources", [])),
         "topics": normalized_topics,
         "sources": added,
+        "updated_sources": updated,
+        "unchanged_sources": unchanged,
     }
 
 
@@ -294,6 +354,60 @@ def export_channel_list(registry_path: Path, output: Path, *, topics: list[str] 
         "exported_count": len(channels),
         "topics": normalize_topics(topics),
     }
+
+
+def registry_sources(registry_path: Path) -> dict:
+    payload = load_registry(registry_path, missing_ok=True)
+    issues = validate_registry(payload)
+    if issues:
+        raise RegistryError(validation_message(issues))
+    sources = payload.get("sources", [])
+    topics: set[str] = set()
+    for source in sources:
+        if not isinstance(source, dict):
+            continue
+        topics.update(normalize_topics(source.get("topics") or []))
+    return {
+        "registry_path": str(registry_path),
+        "source_count": len(sources),
+        "enabled_count": len(enabled_sources(payload)),
+        "topics": sorted(topics),
+        "sources": sources,
+    }
+
+
+def update_source_enabled(registry_path: Path, *, source_id: str, enabled: bool) -> dict:
+    payload = load_registry(registry_path)
+    issues = validate_registry(payload)
+    if issues:
+        raise RegistryError(validation_message(issues))
+    for source in payload.get("sources", []):
+        if not isinstance(source, dict):
+            continue
+        if source.get("source_id") == source_id:
+            source["enabled"] = enabled
+            save_registry(registry_path, payload)
+            return source
+    raise RegistryError(f"Source not found: {source_id}")
+
+
+def update_source_topics(registry_path: Path, *, source_id: str, topics: list[str]) -> dict:
+    normalized_topics = normalize_topics(topics)
+    payload = load_registry(registry_path)
+    issues = validate_registry(payload)
+    if issues:
+        raise RegistryError(validation_message(issues))
+    for source in payload.get("sources", []):
+        if not isinstance(source, dict):
+            continue
+        if source.get("source_id") == source_id:
+            source["topics"] = list(normalized_topics)
+            issues = validate_registry(payload)
+            if issues:
+                raise RegistryError(validation_message(issues))
+            save_registry(registry_path, payload)
+            return source
+    raise RegistryError(f"Source not found: {source_id}")
 
 
 def build_parser() -> argparse.ArgumentParser:

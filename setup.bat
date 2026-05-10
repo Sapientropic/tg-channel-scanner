@@ -92,16 +92,13 @@ exit /b 1
 :config_copied
 echo.
 echo === Next Steps ===
-echo 1. Edit Telegram API credentials:
-echo    %TGCLI_CONFIG%
-echo    Get your api_id and api_hash from: https://my.telegram.org/apps
-echo    ^(If the form shows ERROR, see docs\getting-api-credentials.md^)
+echo 1. Open Signal Desk:
+echo    Signal Desk.bat
 echo.
-echo 2. Check jobs prerequisites, log in, then run a dry monitor:
-echo    tgcs.bat quickstart jobs
-echo    tgcs.bat doctor --profile jobs
-echo    tgcs.bat login
-echo    tgcs.bat monitor run --profile-id jobs-fast --delivery-mode dry-run
+echo 2. In the Start tab, save your Telegram app ID/hash, connect Telegram,
+echo    run the offline demo, and start the first dry-run scan.
+echo    Telegram app credentials come from: https://my.telegram.org/apps
+echo    ^(If the form shows ERROR, see docs\getting-api-credentials.md^)
 goto config_done
 
 :config_exists
@@ -122,8 +119,7 @@ if errorlevel 1 (
 )
 
 echo.
-echo Setup complete. Next: edit config and run jobs-fast
+echo Setup complete. Next: open Signal Desk
 echo   Config:  %TGCLI_CONFIG%
-echo   Next:    tgcs.bat quickstart jobs
-echo   Run:     tgcs.bat doctor --profile jobs ^&^& tgcs.bat login ^&^& tgcs.bat monitor run --profile-id jobs-fast --delivery-mode dry-run
-echo   Schedule preview: tgcs.bat schedule print --profile-id jobs-fast --interval-minutes 15
+echo   Open:    Signal Desk.bat
+echo   Expert CLI fallback: tgcs.bat quickstart jobs

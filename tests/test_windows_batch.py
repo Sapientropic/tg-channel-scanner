@@ -43,10 +43,9 @@ class WindowsBatchTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, output)
         self.assertIn("Setup complete", output)
         self.assertIn("Local project defaults", output)
+        self.assertIn("Signal Desk.bat", output)
+        self.assertIn("Telegram app credentials come from", output)
         self.assertIn("tgcs.bat quickstart jobs", output)
-        self.assertIn("tgcs.bat doctor --profile jobs", output)
-        self.assertIn("tgcs.bat monitor run --profile-id jobs-fast --delivery-mode dry-run", output)
-        self.assertIn("tgcs.bat schedule print --profile-id jobs-fast", output)
         self.assertTrue(config_exists)
 
 

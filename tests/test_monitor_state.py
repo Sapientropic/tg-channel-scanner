@@ -636,7 +636,7 @@ class MonitorStateTests(unittest.TestCase):
         self.assertEqual(insights[0]["kind"], "observe")
         self.assertEqual(insights[0]["label"], "Observe")
         self.assertEqual(insights[0]["confidence"], "low")
-        self.assertEqual(insights[0]["next_action"]["label"], "Collect more runs")
+        self.assertEqual(insights[0]["next_action"]["label"], "Need more data")
         self.assertIn("1 high signal", insights[0]["reason"])
         self.assertLess(insights[0]["priority"], 90)
 
@@ -1795,6 +1795,89 @@ class MonitorStateTests(unittest.TestCase):
         self.assertEqual(profile["config"]["alert_schedule_mode"], "muted")
         self.assertEqual(snapshot["profiles"][0]["alert_schedule_mode"], "muted")
         self.assertNotIn("config", snapshot["profiles"][0])
+
+    def test_profile_enabled_update_persists_dashboard_override(self):
+        conn = sqlite3.connect(":memory:")
+        conn.row_factory = sqlite3.Row
+        monitor_state.init_db(conn)
+        monitor_state.upsert_profile(
+            conn,
+            {
+                "id": "jobs-fast",
+                "path": "profiles/templates/jobs.md",
+                "enabled": True,
+                "alert_schedule_mode": "work_hours",
+            },
+        )
+
+        profile = monitor_state.update_profile_enabled(conn, profile_id="jobs-fast", enabled=False)
+        overridden = monitor_state.apply_profile_runtime_overrides(
+            conn,
+            {"id": "jobs-fast", "path": "profiles/templates/jobs.md", "enabled": True},
+        )
+        snapshot = monitor_state.dashboard_snapshot(conn)
+
+        self.assertFalse(profile["enabled"])
+        self.assertFalse(overridden["enabled"])
+        self.assertFalse(snapshot["profiles"][0]["enabled"])
+        self.assertEqual(profile["config"]["enabled"], False)
+        self.assertNotIn("config", snapshot["profiles"][0])
+
+    def test_profile_runtime_settings_update_persists_dashboard_override(self):
+        conn = sqlite3.connect(":memory:")
+        conn.row_factory = sqlite3.Row
+        monitor_state.init_db(conn)
+        monitor_state.upsert_profile(
+            conn,
+            {
+                "id": "jobs-fast",
+                "path": "profiles/templates/jobs.md",
+                "enabled": True,
+                "scan_window_hours": 2,
+                "semantic_max_messages": 20,
+            },
+        )
+
+        profile = monitor_state.update_profile_runtime_settings(
+            conn,
+            profile_id="jobs-fast",
+            settings={"scan_window_hours": 6, "semantic_max_messages": 40},
+        )
+        overridden = monitor_state.apply_profile_runtime_overrides(
+            conn,
+            {"id": "jobs-fast", "path": "profiles/templates/jobs.md", "scan_window_hours": 2, "semantic_max_messages": 20},
+        )
+        snapshot = monitor_state.dashboard_snapshot(conn)
+
+        self.assertEqual(profile["config"]["scan_window_hours"], 6)
+        self.assertEqual(profile["config"]["semantic_max_messages"], 40)
+        self.assertEqual(overridden["scan_window_hours"], 6)
+        self.assertEqual(overridden["semantic_max_messages"], 40)
+        self.assertEqual(snapshot["profiles"][0]["scan_window_hours"], 6)
+        self.assertEqual(snapshot["profiles"][0]["semantic_max_messages"], 40)
+        self.assertNotIn("config", snapshot["profiles"][0])
+
+    def test_profile_runtime_settings_rejects_invalid_values(self):
+        conn = sqlite3.connect(":memory:")
+        conn.row_factory = sqlite3.Row
+        monitor_state.init_db(conn)
+        monitor_state.upsert_profile(
+            conn,
+            {"id": "jobs-fast", "path": "profiles/templates/jobs.md", "enabled": True},
+        )
+
+        invalid_settings = [
+            {"scan_window_hours": 0},
+            {"scan_window_hours": 169},
+            {"semantic_max_messages": 0},
+            {"semantic_max_messages": 501},
+            {"scan_window_hours": True},
+            {"command": "tgcs monitor run"},
+        ]
+        for settings in invalid_settings:
+            with self.subTest(settings=settings):
+                with self.assertRaises(monitor_state.MonitorStateError):
+                    monitor_state.update_profile_runtime_settings(conn, profile_id="jobs-fast", settings=settings)
 
     def test_follow_up_patch_can_apply_to_profile_file(self):
         conn = sqlite3.connect(":memory:")

@@ -4,6 +4,7 @@ import unittest
 import json
 from io import BytesIO
 from contextlib import AbstractContextManager
+from datetime import UTC, datetime, timedelta
 from http import HTTPStatus
 from pathlib import Path
 from unittest.mock import patch
@@ -219,6 +220,1300 @@ class DashboardServerGitTests(unittest.TestCase):
 
         self.assertIsNotNone(warning)
         self.assertIn("report artifacts", (warning or "").lower())
+
+    def test_loopback_address_detection_handles_common_local_forms(self):
+        self.assertTrue(dashboard_server.is_loopback_address("127.0.0.1"))
+        self.assertTrue(dashboard_server.is_loopback_address("::1"))
+        self.assertTrue(dashboard_server.is_loopback_address("localhost"))
+        self.assertTrue(dashboard_server.is_loopback_address("::ffff:127.0.0.1"))
+        self.assertFalse(dashboard_server.is_loopback_address("192.168.1.10"))
+
+    def test_sensitive_desk_setup_endpoint_requires_loopback_client(self):
+        class FakeHandler:
+            path = "/api/desk/telegram-status"
+            client_address = ("192.168.1.10", 51000)
+            status = None
+            payload = None
+
+            def _json(self, status, payload):
+                self.status = status
+                self.payload = payload
+
+        handler = FakeHandler()
+        dashboard_server.DashboardHandler.do_GET(handler)
+
+        self.assertEqual(handler.status, HTTPStatus.BAD_REQUEST)
+        self.assertIn("localhost", handler.payload["error"])
+
+    def test_desk_actions_exposes_allowlisted_actions_and_human_boundaries(self):
+        payload = dashboard_server.desk_actions()
+
+        self.assertEqual(payload["schema_version"], "desk_actions_v1")
+        actions = {item["action_id"]: item for item in payload["actions"]}
+        for action_id in [
+            "init_jobs",
+            "demo_render",
+            "doctor_jobs",
+            "sources_validate",
+            "sources_import_jobs",
+            "monitor_jobs_dry_run",
+            "feedback_export",
+            "schedule_preview",
+        ]:
+            self.assertEqual(actions[action_id]["run_mode"], "execute")
+            self.assertNotIn("python", actions[action_id]["display_command"].lower())
+
+        self.assertEqual(actions["schedule_install_dry_run"]["run_mode"], "confirm_execute")
+        self.assertEqual(actions["schedule_remove_dry_run"]["run_mode"], "confirm_execute")
+        self.assertNotIn("tgcs", actions["schedule_install_dry_run"]["display_command"].lower())
+        self.assertNotIn("tgcs", actions["schedule_remove_dry_run"]["display_command"].lower())
+        self.assertEqual(actions["login_human"]["run_mode"], "needs_human")
+        self.assertEqual(actions["live_delivery_human"]["run_mode"], "needs_human")
+        self.assertEqual(actions["schedule_install_human"]["run_mode"], "needs_human")
+
+    def test_run_desk_action_rejects_unknown_action_id(self):
+        with self.assertRaises(dashboard_server.DashboardDeskActionError) as raised:
+            dashboard_server.run_desk_action("not-a-real-action")
+
+        self.assertIn("Unknown Desk action", str(raised.exception))
+
+    def test_run_desk_action_ignores_arbitrary_command_payload_and_uses_fixed_entry(self):
+        completed = subprocess.CompletedProcess(
+            ["python"],
+            0,
+            stdout=json.dumps(
+                {
+                    "ok": True,
+                    "data": {
+                        "status": "complete",
+                        "html_path": "output/runs/run-1/report.html",
+                        "next_step": "Open dashboard.",
+                    },
+                    "error": None,
+                }
+            ),
+            stderr="",
+        )
+
+        with patch.object(dashboard_server.subprocess, "run", return_value=completed) as run_mock:
+            result = dashboard_server.run_desk_action(
+                "monitor_jobs_dry_run",
+                body={"command": "powershell -NoProfile Remove-Item -Recurse ."},
+            )
+
+        cmd = [str(part) for part in run_mock.call_args.args[0]]
+        self.assertEqual(Path(cmd[1]).name, "tgcs.py")
+        self.assertIn("monitor", cmd)
+        self.assertIn("run", cmd)
+        self.assertNotIn("Remove-Item", " ".join(cmd))
+        self.assertEqual(result["status"], "success")
+        self.assertEqual(result["artifact_path"], "output/runs/run-1/report.html")
+        self.assertEqual(result["next_action"], "Open dashboard.")
+
+    def test_run_desk_action_returns_needs_human_without_subprocess_for_human_takeover(self):
+        with patch.object(dashboard_server.subprocess, "run") as run_mock:
+            results = {
+                action_id: dashboard_server.run_desk_action(action_id)
+                for action_id in ["login_human", "live_delivery_human", "schedule_install_human"]
+            }
+
+        run_mock.assert_not_called()
+        self.assertEqual(results["login_human"]["status"], "needs_human")
+        self.assertIn("tgcs login", results["login_human"]["display_command"])
+        self.assertEqual(results["live_delivery_human"]["status"], "needs_human")
+        self.assertIn("delivery test", results["live_delivery_human"]["display_command"])
+        self.assertEqual(results["schedule_install_human"]["status"], "needs_human")
+        self.assertIn("schedule print", results["schedule_install_human"]["display_command"])
+
+    def test_schedule_preview_action_only_prints_scheduler_command(self):
+        completed = subprocess.CompletedProcess(
+            ["python"],
+            0,
+            stdout="schtasks /Create /SC MINUTE /MO 15 /TN TGCS-jobs-fast /TR \"tgcs.bat monitor run\"\n",
+            stderr="",
+        )
+
+        with patch.object(dashboard_server.subprocess, "run", return_value=completed) as run_mock:
+            result = dashboard_server.run_desk_action("schedule_preview")
+
+        cmd = [str(part) for part in run_mock.call_args.args[0]]
+        self.assertIn("schedule", cmd)
+        self.assertIn("print", cmd)
+        self.assertNotIn("/Create", cmd)
+        self.assertIn("dry-run", cmd)
+        self.assertNotIn("live", cmd)
+        self.assertEqual(result["status"], "success")
+        self.assertIn("dry-runs would run every 15 minutes", result["detail"])
+        self.assertNotIn("schtasks", result["detail"].lower())
+        self.assertIn("Signal Desk", result["next_action"])
+
+    def test_schedule_install_dry_run_requires_confirmation(self):
+        with patch.object(dashboard_server, "_run_scheduler_command") as run_mock:
+            with self.assertRaises(dashboard_server.DashboardDeskActionError) as raised:
+                dashboard_server.run_desk_action("schedule_install_dry_run", body={})
+
+        run_mock.assert_not_called()
+        self.assertIn("confirmation", str(raised.exception))
+
+    def test_schedule_install_dry_run_rejects_extra_payload_keys(self):
+        with patch.object(dashboard_server, "_run_scheduler_command") as run_mock:
+            with self.assertRaises(dashboard_server.DashboardDeskActionError) as raised:
+                dashboard_server.run_desk_action(
+                    "schedule_install_dry_run",
+                    body={"confirm": True, "command": "powershell Remove-Item ."},
+                )
+
+        run_mock.assert_not_called()
+        self.assertIn("confirmation flag", str(raised.exception))
+
+    def test_schedule_install_dry_run_blocks_non_windows(self):
+        with patch.object(dashboard_server.sys, "platform", "linux"):
+            with patch.object(dashboard_server, "_run_scheduler_command") as run_mock:
+                result = dashboard_server.run_desk_action("schedule_install_dry_run", body={"confirm": True})
+
+        run_mock.assert_not_called()
+        self.assertEqual(result["status"], "blocked")
+        self.assertIn("Windows Task Scheduler", result["detail"])
+
+    def test_schedule_install_dry_run_blocks_when_launcher_is_missing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch.object(dashboard_server.sys, "platform", "win32"):
+                with patch.object(dashboard_server, "PROJECT_ROOT", Path(tmp)):
+                    with patch.object(dashboard_server, "_run_scheduler_command") as run_mock:
+                        result = dashboard_server.run_desk_action("schedule_install_dry_run", body={"confirm": True})
+
+        run_mock.assert_not_called()
+        self.assertEqual(result["status"], "blocked")
+        self.assertIn("launcher", result["detail"].lower())
+
+    def test_schedule_install_dry_run_uses_fixed_schtasks_argv(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project_root = Path(tmp)
+            (project_root / "tgcs.bat").write_text("@echo off\n", encoding="utf-8")
+            completed = subprocess.CompletedProcess(["schtasks.exe"], 0, stdout="SUCCESS\n", stderr="")
+
+            with patch.object(dashboard_server.sys, "platform", "win32"):
+                with patch.object(dashboard_server, "PROJECT_ROOT", project_root):
+                    with patch.object(dashboard_server, "_run_scheduler_command", return_value=completed) as run_mock:
+                        result = dashboard_server.run_desk_action(
+                            "schedule_install_dry_run",
+                            body={"confirm": True},
+                        )
+
+        args = run_mock.call_args.args[0]
+        self.assertEqual(args[0], "schtasks.exe")
+        self.assertIn("/Create", args)
+        self.assertIn(dashboard_server.DESK_SCHEDULER_TASK_NAME, args)
+        trigger = args[args.index("/TR") + 1]
+        self.assertIn("tgcs.bat", trigger)
+        self.assertIn("--delivery-mode dry-run", trigger)
+        self.assertNotIn("--delivery-mode live", trigger)
+        self.assertEqual(result["status"], "success")
+        self.assertNotIn(str(project_root), result["detail"])
+
+    def test_schedule_remove_dry_run_uses_fixed_schtasks_argv(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project_root = Path(tmp)
+            (project_root / "tgcs.bat").write_text("@echo off\n", encoding="utf-8")
+            completed = subprocess.CompletedProcess(["schtasks.exe"], 0, stdout="SUCCESS\n", stderr="")
+
+            with patch.object(dashboard_server.sys, "platform", "win32"):
+                with patch.object(dashboard_server, "PROJECT_ROOT", project_root):
+                    with patch.object(dashboard_server, "_run_scheduler_command", return_value=completed) as run_mock:
+                        result = dashboard_server.run_desk_action(
+                            "schedule_remove_dry_run",
+                            body={"confirm": True},
+                        )
+
+        args = run_mock.call_args.args[0]
+        self.assertEqual(args[:2], ["schtasks.exe", "/Delete"])
+        self.assertIn(dashboard_server.DESK_SCHEDULER_TASK_NAME, args)
+        self.assertEqual(result["status"], "success")
+
+    def test_schedule_install_dry_run_failure_sanitizes_project_path(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project_root = Path(tmp)
+            (project_root / "tgcs.bat").write_text("@echo off\n", encoding="utf-8")
+            completed = subprocess.CompletedProcess(
+                ["schtasks.exe"],
+                1,
+                stdout="",
+                stderr=f"ERROR: cannot use {project_root}\\tgcs.bat\n",
+            )
+
+            with patch.object(dashboard_server.sys, "platform", "win32"):
+                with patch.object(dashboard_server, "PROJECT_ROOT", project_root):
+                    with patch.object(dashboard_server, "_run_scheduler_command", return_value=completed):
+                        result = dashboard_server.run_desk_action(
+                            "schedule_install_dry_run",
+                            body={"confirm": True},
+                        )
+
+        self.assertEqual(result["status"], "failed")
+        self.assertNotIn(str(project_root), result["detail"])
+        self.assertIn("project folder", result["detail"])
+
+    def test_desk_scheduler_status_blocks_non_windows_without_subprocess(self):
+        with patch.object(dashboard_server.sys, "platform", "linux"):
+            with patch.object(dashboard_server, "_run_scheduler_command") as run_mock:
+                status = dashboard_server.desk_scheduler_status()
+
+        run_mock.assert_not_called()
+        self.assertFalse(status["available"])
+        self.assertFalse(status["installed"])
+        self.assertEqual(status["status"], "unavailable")
+
+    def test_desk_scheduler_status_queries_fixed_task_name(self):
+        completed = subprocess.CompletedProcess(["schtasks.exe"], 0, stdout="TaskName: TGCS jobs-fast dry-run\n", stderr="")
+
+        with patch.object(dashboard_server.sys, "platform", "win32"):
+            with patch.object(dashboard_server, "_run_scheduler_command", return_value=completed) as run_mock:
+                status = dashboard_server.desk_scheduler_status()
+
+        args = run_mock.call_args.args[0]
+        self.assertEqual(args, ["schtasks.exe", "/Query", "/TN", dashboard_server.DESK_SCHEDULER_TASK_NAME])
+        self.assertTrue(status["available"])
+        self.assertTrue(status["installed"])
+        self.assertEqual(status["status"], "installed")
+        self.assertIn("every 15 minutes", status["detail"])
+
+    def test_desk_scheduler_status_reports_missing_task_without_leaking_output(self):
+        completed = subprocess.CompletedProcess(
+            ["schtasks.exe"],
+            1,
+            stdout="",
+            stderr="ERROR: The system cannot find the file specified.\n",
+        )
+
+        with patch.object(dashboard_server.sys, "platform", "win32"):
+            with patch.object(dashboard_server, "_run_scheduler_command", return_value=completed):
+                status = dashboard_server.desk_scheduler_status()
+
+        self.assertTrue(status["available"])
+        self.assertFalse(status["installed"])
+        self.assertEqual(status["status"], "not_installed")
+        self.assertEqual(status["detail"], "Automatic jobs dry-runs are off.")
+        self.assertNotIn("ERROR", json.dumps(status))
+
+    def test_desk_scheduler_status_handles_timeout(self):
+        with patch.object(dashboard_server.sys, "platform", "win32"):
+            with patch.object(
+                dashboard_server,
+                "_run_scheduler_command",
+                side_effect=subprocess.TimeoutExpired(cmd=["schtasks.exe"], timeout=30),
+            ):
+                status = dashboard_server.desk_scheduler_status()
+
+        self.assertTrue(status["available"])
+        self.assertFalse(status["installed"])
+        self.assertEqual(status["status"], "unknown")
+        self.assertIn("timed out", status["detail"])
+
+    def test_desk_scheduler_status_handles_missing_schtasks(self):
+        with patch.object(dashboard_server.sys, "platform", "win32"):
+            with patch.object(dashboard_server, "_run_scheduler_command", side_effect=OSError("not found")):
+                status = dashboard_server.desk_scheduler_status()
+
+        self.assertFalse(status["available"])
+        self.assertFalse(status["installed"])
+        self.assertEqual(status["status"], "unavailable")
+        self.assertNotIn("not found", json.dumps(status))
+
+    def test_desk_scheduler_status_http_endpoint_requires_loopback(self):
+        class FakeHandler:
+            path = "/api/desk/scheduler-status"
+            status = None
+            payload = None
+            client_address = ("192.168.1.10", 51000)
+
+            def _json(self, status, payload):
+                self.status = status
+                self.payload = payload
+
+        with patch.object(dashboard_server, "desk_scheduler_status") as status_mock:
+            handler = FakeHandler()
+            dashboard_server.DashboardHandler.do_GET(handler)
+
+        status_mock.assert_not_called()
+        self.assertEqual(handler.status, HTTPStatus.BAD_REQUEST)
+        self.assertIn("localhost", handler.payload["error"])
+
+    def test_desk_scheduler_status_http_endpoint_returns_status(self):
+        class FakeHandler:
+            path = "/api/desk/scheduler-status"
+            status = None
+            payload = None
+            client_address = ("127.0.0.1", 51000)
+
+            def _json(self, status, payload):
+                self.status = status
+                self.payload = payload
+
+        with patch.object(
+            dashboard_server,
+            "desk_scheduler_status",
+            return_value={
+                "schema_version": "desk_scheduler_status_v1",
+                "available": True,
+                "installed": False,
+                "status": "not_installed",
+                "task_label": "jobs-fast dry-run",
+                "interval_minutes": 15,
+                "detail": "Automatic jobs dry-runs are off.",
+                "next_action": "Turn on dry-runs.",
+                "checked_at": "2026-05-10T00:00:00Z",
+            },
+        ) as status_mock:
+            handler = FakeHandler()
+            dashboard_server.DashboardHandler.do_GET(handler)
+
+        status_mock.assert_called_once()
+        self.assertEqual(handler.status, HTTPStatus.OK)
+        self.assertEqual(handler.payload["scheduler"]["schema_version"], "desk_scheduler_status_v1")
+
+    def test_telegram_credentials_are_saved_without_echoing_secret(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            config_path = Path(tmp) / "config.toml"
+            session_path = Path(tmp) / "session"
+
+            status = dashboard_server.save_telegram_credentials(
+                "12345",
+                "a" * 32,
+                config_path=config_path,
+                session_path=session_path,
+            )
+
+            self.assertTrue(status["credentials_ready"])
+            self.assertFalse(status["session_ready"])
+            self.assertNotIn("a" * 32, json.dumps(status))
+            self.assertIn("api_hash", config_path.read_text(encoding="utf-8"))
+            session_path.write_text("session-string", encoding="utf-8")
+            status = dashboard_server.telegram_status(config_path=config_path, session_path=session_path)
+            self.assertEqual(status["login_state"], "authorized")
+
+    def test_telegram_credentials_reject_invalid_values(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            config_path = Path(tmp) / "config.toml"
+
+            with self.assertRaises(ValueError):
+                dashboard_server.save_telegram_credentials("bad", "a" * 32, config_path=config_path)
+            with self.assertRaises(ValueError):
+                dashboard_server.save_telegram_credentials("123", "not valid hash!", config_path=config_path)
+
+            self.assertFalse(config_path.exists())
+
+    def test_telegram_status_expires_stale_code_state(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            config_path = Path(tmp) / "config.toml"
+            session_path = Path(tmp) / "session"
+            dashboard_server.save_telegram_credentials("12345", "a" * 32, config_path=config_path, session_path=session_path)
+            old_sent_at = (datetime.now(UTC) - timedelta(seconds=dashboard_server.TELEGRAM_LOGIN_CODE_TTL_SECONDS + 1)).isoformat().replace("+00:00", "Z")
+            dashboard_server._telegram_login_set(
+                {
+                    "state": "code_sent",
+                    "phone": "+15551234567",
+                    "phone_code_hash": "hash",
+                    "sent_at": old_sent_at,
+                }
+            )
+
+            status = dashboard_server.telegram_status(config_path=config_path, session_path=session_path)
+
+        self.assertEqual(status["login_state"], "ready_for_code")
+        self.assertIn("expired", status["detail"].lower())
+        self.assertEqual(dashboard_server._telegram_login_snapshot(), {})
+
+    def test_telegram_verify_rejects_expired_code_state_before_network(self):
+        old_sent_at = (datetime.now(UTC) - timedelta(seconds=dashboard_server.TELEGRAM_LOGIN_CODE_TTL_SECONDS + 1)).isoformat().replace("+00:00", "Z")
+        dashboard_server._telegram_login_set(
+            {
+                "state": "code_sent",
+                "phone": "+15551234567",
+                "phone_code_hash": "hash",
+                "sent_at": old_sent_at,
+            }
+        )
+
+        with self.assertRaises(ValueError) as raised:
+            dashboard_server.telegram_verify_code("12345")
+
+        self.assertIn("expired", str(raised.exception).lower())
+        self.assertEqual(dashboard_server._telegram_login_snapshot(), {})
+
+    def test_telegram_send_code_converts_provider_errors_to_user_readable_error(self):
+        with patch.object(
+            dashboard_server,
+            "_telegram_send_code_async",
+            side_effect=RuntimeError("connection dropped"),
+        ):
+            with self.assertRaises(ValueError) as raised:
+                dashboard_server.telegram_send_code("+15551234567")
+
+        self.assertIn("Telegram code request failed", str(raised.exception))
+
+    def test_telegram_verify_converts_provider_errors_to_user_readable_error(self):
+        dashboard_server._telegram_login_set(
+            {
+                "state": "code_sent",
+                "phone": "+15551234567",
+                "phone_code_hash": "hash",
+                "sent_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+            }
+        )
+        provider_error = type("PhoneCodeInvalidError", (Exception,), {})
+        with patch.object(
+            dashboard_server,
+            "_telegram_verify_code_async",
+            side_effect=provider_error("bad code"),
+        ):
+            with self.assertRaises(ValueError) as raised:
+                dashboard_server.telegram_verify_code("12345")
+
+        self.assertIn("rejected the verification code", str(raised.exception))
+
+    def test_telegram_login_http_endpoint_uses_specialized_api(self):
+        class FakeHandler:
+            path = "/api/desk/telegram-login/send-code"
+            status = None
+            payload = None
+
+            def _read_json_body(self):
+                return {"phone": "+15551234567", "command": "ignored"}
+
+            def _json(self, status, payload):
+                self.status = status
+                self.payload = payload
+
+        with patch.object(
+            dashboard_server,
+            "telegram_send_code",
+            return_value={
+                "schema_version": "desk_telegram_status_v1",
+                "credentials_ready": True,
+                "session_ready": False,
+                "login_state": "code_sent",
+                "detail": "Telegram sent a verification code.",
+                "next_step": "Enter the code in Signal Desk.",
+                "config_path": "~/.config/tgcli/config.toml",
+                "session_path": "~/.config/tgcli/session",
+            },
+        ) as send_code:
+            handler = FakeHandler()
+            dashboard_server.DashboardHandler.do_POST(handler)
+
+        send_code.assert_called_once_with("+15551234567")
+        self.assertEqual(handler.status, HTTPStatus.OK)
+        self.assertEqual(handler.payload["telegram"]["login_state"], "code_sent")
+
+    def test_telegram_login_http_endpoint_returns_json_for_unexpected_error(self):
+        class FakeHandler:
+            path = "/api/desk/telegram-login/send-code"
+            status = None
+            payload = None
+
+            def _read_json_body(self):
+                return {"phone": "+15551234567"}
+
+            def _json(self, status, payload):
+                self.status = status
+                self.payload = payload
+
+        with patch.object(dashboard_server, "telegram_send_code", side_effect=RuntimeError("provider exploded")):
+            handler = FakeHandler()
+            dashboard_server.DashboardHandler.do_POST(handler)
+
+        self.assertEqual(handler.status, HTTPStatus.INTERNAL_SERVER_ERROR)
+        self.assertFalse(handler.payload["ok"])
+        self.assertIn("internal error", handler.payload["error"])
+
+    def test_telegram_verify_http_endpoint_uses_specialized_api(self):
+        class FakeHandler:
+            path = "/api/desk/telegram-login/verify-code"
+            status = None
+            payload = None
+
+            def _read_json_body(self):
+                return {"code": "12345", "password": "secret", "command": "ignored"}
+
+            def _json(self, status, payload):
+                self.status = status
+                self.payload = payload
+
+        with patch.object(
+            dashboard_server,
+            "telegram_verify_code",
+            return_value={
+                "schema_version": "desk_telegram_status_v1",
+                "credentials_ready": True,
+                "session_ready": True,
+                "login_state": "authorized",
+                "detail": "Telegram is connected for local scans.",
+                "next_step": "Run the first scan from Signal Desk.",
+                "config_path": "~/.config/tgcli/config.toml",
+                "session_path": "~/.config/tgcli/session",
+            },
+        ) as verify_code:
+            handler = FakeHandler()
+            dashboard_server.DashboardHandler.do_POST(handler)
+
+        verify_code.assert_called_once_with("12345", "secret")
+        self.assertEqual(handler.status, HTTPStatus.OK)
+        self.assertTrue(handler.payload["telegram"]["session_ready"])
+
+    def test_telegram_cancel_http_endpoint_clears_login_state(self):
+        class FakeHandler:
+            path = "/api/desk/telegram-login/cancel"
+            status = None
+            payload = None
+
+            def _read_json_body(self):
+                return {"command": "ignored"}
+
+            def _json(self, status, payload):
+                self.status = status
+                self.payload = payload
+
+        with patch.object(
+            dashboard_server,
+            "telegram_cancel_login",
+            return_value={
+                "schema_version": "desk_telegram_status_v1",
+                "credentials_ready": True,
+                "session_ready": False,
+                "login_state": "ready_for_code",
+                "detail": "Credentials are saved.",
+                "next_step": "Enter your phone number.",
+                "config_path": "~/.config/tgcli/config.toml",
+                "session_path": "~/.config/tgcli/session",
+            },
+        ) as cancel_login:
+            handler = FakeHandler()
+            dashboard_server.DashboardHandler.do_POST(handler)
+
+        cancel_login.assert_called_once_with()
+        self.assertEqual(handler.status, HTTPStatus.OK)
+        self.assertEqual(handler.payload["telegram"]["login_state"], "ready_for_code")
+
+    def test_desk_delivery_target_save_rejects_secret_or_command_fields(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            conn = monitor_state.connect(Path(tmp) / "tgcs.db")
+            try:
+                with self.assertRaises(ValueError):
+                    dashboard_server.save_desk_delivery_target(
+                        conn,
+                        "telegram-bot-default",
+                        {"chat_id": "123456", "enabled": True, "bot_token": "secret"},
+                    )
+                with self.assertRaises(ValueError):
+                    dashboard_server.save_desk_delivery_target(
+                        conn,
+                        "telegram-bot-default",
+                        {"chat_id": "123456", "enabled": True, "command": "tgcs monitor run"},
+                    )
+            finally:
+                snapshot = monitor_state.dashboard_snapshot(conn)
+                conn.close()
+
+        self.assertNotIn("secret", json.dumps(snapshot, ensure_ascii=False))
+        self.assertEqual(snapshot["delivery_targets"], [])
+
+    def test_desk_delivery_target_save_returns_sanitized_projection(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            conn = monitor_state.connect(Path(tmp) / "tgcs.db")
+            try:
+                target = dashboard_server.save_desk_delivery_target(
+                    conn,
+                    "telegram-bot-default",
+                    {"chat_id": "@signal_channel", "enabled": True},
+                )
+            finally:
+                conn.close()
+
+        self.assertEqual(target["schema_version"], "delivery_target_v1")
+        self.assertTrue(target["enabled"])
+        self.assertEqual(target["config"]["chat_id"], "@signal_channel")
+        self.assertNotIn("token", json.dumps(target, ensure_ascii=False).lower())
+
+    def test_desk_delivery_target_test_is_dry_run_only(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            conn = monitor_state.connect(Path(tmp) / "tgcs.db")
+            dashboard_server.save_desk_delivery_target(
+                conn,
+                "telegram-bot-default",
+                {"chat_id": "123456", "enabled": True},
+            )
+            try:
+                with patch.object(
+                    dashboard_server.delivery,
+                    "send_telegram_bot_message",
+                    return_value=dashboard_server.delivery.DeliveryAttempt(
+                        target_id="telegram-bot-default",
+                        target_type="telegram_bot",
+                        mode="dry-run",
+                        ok=True,
+                        status="dry_run",
+                    ),
+                ) as send_mock:
+                    result = dashboard_server.test_desk_delivery_target(
+                        conn,
+                        "telegram-bot-default",
+                        {"chat_id": "654321"},
+                    )
+            finally:
+                conn.close()
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["mode"], "dry-run")
+        send_mock.assert_called_once()
+        self.assertEqual(send_mock.call_args.kwargs["chat_id"], "654321")
+        self.assertEqual(send_mock.call_args.kwargs["mode"], "dry-run")
+
+    def test_desk_delivery_target_test_rejects_user_controlled_mode(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            conn = monitor_state.connect(Path(tmp) / "tgcs.db")
+            try:
+                with self.assertRaises(ValueError):
+                    dashboard_server.test_desk_delivery_target(
+                        conn,
+                        "telegram-bot-default",
+                        {"chat_id": "123456", "mode": "live"},
+                    )
+            finally:
+                conn.close()
+
+    def test_desk_source_import_preview_does_not_write_default_registry(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            with patch.object(dashboard_server, "PROJECT_ROOT", root):
+                result = dashboard_server.preview_desk_source_import(
+                    {"sources": "@remote_jobs\nhttps://t.me/s/miniapps_jobs\n", "topic": "jobs"}
+                )
+
+            registry = root / ".tgcs" / "sources.json"
+
+        self.assertFalse(registry.exists())
+        self.assertTrue(result["dry_run"])
+        self.assertFalse(result["written"])
+        self.assertEqual(result["added_count"], 2)
+        self.assertEqual(result["topic"], "jobs")
+        self.assertEqual(result["preview_sources"][0]["label"], "remote_jobs")
+        self.assertEqual(result["preview_truncated_count"], 0)
+        self.assertNotIn(str(root), json.dumps(result, ensure_ascii=False))
+
+    def test_desk_source_import_writes_default_registry_without_accepting_paths_or_commands(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            with patch.object(dashboard_server, "PROJECT_ROOT", root):
+                with self.assertRaises(ValueError):
+                    dashboard_server.import_desk_sources(
+                        {
+                            "sources": "@remote_jobs",
+                            "topic": "jobs",
+                            "path": "C:/private/sources.json",
+                            "command": "tgcs sources import evil.txt",
+                        }
+                    )
+                result = dashboard_server.import_desk_sources({"sources": "@remote_jobs", "topic": "jobs"})
+
+            registry = root / ".tgcs" / "sources.json"
+            payload = json.loads(registry.read_text(encoding="utf-8"))
+
+        self.assertTrue(result["written"])
+        self.assertEqual(result["added_count"], 1)
+        self.assertEqual(result["registry_path"], ".tgcs/sources.json")
+        self.assertEqual(payload["sources"][0]["username"], "remote_jobs")
+        self.assertEqual(payload["sources"][0]["topics"], ["jobs"])
+        self.assertNotIn("tgcs sources import", json.dumps(payload, ensure_ascii=False))
+
+    def test_desk_source_import_rejects_non_telegram_like_identifiers(self):
+        with self.assertRaises(ValueError):
+            dashboard_server.preview_desk_source_import(
+                {"sources": "remote_jobs\nnot a channel; rm -rf", "topic": "jobs"}
+            )
+
+    def test_desk_source_import_rejects_empty_sources_and_invalid_topic(self):
+        with self.assertRaises(ValueError):
+            dashboard_server.preview_desk_source_import({"sources": "  \n# only comments", "topic": "jobs"})
+        with self.assertRaises(ValueError):
+            dashboard_server.preview_desk_source_import({"sources": "remote_jobs", "topic": "../private"})
+
+    def test_desk_source_import_merges_topic_into_existing_registry(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            registry = root / ".tgcs" / "sources.json"
+            registry.parent.mkdir(parents=True)
+            registry.write_text(
+                json.dumps(
+                    {
+                        "schema_version": "source_registry_v1",
+                        "sources": [
+                            {
+                                "source_id": "telegram:remote_jobs",
+                                "username": "remote_jobs",
+                                "channel_id": None,
+                                "label": "remote_jobs",
+                                "topics": [],
+                                "priority": "normal",
+                                "expected_language": "",
+                                "scan_window_hours": 24,
+                                "enabled": True,
+                                "notes": "",
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            with patch.object(dashboard_server, "PROJECT_ROOT", root):
+                result = dashboard_server.import_desk_sources({"sources": "remote_jobs", "topic": "jobs"})
+            payload = json.loads(registry.read_text(encoding="utf-8"))
+
+        self.assertEqual(result["added_count"], 0)
+        self.assertEqual(result["updated_count"], 1)
+        self.assertEqual(payload["sources"][0]["topics"], ["jobs"])
+
+    def test_desk_sources_lists_and_toggles_default_registry(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            with patch.object(dashboard_server, "PROJECT_ROOT", root):
+                dashboard_server.import_desk_sources({"sources": "remote_jobs", "topic": "jobs"})
+                listed = dashboard_server.desk_sources()
+                updated = dashboard_server.set_desk_source_enabled(
+                    "telegram:remote_jobs",
+                    {"enabled": False},
+                )
+
+        self.assertEqual(listed["source_count"], 1)
+        self.assertEqual(listed["enabled_count"], 1)
+        self.assertEqual(listed["sources"][0]["label"], "remote_jobs")
+        self.assertEqual(updated["enabled_count"], 0)
+        self.assertFalse(updated["sources"][0]["enabled"])
+        self.assertNotIn(str(root), json.dumps(updated, ensure_ascii=False))
+
+    def test_desk_source_topics_updates_default_registry_without_accepting_paths_or_commands(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            with patch.object(dashboard_server, "PROJECT_ROOT", root):
+                dashboard_server.import_desk_sources({"sources": "remote_jobs", "topic": "jobs"})
+                with self.assertRaises(ValueError):
+                    dashboard_server.set_desk_source_topics(
+                        "telegram:remote_jobs",
+                        {"topics": ["remote-work"], "path": "C:/private/sources.json"},
+                    )
+                updated = dashboard_server.set_desk_source_topics(
+                    "telegram:remote_jobs",
+                    {"topics": ["remote-work", "jobs", "remote-work"]},
+                )
+
+            registry = root / ".tgcs" / "sources.json"
+            payload = json.loads(registry.read_text(encoding="utf-8"))
+
+        self.assertEqual(updated["topics"], ["jobs", "remote-work"])
+        self.assertEqual(updated["sources"][0]["topics"], ["remote-work", "jobs"])
+        self.assertEqual(payload["sources"][0]["topics"], ["remote-work", "jobs"])
+        self.assertNotIn(str(root), json.dumps(updated, ensure_ascii=False))
+
+    def test_desk_source_topics_rejects_invalid_payloads(self):
+        invalid_payloads = [
+            {"topics": "jobs"},
+            {"topics": []},
+            {"topics": ["../private"]},
+            {"topics": ["jobs", 123]},
+            {"topics": [f"topic{i}" for i in range(9)]},
+        ]
+        for body in invalid_payloads:
+            with self.subTest(body=body):
+                with self.assertRaises(ValueError):
+                    dashboard_server.set_desk_source_topics("telegram:remote_jobs", body)
+
+    def test_desk_source_enabled_rejects_unexpected_fields(self):
+        with self.assertRaises(ValueError):
+            dashboard_server.set_desk_source_enabled(
+                "telegram:remote_jobs",
+                {"enabled": False, "path": "C:/private/sources.json"},
+            )
+
+    def test_desk_source_import_http_endpoints_use_specialized_api(self):
+        class FakeHandler:
+            status = None
+            payload = None
+            client_address = ("127.0.0.1", 51000)
+
+            def __init__(self, path):
+                self.path = path
+
+            def _read_json_body(self):
+                return {"sources": "@remote_jobs", "topic": "jobs"}
+
+            def _json(self, status, payload):
+                self.status = status
+                self.payload = payload
+
+        endpoint_functions = {
+            "/api/desk/sources/preview": "preview_desk_source_import",
+            "/api/desk/sources/import": "import_desk_sources",
+        }
+        for path, function_name in endpoint_functions.items():
+            with self.subTest(path=path):
+                with patch.object(
+                    dashboard_server,
+                    function_name,
+                    return_value={
+                        "schema_version": "desk_source_import_result_v1",
+                        "dry_run": path.endswith("preview"),
+                        "written": path.endswith("import"),
+                        "topic": "jobs",
+                        "added_count": 1,
+                        "updated_count": 0,
+                        "unchanged_count": 0,
+                        "source_count": 1,
+                        "registry_path": ".tgcs/sources.json",
+                        "preview_sources": [{"label": "remote_jobs", "source_id": "telegram:remote_jobs"}],
+                        "title": "Sources ready",
+                        "detail": "ok",
+                        "next_action": "Run source checks.",
+                        "finished_at": "2026-05-10T00:00:00Z",
+                    },
+                ) as action_mock:
+                    handler = FakeHandler(path)
+                    dashboard_server.DashboardHandler.do_POST(handler)
+
+                action_mock.assert_called_once_with({"sources": "@remote_jobs", "topic": "jobs"})
+                self.assertEqual(handler.status, HTTPStatus.OK)
+                self.assertEqual(handler.payload["result"]["schema_version"], "desk_source_import_result_v1")
+
+    def test_desk_source_enabled_http_endpoint_uses_specialized_api(self):
+        class FakeHandler:
+            path = "/api/desk/sources/telegram%3Aremote_jobs/enabled"
+            status = None
+            payload = None
+            client_address = ("127.0.0.1", 51000)
+
+            def _read_json_body(self):
+                return {"enabled": False}
+
+            def _json(self, status, payload):
+                self.status = status
+                self.payload = payload
+
+        with patch.object(
+            dashboard_server,
+            "set_desk_source_enabled",
+            return_value={"schema_version": "desk_sources_v1", "source_count": 1, "enabled_count": 0, "topics": [], "sources": []},
+        ) as action_mock:
+            handler = FakeHandler()
+            dashboard_server.DashboardHandler.do_POST(handler)
+
+        action_mock.assert_called_once_with("telegram:remote_jobs", {"enabled": False})
+        self.assertEqual(handler.status, HTTPStatus.OK)
+        self.assertEqual(handler.payload["sources"]["schema_version"], "desk_sources_v1")
+
+    def test_desk_source_topics_http_endpoint_uses_specialized_api(self):
+        class FakeHandler:
+            path = "/api/desk/sources/telegram%3Aremote_jobs/topics"
+            status = None
+            payload = None
+            client_address = ("127.0.0.1", 51000)
+
+            def _read_json_body(self):
+                return {"topics": ["jobs", "remote-work"]}
+
+            def _json(self, status, payload):
+                self.status = status
+                self.payload = payload
+
+        with patch.object(
+            dashboard_server,
+            "set_desk_source_topics",
+            return_value={
+                "schema_version": "desk_sources_v1",
+                "source_count": 1,
+                "enabled_count": 1,
+                "topics": ["jobs", "remote-work"],
+                "sources": [],
+            },
+        ) as action_mock:
+            handler = FakeHandler()
+            dashboard_server.DashboardHandler.do_POST(handler)
+
+        action_mock.assert_called_once_with("telegram:remote_jobs", {"topics": ["jobs", "remote-work"]})
+        self.assertEqual(handler.status, HTTPStatus.OK)
+        self.assertEqual(handler.payload["sources"]["schema_version"], "desk_sources_v1")
+
+    def test_desk_source_topics_http_endpoint_rejects_encoded_invalid_source_ids(self):
+        class FakeHandler:
+            status = None
+            payload = None
+            client_address = ("127.0.0.1", 51000)
+
+            def __init__(self, path):
+                self.path = path
+
+            def _read_json_body(self):
+                return {"topics": ["jobs"]}
+
+            def _json(self, status, payload):
+                self.status = status
+                self.payload = payload
+
+        paths = [
+            "/api/desk/sources/telegram%3A..%2Fprivate/topics",
+            "/api/desk/sources/telegram%3Aremote_jobs%00/topics",
+            f"/api/desk/sources/telegram%3A{'a' * 65}/topics",
+        ]
+        for path in paths:
+            with self.subTest(path=path):
+                handler = FakeHandler(path)
+                dashboard_server.DashboardHandler.do_POST(handler)
+
+                self.assertEqual(handler.status, HTTPStatus.BAD_REQUEST)
+                self.assertIn("Source id is not supported", handler.payload["error"])
+
+    def test_profile_enabled_http_endpoint_updates_runtime_override(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "tgcs.db"
+            conn = monitor_state.connect(db_path)
+            try:
+                monitor_state.upsert_profile(
+                    conn,
+                    {
+                        "id": "jobs-fast",
+                        "path": "profiles/templates/jobs.md",
+                        "enabled": True,
+                    },
+                )
+            finally:
+                conn.close()
+
+            class FakeHandler:
+                path = "/api/profiles/jobs-fast/enabled"
+                status = None
+                payload = None
+                client_address = ("127.0.0.1", 51000)
+
+                def _connect(self):
+                    return monitor_state.connect(db_path)
+
+                def _read_json_body(self):
+                    return {"enabled": False}
+
+                def _json(self, status, payload):
+                    self.status = status
+                    self.payload = payload
+
+            handler = FakeHandler()
+            dashboard_server.DashboardHandler.do_POST(handler)
+            conn = monitor_state.connect(db_path)
+            try:
+                snapshot = monitor_state.dashboard_snapshot(conn)
+            finally:
+                conn.close()
+
+        self.assertEqual(handler.status, HTTPStatus.OK)
+        self.assertFalse(handler.payload["profile"]["enabled"])
+        self.assertFalse(snapshot["profiles"][0]["enabled"])
+
+    def test_profile_enabled_http_endpoint_rejects_unexpected_fields(self):
+        class FakeHandler:
+            path = "/api/profiles/jobs-fast/enabled"
+            status = None
+            payload = None
+            client_address = ("127.0.0.1", 51000)
+
+            def _read_json_body(self):
+                return {"enabled": False, "command": "tgcs monitor run"}
+
+            def _json(self, status, payload):
+                self.status = status
+                self.payload = payload
+
+        handler = FakeHandler()
+        dashboard_server.DashboardHandler.do_POST(handler)
+
+        self.assertEqual(handler.status, HTTPStatus.BAD_REQUEST)
+        self.assertIn("Unsupported profile setting field: command", handler.payload["error"])
+
+    def test_profile_enabled_http_endpoint_requires_boolean(self):
+        class FakeHandler:
+            path = "/api/profiles/jobs-fast/enabled"
+            status = None
+            payload = None
+            client_address = ("127.0.0.1", 51000)
+
+            def _read_json_body(self):
+                return {"enabled": "false"}
+
+            def _json(self, status, payload):
+                self.status = status
+                self.payload = payload
+
+        handler = FakeHandler()
+        dashboard_server.DashboardHandler.do_POST(handler)
+
+        self.assertEqual(handler.status, HTTPStatus.BAD_REQUEST)
+        self.assertIn("true or false", handler.payload["error"])
+
+    def test_profile_runtime_settings_http_endpoint_updates_runtime_override(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "tgcs.db"
+            conn = monitor_state.connect(db_path)
+            try:
+                monitor_state.upsert_profile(
+                    conn,
+                    {
+                        "id": "jobs-fast",
+                        "path": "profiles/templates/jobs.md",
+                        "enabled": True,
+                        "scan_window_hours": 2,
+                        "semantic_max_messages": 20,
+                    },
+                )
+            finally:
+                conn.close()
+
+            class FakeHandler:
+                path = "/api/profiles/jobs-fast/runtime-settings"
+                status = None
+                payload = None
+                client_address = ("127.0.0.1", 51000)
+
+                def _connect(self):
+                    return monitor_state.connect(db_path)
+
+                def _read_json_body(self):
+                    return {"scan_window_hours": 6, "semantic_max_messages": 40}
+
+                def _json(self, status, payload):
+                    self.status = status
+                    self.payload = payload
+
+            handler = FakeHandler()
+            dashboard_server.DashboardHandler.do_POST(handler)
+            conn = monitor_state.connect(db_path)
+            try:
+                snapshot = monitor_state.dashboard_snapshot(conn)
+            finally:
+                conn.close()
+
+        self.assertEqual(handler.status, HTTPStatus.OK)
+        self.assertEqual(handler.payload["profile"]["config"]["scan_window_hours"], 6)
+        self.assertEqual(handler.payload["profile"]["config"]["semantic_max_messages"], 40)
+        self.assertEqual(snapshot["profiles"][0]["scan_window_hours"], 6)
+        self.assertEqual(snapshot["profiles"][0]["semantic_max_messages"], 40)
+
+    def test_profile_runtime_settings_http_endpoint_rejects_extra_fields(self):
+        class FakeHandler:
+            path = "/api/profiles/jobs-fast/runtime-settings"
+            status = None
+            payload = None
+            client_address = ("127.0.0.1", 51000)
+
+            def _read_json_body(self):
+                return {"scan_window_hours": 6, "command": "tgcs monitor run"}
+
+            def _json(self, status, payload):
+                self.status = status
+                self.payload = payload
+
+        handler = FakeHandler()
+        dashboard_server.DashboardHandler.do_POST(handler)
+
+        self.assertEqual(handler.status, HTTPStatus.BAD_REQUEST)
+        self.assertIn("Unsupported profile setting field: command", handler.payload["error"])
+
+    def test_profile_runtime_settings_http_endpoint_rejects_out_of_range_values(self):
+        class FakeConnection:
+            def close(self):
+                pass
+
+        class FakeHandler:
+            path = "/api/profiles/jobs-fast/runtime-settings"
+            status = None
+            payload = None
+            client_address = ("127.0.0.1", 51000)
+
+            def _connect(self):
+                return FakeConnection()
+
+            def _read_json_body(self):
+                return {"scan_window_hours": 0}
+
+            def _json(self, status, payload):
+                self.status = status
+                self.payload = payload
+
+        with patch.object(
+            dashboard_server.monitor_state,
+            "update_profile_runtime_settings",
+            side_effect=monitor_state.MonitorStateError("scan_window_hours must be between 1 and 168."),
+        ) as update_mock:
+            handler = FakeHandler()
+            dashboard_server.DashboardHandler.do_POST(handler)
+
+        update_mock.assert_called_once()
+        self.assertEqual(handler.status, HTTPStatus.BAD_REQUEST)
+        self.assertIn("between 1 and 168", handler.payload["error"])
+
+    def test_profile_runtime_settings_http_endpoint_rejects_invalid_payloads(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "tgcs.db"
+            conn = monitor_state.connect(db_path)
+            try:
+                monitor_state.upsert_profile(
+                    conn,
+                    {"id": "jobs-fast", "path": "profiles/templates/jobs.md", "enabled": True},
+                )
+            finally:
+                conn.close()
+
+            class FakeHandler:
+                status = None
+                payload = None
+                client_address = ("127.0.0.1", 51000)
+
+                def __init__(self, body, path="/api/profiles/jobs-fast/runtime-settings"):
+                    self.body = body
+                    self.path = path
+
+                def _connect(self):
+                    return monitor_state.connect(db_path)
+
+                def _read_json_body(self):
+                    return self.body
+
+                def _json(self, status, payload):
+                    self.status = status
+                    self.payload = payload
+
+            cases = [
+                ({}, "/api/profiles/jobs-fast/runtime-settings", "At least one profile setting is required"),
+                ({"semantic_max_messages": 0}, "/api/profiles/jobs-fast/runtime-settings", "between 1 and 500"),
+                ({"semantic_max_messages": 501}, "/api/profiles/jobs-fast/runtime-settings", "between 1 and 500"),
+                ({"scan_window_hours": "six"}, "/api/profiles/jobs-fast/runtime-settings", "must be an integer"),
+                ({"scan_window_hours": True}, "/api/profiles/jobs-fast/runtime-settings", "must be an integer"),
+                ({"scan_window_hours": 6}, "/api/profiles/unknown/runtime-settings", "Profile is not registered"),
+            ]
+            for body, path, error_fragment in cases:
+                with self.subTest(body=body, path=path):
+                    handler = FakeHandler(body, path)
+                    dashboard_server.DashboardHandler.do_POST(handler)
+
+                    self.assertEqual(handler.status, HTTPStatus.BAD_REQUEST)
+                    self.assertIn(error_fragment, handler.payload["error"])
+
+    def test_telegram_post_endpoints_require_loopback_client(self):
+        class FakeHandler:
+            status = None
+            payload = None
+            client_address = ("192.168.1.10", 51000)
+
+            def __init__(self, path):
+                self.path = path
+
+            def _read_json_body(self):
+                return {"api_id": "12345", "api_hash": "a" * 32, "phone": "+15551234567", "code": "12345"}
+
+            def _json(self, status, payload):
+                self.status = status
+                self.payload = payload
+
+        endpoint_functions = {
+            "/api/desk/telegram-credentials": "save_telegram_credentials",
+            "/api/desk/telegram-login/send-code": "telegram_send_code",
+            "/api/desk/telegram-login/verify-code": "telegram_verify_code",
+            "/api/desk/telegram-login/cancel": "telegram_cancel_login",
+            "/api/desk/delivery-targets/telegram-bot-default": "save_desk_delivery_target",
+            "/api/desk/delivery-targets/telegram-bot-default/test": "test_desk_delivery_target",
+            "/api/desk/sources/preview": "preview_desk_source_import",
+            "/api/desk/sources/import": "import_desk_sources",
+            "/api/desk/sources/telegram%3Aremote_jobs/enabled": "set_desk_source_enabled",
+            "/api/desk/sources/telegram%3Aremote_jobs/topics": "set_desk_source_topics",
+            "/api/profiles/jobs-fast/enabled": "update_profile_enabled",
+            "/api/profiles/jobs-fast/runtime-settings": "update_profile_runtime_settings",
+            "/api/profiles/jobs-fast/alert-mode": "update_profile_alert_mode",
+        }
+        for path, function_name in endpoint_functions.items():
+            with self.subTest(path=path):
+                module = dashboard_server.monitor_state if function_name.startswith("update_profile_") else dashboard_server
+                with patch.object(module, function_name) as action_mock:
+                    handler = FakeHandler(path)
+                    dashboard_server.DashboardHandler.do_POST(handler)
+
+                action_mock.assert_not_called()
+                self.assertEqual(handler.status, HTTPStatus.BAD_REQUEST)
+                self.assertIn("localhost", handler.payload["error"])
+
+    def test_desk_actions_http_endpoint_returns_actions(self):
+        class FakeHandler:
+            path = "/api/desk/actions"
+            status = None
+            payload = None
+
+            def _json(self, status, payload):
+                self.status = status
+                self.payload = payload
+
+        handler = FakeHandler()
+        dashboard_server.DashboardHandler.do_GET(handler)
+
+        self.assertEqual(handler.status, HTTPStatus.OK)
+        self.assertEqual(handler.payload["schema_version"], "desk_actions_v1")
+
+    def test_desk_action_run_endpoint_returns_bad_request_for_unknown_action(self):
+        class FakeHandler:
+            path = "/api/desk/actions/unknown/run"
+            status = None
+            payload = None
+
+            def _read_json_body(self):
+                return {}
+
+            def _json(self, status, payload):
+                self.status = status
+                self.payload = payload
+
+        handler = FakeHandler()
+        dashboard_server.DashboardHandler.do_POST(handler)
+
+        self.assertEqual(handler.status, HTTPStatus.BAD_REQUEST)
+        self.assertIn("Unknown Desk action", handler.payload["error"])
+
+    def test_desk_action_run_endpoint_uses_requested_action_id(self):
+        class FakeHandler:
+            path = "/api/desk/actions/monitor_jobs_dry_run/run"
+            status = None
+            payload = None
+
+            def _read_json_body(self):
+                return {"command": "ignored"}
+
+            def _json(self, status, payload):
+                self.status = status
+                self.payload = payload
+
+        with patch.object(
+            dashboard_server,
+            "run_desk_action",
+            return_value={
+                "schema_version": "desk_action_result_v1",
+                "action_id": "monitor_jobs_dry_run",
+                "status": "success",
+                "title": "Run jobs monitor dry-run",
+                "detail": "done",
+                "display_command": "tgcs monitor run --profile-id jobs-fast --delivery-mode dry-run",
+                "exit_code": 0,
+                "artifact_path": "",
+                "next_action": "",
+                "finished_at": "2026-05-10T00:00:00Z",
+            },
+        ) as run_mock:
+            handler = FakeHandler()
+            dashboard_server.DashboardHandler.do_POST(handler)
+
+        run_mock.assert_called_once_with("monitor_jobs_dry_run", body={"command": "ignored"})
+        self.assertEqual(handler.status, HTTPStatus.OK)
+        self.assertEqual(handler.payload["result"]["action_id"], "monitor_jobs_dry_run")
 
     def test_markdown_report_artifact_renders_as_mobile_html(self):
         with tempfile.TemporaryDirectory() as tmp:
