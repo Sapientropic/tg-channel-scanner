@@ -193,46 +193,99 @@ export function ActionsView({
           ))}
         </div>
       )}
-      {compactReadyMode && summaryBlock}
-      {secondaryReadySteps.length > 0 && (
-        <details className="journey-secondary">
-          <summary>Other controls</summary>
-          <div className="journey-list secondary">
-            {secondaryReadySteps.map((step, index) => (
-              <JourneyStepCard
-                actionMap={actionMap}
-                anyBusy={Boolean(busyActionId)}
-                busyActionId={busyActionId}
-                index={index + 1}
-                key={step.key}
-                onRun={onRun}
-                results={results}
-                step={step}
-                telegram={telegram}
-              />
-            ))}
+      {compactReadyMode ? (
+        <details className="journey-secondary start-more-controls">
+          <summary>More controls</summary>
+          <div className="start-more-body">
+            <section className="start-more-section" aria-label="Status snapshot">
+              <span className="panel-kicker">Status snapshot</span>
+              {summaryBlock}
+            </section>
+            {secondaryReadySteps.length > 0 && (
+              <section className="start-more-section" aria-label="Other controls">
+                <span className="panel-kicker">Other controls</span>
+                <div className="journey-list secondary">
+                  {secondaryReadySteps.map((step, index) => (
+                    <JourneyStepCard
+                      actionMap={actionMap}
+                      anyBusy={Boolean(busyActionId)}
+                      busyActionId={busyActionId}
+                      index={index + 1}
+                      key={step.key}
+                      onRun={onRun}
+                      results={results}
+                      step={step}
+                      telegram={telegram}
+                    />
+                  ))}
+                </div>
+              </section>
+            )}
+            {parkedSteps.length > 0 && (
+              <section className="start-more-section" aria-label="Setup checks">
+                <span className="panel-kicker">Setup checks</span>
+                <div className="journey-list secondary">
+                  {parkedSteps.map((step, index) => (
+                    <JourneyStepCard
+                      actionMap={actionMap}
+                      anyBusy={Boolean(busyActionId)}
+                      busyActionId={busyActionId}
+                      index={index + 1}
+                      key={step.key}
+                      onRun={onRun}
+                      results={results}
+                      step={step}
+                      telegram={telegram}
+                    />
+                  ))}
+                </div>
+              </section>
+            )}
           </div>
         </details>
-      )}
-      {parkedSteps.length > 0 && (
-        <details className="journey-secondary">
-          <summary>Setup checks</summary>
-          <div className="journey-list secondary">
-            {parkedSteps.map((step, index) => (
-              <JourneyStepCard
-                actionMap={actionMap}
-                anyBusy={Boolean(busyActionId)}
-                busyActionId={busyActionId}
-                index={index + 1}
-                key={step.key}
-                onRun={onRun}
-                results={results}
-                step={step}
-                telegram={telegram}
-              />
-            ))}
-          </div>
-        </details>
+      ) : (
+        <>
+          {secondaryReadySteps.length > 0 && (
+            <details className="journey-secondary">
+              <summary>Other controls</summary>
+              <div className="journey-list secondary">
+                {secondaryReadySteps.map((step, index) => (
+                  <JourneyStepCard
+                    actionMap={actionMap}
+                    anyBusy={Boolean(busyActionId)}
+                    busyActionId={busyActionId}
+                    index={index + 1}
+                    key={step.key}
+                    onRun={onRun}
+                    results={results}
+                    step={step}
+                    telegram={telegram}
+                  />
+                ))}
+              </div>
+            </details>
+          )}
+          {parkedSteps.length > 0 && (
+            <details className="journey-secondary">
+              <summary>Setup checks</summary>
+              <div className="journey-list secondary">
+                {parkedSteps.map((step, index) => (
+                  <JourneyStepCard
+                    actionMap={actionMap}
+                    anyBusy={Boolean(busyActionId)}
+                    busyActionId={busyActionId}
+                    index={index + 1}
+                    key={step.key}
+                    onRun={onRun}
+                    results={results}
+                    step={step}
+                    telegram={telegram}
+                  />
+                ))}
+              </div>
+            </details>
+          )}
+        </>
       )}
     </section>
   );

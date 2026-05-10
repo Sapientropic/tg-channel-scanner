@@ -24,7 +24,7 @@ Current truth for the 2026-05-11 quality loop. Product rules stay in `.frontend-
 
 Cannot claim acceptance readiness yet.
 
-The highest current blockers are interaction/information-architecture problems, not build or test failures. Runs, Settings, mobile Review, and Profiles have been materially reduced. Qwen's post-KIMI semantic blockers and KIMI's mobile Settings type-size P1 were fixed locally in Iteration 15. The next highest user-visible gap is mobile Start first-viewport noise.
+The highest current blockers are interaction/information-architecture problems, not build or test failures. Runs, Settings, mobile Review, Profiles, and Start have been materially reduced. Qwen's post-KIMI semantic blockers and KIMI's mobile Settings type-size P1 were fixed locally in Iteration 15; KIMI's mobile Start first-viewport concern was fixed locally in Iteration 16. A full-surface reviewer gate is still needed before any acceptance claim.
 
 ## Repair Roadmap
 
@@ -49,7 +49,7 @@ The highest current blockers are interaction/information-architecture problems, 
    - Commit checkpoint when a slice is coherent and verified enough to roll back.
 
 5. Current next slice - reviewer follow-up and remaining app polish:
-   - Reduce mobile Start first-viewport noise; KIMI flagged it as the largest remaining scroll trap.
+   - Run a full-surface reviewer gate after Start / Review / Runs / Settings changes.
    - Keep reducing first-viewport noise without hiding safety or maintenance controls.
    - Use another independent reviewer because Gemini failed again.
    - The recovered Claude Code plans report is now P0/P1-clean locally; the count-bar P2 was handled in Iteration 15.
@@ -515,3 +515,33 @@ The highest current blockers are interaction/information-architecture problems, 
 - Hook enforcement: manual.
 - Artifact hygiene: reviewer packet remains in the timestamped output evidence folder; current truth remains this log and `docs/quality-task-state.md`.
 - Next: commit checkpoint, then start mobile Start first-viewport noise reduction.
+
+## Iteration 16 - Mobile Start First-Viewport Reduction
+
+- Target: fix KIMI's largest remaining first-viewport concern: mobile Start was still 1161px tall and read like a checklist after the main action.
+- Changes:
+  - `dashboard/src/components/actions.tsx`: ready-mode Start now keeps secondary status, other controls, and setup checks inside one `More controls` disclosure.
+  - `dashboard/src/styles/actions.css`: added compact `More controls` disclosure styling and removed the earlier separate status disclosure styling.
+- Verification:
+  - `npm test -- --run src/components/actions.test.tsx`: 1 file / 12 tests passed.
+  - `npm test -- --run`: 11 files / 82 tests passed.
+  - `npm run build`: passed.
+  - `git diff --check`: passed, with only Windows line-ending warnings.
+  - Start-only real-browser checks: `output/quality-review/20260511-0510-start-first-viewport/` and `output/quality-review/20260511-0518-start-more-collapse/`.
+  - Full real-browser check after the Start fix: `output/quality-review/20260511-0522-full-after-start/`.
+  - Mobile Start scroll height is now 844px, down from 1161px before the slice.
+  - Desktop Start remains one viewport high; all audited desktop/mobile tabs have no horizontal overflow and zero small-target findings.
+- External review:
+  - Directly addresses KIMI task `e218d617fb74` P2/Priority 1 recommendation for mobile Start first-viewport noise reduction.
+  - No post-Start full-surface reviewer has run yet; that is the next gate.
+- Triage:
+  - Accepted: ready-mode users should see one recommended next action, not a status/checklist wall.
+  - Accepted: secondary status and setup controls remain available, but behind one deliberate disclosure.
+  - Deferred: further micro-copy polish inside the collapsed controls until a full-surface reviewer asks for it.
+- Task state: local checkpoint ready after full visual audit.
+- `needs_human`: final visual/taste acceptance remains user-owned.
+- Residual risk: Mobile Review, Runs, and Profiles are still slightly over one viewport, but all are under 950px and have no overflow or small targets.
+- Memory closeout: pending.
+- Hook enforcement: manual.
+- Artifact hygiene: screenshot evidence remains timestamped under `output/quality-review/`; no extra docs created.
+- Next: commit checkpoint, then dispatch a full-surface reviewer packet.

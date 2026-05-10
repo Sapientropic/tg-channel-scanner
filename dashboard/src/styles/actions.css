@@ -227,6 +227,27 @@
   padding: 0 10px 10px;
 }
 
+.start-more-body {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  padding: 0 10px 10px;
+}
+
+.start-more-section {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.start-more-section .start-summary {
+  box-shadow: none;
+}
+
+.start-more-section .journey-list {
+  padding: 0;
+}
+
 .journey-step {
   display: grid;
   grid-template-columns: 34px minmax(0, 1fr) minmax(218px, 0.27fr);
