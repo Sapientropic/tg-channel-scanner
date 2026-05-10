@@ -13,28 +13,29 @@ Current truth for the 2026-05-11 quality loop. The full historical log is archiv
 
 ## Current Verdict
 
-Cannot claim acceptance readiness yet.
+Cannot claim user acceptance yet; local evidence is strong enough to keep iterating from reviewer-specific P2/P3 rather than broad layout rescue.
 
 What is locally verified:
 - Mobile Start and Settings are exactly one 390x844 viewport after the latest fixes.
-- Mobile Review, Profiles, and Runs are still over one viewport but under 950px.
+- Mobile Review, Profiles, and Runs are still over one viewport; Review is 948px and Runs is 942px after the KIMI full-surface P1 fix.
 - Desktop Start / Review / Profiles / Runs / Settings are one viewport high.
-- Latest full visual audit has no horizontal overflow and zero small-target findings across all audited tabs.
+- Latest affected-surface visual audit has no horizontal overflow and zero small-target findings across Review / Runs / Settings.
 
 What blocks a stronger claim:
-- Full-surface KIMI task `8d8822766019` is still pending.
 - Gemini reviewer route failed from rate limits.
-- DeepSeek fallback product task `7355855bc0fc` is pending.
+- DeepSeek fallback task `7355855bc0fc` completed without repo access and is treated as weak/no-count signal.
+- Human taste acceptance remains user-owned at the 2026-05-11 13:00 +08:00 review.
 
 ## Latest Evidence
 
 - Latest full screenshot/audit set: `output/quality-review/20260511-0522-full-after-start/`.
+- Latest affected-surface screenshot/audit set after KIMI full-surface P1 fixes: `output/quality-review/20260511-0600-kimi-full-p1-fix/`.
 - Latest Settings yield summary screenshot/audit: `output/quality-review/20260511-0530-settings-yield-summary/`.
 - Full reviewer packet: `output/quality-review/20260511-0522-full-after-start/reviewer-packet.md`.
 - Current task state: `docs/quality-task-state.md`.
 
 Latest deterministic checks:
-- `npm test -- --run`: 11 files / 83 tests passed after the Settings yield-summary slice.
+- `npm test -- --run`: 11 files / 83 tests passed after the KIMI full-surface P1 fix.
 - `npm run build`: passed.
 - `git diff --check`: passed, with only Windows line-ending warnings.
 
@@ -44,6 +45,7 @@ Latest deterministic checks:
 - `b403a1e` - Qwen semantic feedback fixed; Runs count bars normalized across visible clusters.
 - `1f85b0d` - Ready-mode Start secondary controls collapsed into one `More controls` disclosure.
 - `0b32fb6` - Saved Sources collapsed summary now shows source yield from existing `source_stats`.
+- Current slice - KIMI full-surface P1 fixes: mobile Runs timeline labels are readable without wrapping, Review titles clamp on mobile, and Settings Repository uses human sync copy.
 
 ## Latest Fixes
 
@@ -53,16 +55,19 @@ Latest deterministic checks:
 - Review:
   - Secondary actions use `Wrong match` and `Tune profile` instead of insider shorthand.
   - Keep/Skip remain visually primary; tuning/mismatch actions are visually secondary.
+  - Mobile card titles clamp to three lines before the action strip.
   - Mobile Review is 948px; this trade-off is accepted locally because clear labels beat cryptic compactness for the target user.
 - Runs:
   - Recent evidence is grouped by attention/review/clean.
   - Multi-run report links state they are the latest report for one run in a cluster.
   - Count bars now use a shared visible scale so low-volume and high-volume clusters are visually comparable.
+  - Mobile compact timeline dates are 11px and no longer split into unreadable fragments.
 - Settings:
   - Sources / Alerts / Notes / Yield are top-level tasks.
   - Saved Sources defaults to a collapsed management entry.
   - Collapsed Saved Sources now shows existing yield facts such as `3 latest cards · 68 tracked`.
   - Mobile Settings task details are 11px, not 9px.
+  - Repository collapsed summary now says `Workspace saved locally` / `Check when needed` instead of `UNCHECKED` / `--`.
 - Docs:
   - README / ROADMAP detail duplication was removed earlier.
   - Full quality history is archived; this file is the single current truth for the running loop.
@@ -75,22 +80,20 @@ Accepted and fixed:
 - Qwen Review action semantics and Settings `Yield` label correction.
 - Claude Code plans report Runs P0/P1; remaining count-bar P2 was fixed in `b403a1e`.
 - Qwen integrity warning that reviewer-packet claims needed pending-review wording.
-
-Pending:
-- KIMI full-surface task `8d8822766019`.
-- DeepSeek fallback product task `7355855bc0fc`.
+- KIMI full-surface task `8d8822766019`: accepted P1s for Runs date readability, Review mobile title clamp, and Settings Repository human copy.
 
 Degraded:
 - Gemini task `fbec77e0e78b` failed from provider rate limit.
+- DeepSeek task `7355855bc0fc` had no repo access; rated weak/no-count instead of treated as a reviewer pass.
 
 ## Residual Risk
 
 - Mobile Review/Runs/Profile pages remain taller than one viewport even though they are under 950px and have no overflow/small-target findings.
-- Full heterogeneous reviewer gate is degraded until KIMI and one fallback product reviewer are read and triaged.
+- Full heterogeneous reviewer gate is still degraded because Gemini was rate-limited and DeepSeek lacked repo access.
 - Source yield summary avoids fabricated timestamps; deeper recency wording needs a real timestamp field.
 
 ## Next Action
 
-1. Poll and triage KIMI task `8d8822766019`.
-2. Poll and triage DeepSeek task `7355855bc0fc` if KIMI remains slow.
-3. Update `docs/quality-task-state.md`, then continue the next reviewer-driven slice or final handoff when the deadline arrives.
+1. Commit the KIMI full-surface P1 fix checkpoint.
+2. Continue with another real-page review slice, prioritizing any reviewer-backed P1 over cosmetic P3.
+3. Near 2026-05-11 13:00 +08:00, stop opening new work and produce a concise evidence-backed handoff.

@@ -1,8 +1,37 @@
 import { Download, GitBranch } from "lucide-react";
 
-import { formatGitRemoteState } from "../domain/display";
 import type { GitUpdateStatus } from "../domain/types";
 import { PanelHeader, StatusLine } from "./common";
+
+function localChangeLabel(count: number) {
+  return `${count} local ${count === 1 ? "change" : "changes"}`;
+}
+
+function repositorySummary(status: GitUpdateStatus | null) {
+  if (!status) return "Workspace saved locally";
+  if (status.dirty) return "Changes ready to save";
+  if (status.status === "fetch_failed") return "Update check failed";
+  if (status.behind > 0 && status.ahead > 0) return "Manual sync needed";
+  if (status.behind > 0) return "Updates available";
+  if (status.ahead > 0) return "Local commits ready";
+  return "Up to date";
+}
+
+function repositoryDelta(status: GitUpdateStatus | null) {
+  if (!status) return "Check when needed";
+  if (status.dirty) return localChangeLabel(status.dirty_count);
+  if (status.ahead > 0 || status.behind > 0) {
+    return `${status.ahead} local / ${status.behind} remote`;
+  }
+  if (status.status === "fetch_failed") return "Try again later";
+  return "No remote changes";
+}
+
+function repositoryMessage(status: GitUpdateStatus | null) {
+  if (!status) return "Local workspace is saved here. Check updates only when you want to sync.";
+  if (status.message) return status.message;
+  return repositorySummary(status);
+}
 
 export function StatusRail({
   gitStatus,
@@ -20,13 +49,13 @@ export function StatusRail({
       <PanelHeader icon={<GitBranch size={18} />} title="Repository" />
       <details className="repository-details">
         <summary>
-          <span>{formatGitRemoteState(gitStatus)}</span>
-          <strong>{gitStatus ? `${gitStatus.ahead} ahead / ${gitStatus.behind} behind` : "--"}</strong>
+          <span>{repositorySummary(gitStatus)}</span>
+          <strong>{repositoryDelta(gitStatus)}</strong>
         </summary>
         <div className="repository-toolbar">
-          <StatusLine label="Branch" value={gitStatus?.branch || "unchecked"} />
-          <StatusLine label="Remote" value={formatGitRemoteState(gitStatus)} />
-          <StatusLine label="Delta" value={gitStatus ? `${gitStatus.ahead} ahead / ${gitStatus.behind} behind` : "--"} />
+          <StatusLine label="Branch" value={gitStatus?.branch || "Local workspace"} />
+          <StatusLine label="Remote" value={repositorySummary(gitStatus)} />
+          <StatusLine label="Delta" value={repositoryDelta(gitStatus)} />
           <div className="git-actions">
             <button type="button" onClick={onCheckUpdates} disabled={gitBusy}>
               <GitBranch size={15} />
@@ -38,7 +67,7 @@ export function StatusRail({
             </button>
           </div>
           <p className={`git-message ${gitStatus?.status || "unchecked"}`}>
-            {gitStatus?.message || "Remote status unchecked"}
+            {repositoryMessage(gitStatus)}
           </p>
         </div>
       </details>

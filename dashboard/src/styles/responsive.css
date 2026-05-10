@@ -399,6 +399,13 @@
     display: grid;
   }
 
+  .card-title-row h3 {
+    display: -webkit-box;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
+  }
+
   .board-token {
     min-width: 46px;
     min-height: 46px;
@@ -602,15 +609,23 @@
   }
 
   .run-compact-tile {
-    gap: 3px;
-    min-height: 42px;
-    padding: 5px 3px;
+    justify-items: center;
+    gap: 2px;
+    min-height: 39px;
+    padding: 5px 2px;
+    text-align: center;
   }
 
   .run-compact-tile small,
   .run-compact-tile span {
-    font-size: 9px;
+    font-size: 11px;
     line-height: 1.15;
+  }
+
+  .run-compact-tile small,
+  .run-compact-tile strong {
+    overflow-wrap: normal;
+    white-space: nowrap;
   }
 
   .run-compact-tile strong {
