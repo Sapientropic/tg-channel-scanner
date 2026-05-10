@@ -43,7 +43,7 @@ const SOURCE_HEAT_LIMIT = 72;
 const SOURCE_ACTION_LIMIT = 6;
 export const SOURCE_LIBRARY_PAGE_SIZE = 8;
 
-type SettingsTask = "sources" | "notifications" | "learning";
+type SettingsTask = "sources" | "notifications" | "learning" | "evidence";
 
 export function SettingsView({
   targets,
@@ -124,6 +124,7 @@ export function SettingsView({
       <SettingsTaskSwitch
         activeTask={activeTask}
         feedbackCount={feedbackSummary?.exportable_count ?? 0}
+        evidenceCount={sourceStats.length}
         notificationCount={targets.length}
         onSelect={setActiveTask}
         sourceCount={sourceLibrary?.source_count ?? sourceStats.length}
@@ -200,11 +201,11 @@ export function SettingsView({
         />
       </section>
 
-      <details className="settings-evidence">
-        <summary>
-          <Activity size={16} />
-          <span>Source evidence</span>
-        </summary>
+      <section
+        className="settings-section settings-section-evidence"
+        aria-label="Source evidence settings"
+        data-active={activeTask === "evidence" ? "true" : "false"}
+      >
         <div className="settings-evidence-grid">
           <div className="table-section source-yield-panel">
             <PanelHeader icon={<Activity size={18} />} title="Yield History" count={sourceStats.length} />
@@ -215,7 +216,7 @@ export function SettingsView({
             {sourceInsights.length ? <SourceActionGrid insights={sourceInsights} /> : <InlineEmpty title="No source actions yet" />}
           </div>
         </div>
-      </details>
+      </section>
     </section>
   );
 }
@@ -225,18 +226,21 @@ function SettingsTaskSwitch({
   sourceCount,
   notificationCount,
   feedbackCount,
+  evidenceCount,
   onSelect,
 }: {
   activeTask: SettingsTask;
   sourceCount: number;
   notificationCount: number;
   feedbackCount: number;
+  evidenceCount: number;
   onSelect: (task: SettingsTask) => void;
 }) {
   const tasks: Array<{ id: SettingsTask; label: string; count: number; detail: string }> = [
     { id: "sources", label: "Sources", count: sourceCount, detail: "Add or manage channels" },
     { id: "notifications", label: "Alerts", count: notificationCount, detail: "Bot token and delivery" },
-    { id: "learning", label: "Feedback", count: feedbackCount, detail: "Export review notes" },
+    { id: "learning", label: "Notes", count: feedbackCount, detail: "Export review notes" },
+    { id: "evidence", label: "Evidence", count: evidenceCount, detail: "Yield and source actions" },
   ];
   return (
     <div className="settings-task-switch" aria-label="Settings task switcher">

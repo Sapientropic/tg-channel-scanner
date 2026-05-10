@@ -180,7 +180,7 @@
   justify-content: center;
   width: max-content;
   min-width: 0;
-  min-height: 34px;
+  min-height: 44px;
   padding: 0 12px;
   box-shadow: none;
 }
@@ -206,7 +206,7 @@
   justify-content: center;
   width: max-content;
   min-width: 0;
-  min-height: 34px;
+  min-height: 44px;
   padding: 0 12px;
   box-shadow: none;
 }
@@ -250,7 +250,7 @@
   font: inherit;
   font-size: 13px;
   font-weight: var(--label-weight);
-  min-height: 28px;
+  min-height: 44px;
   padding: 0 6px;
 }
 

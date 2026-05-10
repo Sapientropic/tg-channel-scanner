@@ -409,7 +409,7 @@
   }
 
   .settings-task-switch {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 6px;
   }
 
@@ -498,10 +498,6 @@
     font-size: 12px;
     font-weight: var(--badge-weight);
     cursor: pointer;
-  }
-
-  .mobile-action-strip button:nth-child(n + 3) span {
-    display: none;
   }
 
   .mobile-action-strip button:disabled {

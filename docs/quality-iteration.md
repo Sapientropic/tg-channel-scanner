@@ -24,7 +24,7 @@ Current truth for the 2026-05-11 quality loop. Product rules stay in `.frontend-
 
 Cannot claim acceptance readiness yet.
 
-The highest current blockers are interaction/information-architecture problems, not build or test failures. Runs, Settings, and mobile Review have been materially reduced, but external review is degraded because Gemini failed and the latest KIMI P1 fixes still need follow-up pressure before acceptance can be claimed.
+The highest current blockers are interaction/information-architecture problems, not build or test failures. Runs, Settings, mobile Review, and Profiles have been materially reduced, but the latest Qwen P0/P1 fixes still need follow-up reviewer pressure before acceptance can be claimed.
 
 ## Repair Roadmap
 
@@ -49,7 +49,7 @@ The highest current blockers are interaction/information-architecture problems, 
    - Commit checkpoint when a slice is coherent and verified enough to roll back.
 
 5. Current next slice - reviewer follow-up and remaining app polish:
-   - Re-check Settings after accepted KIMI P1 fixes.
+   - Re-check Review/Settings after accepted Qwen P0/P1 fixes.
    - Keep reducing first-viewport noise without hiding safety or maintenance controls.
    - Use another independent reviewer because Gemini failed again.
 
@@ -407,3 +407,36 @@ The highest current blockers are interaction/information-architecture problems, 
 - Hook enforcement: manual.
 - Artifact hygiene: screenshot evidence remains timestamped under `output/quality-review/`; transient reviewer packet remains under ignored output evidence.
 - Next: commit checkpoint, dispatch another independent reviewer for the post-fix Settings/Review surface, then continue with the next highest-value app polish.
+
+## Iteration 13 - Qwen P0/P1 And Profiles Targets
+
+- Target: fix Qwen's post-fix P0/P1 findings and remove the remaining Profiles touch-target failures.
+- Changes:
+  - `dashboard/src/components/inbox.tsx` and `dashboard/src/styles/responsive.css`: mobile Review secondary actions now show visible `FP` and `Diff` labels instead of icon-only controls.
+  - `dashboard/src/components/settings.tsx`: Settings switcher is now Sources / Alerts / Notes / Evidence; Evidence is a top-level task instead of a bottom folded footer.
+  - `dashboard/src/styles/settings/layout.css`: four-task Settings switcher uses two columns on mobile and mutes empty Notes count.
+  - `dashboard/src/styles/common-controls.css` and `dashboard/src/styles/profiles.css`: Profiles Pause, alert mode buttons, Scan settings, and runtime inputs meet the 44px target.
+- Verification:
+  - `npm test -- --run`: 11 files / 81 tests passed.
+  - `npm run build`: passed.
+  - Real-browser screenshots and metrics: `output/quality-review/20260511-0413-qwen-p1-fix/`.
+  - Desktop Start / Review / Profiles / Runs / Settings: no horizontal overflow and zero small-target findings.
+  - Mobile Start / Review / Profiles / Runs / Settings: no horizontal overflow and zero small-target findings.
+  - Mobile Review remains 898px tall, still about 6% beyond the 844px viewport.
+  - Mobile Settings is 1258px tall after promoting Evidence to a top-level task, still far below the earlier 3051px baseline.
+  - Mobile Profiles is 917px tall after target-size fixes.
+- External review:
+  - Qwen task `910e5ac46754` returned `pass-with-risks`; accepted its P0/P1 findings and fixed them locally.
+- Triage:
+  - Accepted: icon-only secondary actions were too cryptic for ordinary mobile users.
+  - Accepted: Feedback was ambiguous; `Notes` better matches exportable review notes.
+  - Accepted with adjustment: Evidence should not be trapped in Sources or buried at the bottom, so it became a first-level Settings task.
+  - Accepted: Profiles still had real small targets despite other pages being clean.
+  - Deferred: Review remains slightly taller than one mobile viewport; forcing it under 844px would likely hide useful context.
+- Task state: local checkpoint ready; follow-up reviewer pressure still needed before acceptance claims.
+- `needs_human`: final visual/taste acceptance remains user-owned.
+- Residual risk: Start remains 1161px on mobile; acceptable for now but still a candidate if reviewers find first-viewport noise.
+- Memory closeout: pending.
+- Hook enforcement: manual.
+- Artifact hygiene: screenshot evidence remains timestamped under `output/quality-review/`.
+- Next: commit checkpoint, request post-Qwen reviewer follow-up, then continue with the next high-value surface.

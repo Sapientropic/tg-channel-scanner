@@ -243,7 +243,7 @@ function MobileActionStrip({
         disabled={busy}
       >
         <Ban size={16} />
-        <span>False positive</span>
+        <span>FP</span>
       </button>
       <button
         aria-label={showFollowUp ? "Hide profile diff note" : "Draft profile diff"}
@@ -253,7 +253,7 @@ function MobileActionStrip({
         disabled={busy}
       >
         <FileDiff size={16} />
-        <span>{showFollowUp ? "Hide diff" : "Draft diff"}</span>
+        <span>{showFollowUp ? "Hide" : "Diff"}</span>
       </button>
     </div>
   );

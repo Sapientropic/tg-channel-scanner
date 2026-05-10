@@ -21,7 +21,7 @@
 
 .settings-task-switch {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
   min-width: 0;
 }
@@ -120,6 +120,11 @@
   min-width: 0;
   padding: 12px;
   border-top: 1px solid var(--wash-paper-12);
+}
+
+.settings-section-evidence .settings-evidence-grid {
+  padding: 0;
+  border-top: 0;
 }
 
 .settings-grid .delivery-targets-panel {
