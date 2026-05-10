@@ -196,7 +196,7 @@
 .follow-up-submit,
 .mode-button,
 .text-button {
-  min-height: 42px;
+  min-height: 44px;
   border: 1px solid var(--line);
   border-radius: 0;
   background: var(--paper);

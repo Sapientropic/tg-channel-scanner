@@ -4,7 +4,9 @@ Current truth for the 2026-05-11 quality loop. Product rules stay in `.frontend-
 
 ## Operating Contract
 
-- Mode: Standard, with degraded reviewer gate because no external KIMI/GEMINI command is available in this session.
+- Mode: Integrity.
+- Intake: option-button intake was unavailable in this Default-mode runtime; the user explicitly selected `1A2A3A`: continue useful slices until the deadline, use Integrity gate, and prioritize Runs timeline / Recent Evidence de-duplication next.
+- Reviewer gate: use Orchestra profiles with concrete `assign / poll / show / rate`. KIMI is required for product/interaction critique; Gemini is preferred for broad visual/product critique; Qwen audits process integrity and overclaim risk.
 - Stop condition: keep opening useful, checkpointable slices until 2026-05-11 13:00 +08:00, then write the final handoff.
 - Scope: Signal Desk dashboard across desktop/mobile, generated report touchpoints where linked from Desk, README/ROADMAP/doc truth-source hygiene.
 - User lens: ordinary app user, ADHD, low tolerance for duplicate prose, strong preference for visual decision surfaces.
@@ -16,12 +18,13 @@ Current truth for the 2026-05-11 quality loop. Product rules stay in `.frontend-
 - Browser evidence: screenshots captured under `output/quality-review/20260511-0200/` for Inbox, Start, Profiles, Runs, and Settings at desktop 1440x1000 and mobile 390x844.
 - Screenshot audit JSON: `output/quality-review/20260511-0200/screenshot-audit.json`.
 - Reviewer B reported P1 documentation duplication across README / README.zh-CN / ROADMAP versus `docs/v0.5-alpha-alert-review-inbox.md`, plus a privacy-copy contradiction.
+- Orchestra/KIMI re-audit `11700c4a7a79` reported that the desk is not acceptance-ready: Iteration 7 improved audit numbers but did not solve the largest UX failures.
 
 ## Current Verdict
 
 Cannot claim acceptance readiness yet.
 
-The dashboard has a strong visual language, but Settings currently fails the ordinary app-user path: a long saved-source table appears before Add Sources, especially bad on mobile. The header also says tokens are never saved while Settings offers local credential-store save, which is a trust contradiction.
+The highest current blockers are interaction/information-architecture problems, not build or test failures: desktop Review can become a one-card island, mobile Runs compresses too much timeline information into 390px, Recent Evidence repeats near-identical rows, mobile Review still has a filter/action density problem, and Settings remains a long configuration maze.
 
 ## Repair Roadmap
 
@@ -44,6 +47,11 @@ The dashboard has a strong visual language, but Settings currently fails the ord
 4. Verification / review loop:
    - After each slice: rebuild or typecheck, rerun focused tests, recapture screenshots, and triage reviewer reports.
    - Commit checkpoint when a slice is coherent and verified enough to roll back.
+
+5. Current next slice - Runs information surface:
+   - Replace the mobile seven-label day strip with a readable compact health summary.
+   - Group and label recent run evidence so repeated profile/date rows do not look like noise.
+   - Preserve report access, but make the user's next decision visible before artifact links.
 
 ## Iteration 0 - Ground Truth And Plan
 
@@ -216,3 +224,32 @@ The dashboard has a strong visual language, but Settings currently fails the ord
 - Hook enforcement: manual.
 - Artifact hygiene: screenshot evidence remains timestamped; no generated evidence was promoted into docs.
 - Next: desktop compact-control polish if it does not make the desk less scannable.
+
+## Iteration 7 - Desktop Primary Control Baseline
+
+- Target: reduce desktop click-target friction without flattening the dense workstation layout.
+- Changes:
+  - Raised primary desktop button/input baselines to 44px for navigation, text buttons, journey controls, Telegram login fields, source import/search fields, delivery fields, and repository action buttons.
+  - Left filter/evidence chips compact so Review and Runs remain scannable.
+- Verification:
+  - `npm test -- --run`: 11 files / 75 tests passed.
+  - `npm run build`: passed.
+  - Real-browser screenshots and metrics: `output/quality-review/20260511-0340/`.
+  - Mobile Start / Review / Runs / Settings: no horizontal overflow and zero small-target findings.
+  - Desktop remaining sub-44 findings are compact filter/evidence chips or report links, not primary buttons.
+- External review:
+  - Orchestra/KIMI re-audit `11700c4a7a79` completed.
+  - Reviewer verdict: not acceptance-ready; Iteration 7 improved metrics but did not address the largest user-visible failures.
+  - Process correction: future reviewer gates must use Orchestra `assign / poll / show / rate`, not a one-off handoff, because the user explicitly requested the updated workflow.
+- Triage:
+  - Accepted: raise primary controls.
+  - Accepted: do not count this slice as UX acceptance; treat it only as a rollback checkpoint.
+  - Accepted: next high-value slice is Runs information restructuring: mobile timeline readability plus grouped/de-duplicated recent evidence.
+  - Rejected for now: blindly turning every badge/filter/evidence chip into 44px blocks, because it would reduce scan density without clear benefit.
+- Task state: checkpoint ready.
+- `needs_human`: final taste acceptance remains user-owned.
+- Residual risk: KIMI still flags desktop Review single-card dead space, mobile Runs timeline density, repeated run rows, mobile Review filter/action density, and Settings maze.
+- Memory closeout: pending.
+- Hook enforcement: manual.
+- Artifact hygiene: screenshot evidence remains timestamped.
+- Next: commit this checkpoint, then rebuild the Runs surface.

@@ -39,7 +39,7 @@
 }
 
 .source-import-topic input {
-  min-height: 38px;
+  min-height: 44px;
   padding: 0 10px;
 }
 
@@ -277,7 +277,7 @@
 .source-library-search input {
   width: 100%;
   min-width: 0;
-  min-height: 38px;
+  min-height: 44px;
   padding: 0 10px;
   border: 1px solid var(--wash-paper-18);
   border-radius: 0;
