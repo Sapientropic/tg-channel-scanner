@@ -65,7 +65,7 @@ export function InboxView({
           type="button"
         >
           <ListFilter size={14} />
-          <span>{activeFilter.label}</span>
+          <span>{compactFilterLabel(activeFilter.label)}</span>
           <strong>{activeFilter.count}</strong>
         </button>
         <div className="inbox-filter-group" data-open={filtersOpen ? "true" : "false"}>
@@ -111,6 +111,13 @@ export function InboxView({
       )}
     </section>
   );
+}
+
+function compactFilterLabel(label: string) {
+  if (label === "Latest action") return "Latest";
+  if (label === "New/Changed") return "New";
+  if (label === "Low/Medium") return "Low/Med";
+  return label;
 }
 
 function ReviewBacklogPanel({

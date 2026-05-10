@@ -33,12 +33,13 @@ What blocks a stronger claim:
 - Latest full screenshot/audit set after removing Runs `none` noise: `output/quality-review/20260511-0645-full-after-runs-none-noise-cut/`.
 - Latest full screenshot/audit set after compacting mobile Review: `output/quality-review/20260511-0700-full-review-density/`.
 - Latest full screenshot/audit set with all mobile pages one-screen: `output/quality-review/20260511-0720-full-all-mobile-one-screen/`.
+- Latest full screenshot/audit set after final KIMI P2 fixes: `output/quality-review/20260511-0730-final-kimi-p2-fix/`.
 - Latest Settings yield summary screenshot/audit: `output/quality-review/20260511-0530-settings-yield-summary/`.
 - Full reviewer packet: `output/quality-review/20260511-0522-full-after-start/reviewer-packet.md`.
 - Current task state: `docs/quality-task-state.md`.
 
 Latest deterministic checks:
-- `npm test -- --run`: 12 files / 85 tests passed after the mobile Review density slice.
+- `npm test -- --run`: 12 files / 85 tests passed after the final KIMI P2 fixes.
 - `npm run build`: passed.
 - `git diff --check`: passed, with only Windows line-ending warnings.
 
@@ -53,6 +54,7 @@ Latest deterministic checks:
 - `53af224` - Runs compact timeline no longer repeats `none` on empty days; the no-scan meaning remains in `aria-label` / tooltip.
 - `c039f8a` - Mobile Review triage is a compact filter row and the first card fits in one viewport.
 - `bfe8065` - Mobile Runs is compacted to one viewport without reintroducing unreadable timeline labels.
+- Current slice - Final KIMI P2s fixed: mobile Review filter shows `Latest 1`; Runs timeline tile alignment is unified.
 
 ## Latest Fixes
 
@@ -64,6 +66,7 @@ Latest deterministic checks:
   - Keep/Skip remain visually primary; tuning/mismatch actions are visually secondary.
   - Mobile card titles clamp to three lines before the action strip.
   - Mobile Review is now exactly 844px; the compact filter button keeps an accessible `aria-label`.
+  - Mobile filter toggle visibly shows the active filter and count, such as `Latest 1`.
 - Runs:
   - Recent evidence is grouped by attention/review/clean.
   - Multi-run report links state they are the latest report for one run in a cluster.
@@ -71,6 +74,7 @@ Latest deterministic checks:
   - Mobile compact timeline dates are 11px and no longer split into unreadable fragments.
   - Empty days in the compact timeline show only the date instead of repeating `none`.
   - Mobile Runs is now exactly 844px; the repeated explanation under `Fix failed scans` is removed because the attention group already carries the action.
+  - Compact timeline tiles share centered vertical alignment.
 - Settings:
   - Sources / Alerts / Notes / Yield are top-level tasks.
   - Saved Sources defaults to a collapsed management entry.
@@ -95,11 +99,11 @@ Accepted and fixed:
 - KIMI full-surface task `8d8822766019`: accepted P1s for Runs date readability, Review mobile title clamp, and Settings Repository human copy.
 - Qwen structural review `0c5099e26020`: `pass-with-risks`; confirmed Claude plans P0/P1 are closed. Its Profiles 917px risk is stale because the current slice lowered Profiles to 844px.
 - KIMI post-fix review `60b877b6c8ca`: `pass-with-risks`; P0/P1 are closed. Accepted its P2 `none` noise finding because it directly matched the user's repeated-noise constraint.
+- Final KIMI gate `96bfffa790b1`: `pass-with-risks`; no P0/P1. Accepted and fixed its P2 findings for visible mobile Review filter state and Runs tile alignment.
 
 Degraded:
 - Gemini task `fbec77e0e78b` failed from provider rate limit.
 - DeepSeek task `7355855bc0fc` had no repo access; rated weak/no-count instead of treated as a reviewer pass.
-- Final KIMI all-one-screen gate `96bfffa790b1` is still running and is not counted yet.
 
 ## Residual Risk
 
@@ -108,6 +112,6 @@ Degraded:
 
 ## Next Action
 
-1. Poll and triage final KIMI task `96bfffa790b1`.
+1. Commit the final KIMI P2 fix checkpoint.
 2. Continue reviewer-driven polish only where evidence shows user-visible noise or interaction friction.
 3. Near 2026-05-11 13:00 +08:00, stop opening new work and produce a concise evidence-backed handoff.

@@ -36,6 +36,7 @@ describe("InboxView", () => {
     );
 
     expect(html).toContain('aria-label="Review filter: Latest action (1)"');
+    expect(html).toContain("Latest");
     expect(html).toContain("Frontend Developer");
     expect(html).toContain("Keep");
     expect(html).toContain("Tune profile");
