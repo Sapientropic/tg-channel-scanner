@@ -149,13 +149,37 @@
   }
 
   .inbox-toolbar {
-    align-items: flex-start;
-    flex-direction: column;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 44px;
+    align-items: center;
     gap: 8px;
-    padding: 8px 10px;
+    padding: 8px;
+  }
+
+  .triage-copy {
+    gap: 5px;
+  }
+
+  .triage-copy .panel-title {
+    font-size: 11px;
+  }
+
+  .triage-visual {
+    min-width: 0;
+    gap: 4px;
+  }
+
+  .triage-stack {
+    height: 7px;
+  }
+
+  .triage-legend {
+    gap: 6px;
+    font-size: 9px;
   }
 
   .inbox-filter-group {
+    grid-column: 1 / -1;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     width: 100%;
     justify-content: flex-start;
@@ -164,11 +188,10 @@
   .inbox-filter-toggle {
     display: inline-flex;
     align-items: center;
-    justify-content: space-between;
-    gap: 7px;
-    width: 100%;
+    justify-content: center;
+    width: 44px;
     min-height: 44px;
-    padding: 0 10px;
+    padding: 0;
     border: 1px solid var(--wash-paper-18);
     background: color-mix(in oklch, var(--signal-medium) 13%, transparent);
     color: var(--paper);
@@ -180,6 +203,11 @@
 
   .inbox-filter-toggle strong {
     color: var(--amber);
+  }
+
+  .inbox-filter-toggle span,
+  .inbox-filter-toggle strong {
+    display: none;
   }
 
   .inbox-filter-group[data-open="false"] {
@@ -209,7 +237,8 @@
   }
 
   .card-main {
-    padding: 16px;
+    gap: 8px;
+    padding: 12px;
   }
 
   .card-actions {
@@ -510,6 +539,24 @@
   .mobile-action-strip button:disabled {
     cursor: wait;
     opacity: 0.62;
+  }
+
+  .review-card .reason {
+    line-height: 1.42;
+  }
+
+  .review-card .meta-row,
+  .review-card .source-row {
+    gap: 5px;
+  }
+
+  .review-card .report-chip {
+    min-height: 44px;
+    padding: 5px 7px;
+  }
+
+  .review-card .report-chip small {
+    display: none;
   }
 
   .review-card:not([data-actions-expanded="true"]) .card-actions {

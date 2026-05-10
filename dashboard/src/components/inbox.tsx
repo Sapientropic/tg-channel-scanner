@@ -58,6 +58,7 @@ export function InboxView({
           <InboxTriageVisual cards={cards} latestRunId={latestRunId} />
         </div>
         <button
+          aria-label={`Review filter: ${activeFilter.label} (${activeFilter.count})`}
           aria-expanded={filtersOpen}
           className="inbox-filter-toggle"
           onClick={() => setFiltersOpen((value) => !value)}

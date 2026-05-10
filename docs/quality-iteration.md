@@ -16,8 +16,8 @@ Current truth for the 2026-05-11 quality loop. The full historical log is archiv
 Cannot claim user acceptance yet; local evidence is strong enough to keep iterating from reviewer-specific P2/P3 rather than broad layout rescue.
 
 What is locally verified:
-- Mobile Start, Profiles, and Settings are exactly one 390x844 viewport after the latest fixes.
-- Mobile Review and Runs are still over one viewport; Review is 948px and Runs is 942px after the KIMI full-surface P1 fix.
+- Mobile Start, Review, Profiles, and Settings are exactly one 390x844 viewport after the latest fixes.
+- Mobile Runs is still over one viewport at 942px.
 - Desktop Start / Review / Profiles / Runs / Settings are one viewport high.
 - Latest full visual audit has no horizontal overflow and zero small-target findings across Start / Review / Profiles / Runs / Settings.
 
@@ -32,12 +32,13 @@ What blocks a stronger claim:
 - Latest affected-surface screenshot/audit set after KIMI full-surface P1 fixes: `output/quality-review/20260511-0600-kimi-full-p1-fix/`.
 - Latest full screenshot/audit set after hiding empty profile drafts: `output/quality-review/20260511-0630-full-after-profiles-noise-cut/`.
 - Latest full screenshot/audit set after removing Runs `none` noise: `output/quality-review/20260511-0645-full-after-runs-none-noise-cut/`.
+- Latest full screenshot/audit set after compacting mobile Review: `output/quality-review/20260511-0700-full-review-density/`.
 - Latest Settings yield summary screenshot/audit: `output/quality-review/20260511-0530-settings-yield-summary/`.
 - Full reviewer packet: `output/quality-review/20260511-0522-full-after-start/reviewer-packet.md`.
 - Current task state: `docs/quality-task-state.md`.
 
 Latest deterministic checks:
-- `npm test -- --run`: 11 files / 84 tests passed after the profile empty-drafts slice.
+- `npm test -- --run`: 12 files / 85 tests passed after the mobile Review density slice.
 - `npm run build`: passed.
 - `git diff --check`: passed, with only Windows line-ending warnings.
 
@@ -49,7 +50,8 @@ Latest deterministic checks:
 - `0b32fb6` - Saved Sources collapsed summary now shows source yield from existing `source_stats`.
 - `55d1b43` - KIMI full-surface P1 fixes: mobile Runs timeline labels are readable without wrapping, Review titles clamp on mobile, and Settings Repository uses human sync copy.
 - `e8b1d23` - Profiles hides the empty `Preference Drafts = 0` panel and returns mobile Profiles to one viewport.
-- Current slice - Runs compact timeline no longer repeats `none` on empty days; the no-scan meaning remains in `aria-label` / tooltip.
+- `53af224` - Runs compact timeline no longer repeats `none` on empty days; the no-scan meaning remains in `aria-label` / tooltip.
+- Current slice - Mobile Review triage is a compact filter row and the first card fits in one viewport.
 
 ## Latest Fixes
 
@@ -60,7 +62,7 @@ Latest deterministic checks:
   - Secondary actions use `Wrong match` and `Tune profile` instead of insider shorthand.
   - Keep/Skip remain visually primary; tuning/mismatch actions are visually secondary.
   - Mobile card titles clamp to three lines before the action strip.
-  - Mobile Review is 948px; this trade-off is accepted locally because clear labels beat cryptic compactness for the target user.
+  - Mobile Review is now exactly 844px; the compact filter button keeps an accessible `aria-label`.
 - Runs:
   - Recent evidence is grouped by attention/review/clean.
   - Multi-run report links state they are the latest report for one run in a cluster.
@@ -98,12 +100,12 @@ Degraded:
 
 ## Residual Risk
 
-- Mobile Review and Runs remain taller than one viewport even though they are under 950px and have no overflow/small-target findings.
+- Mobile Runs remains taller than one viewport even though it is under 950px and has no overflow/small-target findings.
 - Full heterogeneous reviewer gate is still degraded because Gemini was rate-limited and DeepSeek lacked repo access.
 - Source yield summary avoids fabricated timestamps; deeper recency wording needs a real timestamp field.
 
 ## Next Action
 
-1. Commit the Runs `none` noise checkpoint.
+1. Commit the mobile Review density checkpoint.
 2. Continue reviewer-driven polish only where evidence shows user-visible noise or interaction friction.
 3. Near 2026-05-11 13:00 +08:00, stop opening new work and produce a concise evidence-backed handoff.
