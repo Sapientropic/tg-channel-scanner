@@ -33,6 +33,7 @@ export function InboxView({
   busy: boolean;
 }) {
   const [filter, setFilter] = useState<InboxFilter>("actionable");
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const filters = inboxFilterOptions(cards, latestRunId);
   if (!cards.length) {
     return (
@@ -44,6 +45,7 @@ export function InboxView({
     );
   }
   const filteredCards = filterInboxCards(cards, filter, latestRunId);
+  const activeFilter = filters.find((item) => item.id === filter) ?? filters[0];
   return (
     <section className="list-section" aria-label="Pending review cards">
       <SetupChecklistBanner setupStatus={setupStatus} />
@@ -55,12 +57,25 @@ export function InboxView({
           </span>
           <InboxTriageVisual cards={cards} latestRunId={latestRunId} />
         </div>
-        <div className="inbox-filter-group">
+        <button
+          aria-expanded={filtersOpen}
+          className="inbox-filter-toggle"
+          onClick={() => setFiltersOpen((value) => !value)}
+          type="button"
+        >
+          <ListFilter size={14} />
+          <span>{activeFilter.label}</span>
+          <strong>{activeFilter.count}</strong>
+        </button>
+        <div className="inbox-filter-group" data-open={filtersOpen ? "true" : "false"}>
           {filters.map((item) => (
             <button
               className={filter === item.id ? "filter-chip active" : "filter-chip"}
               key={item.id}
-              onClick={() => setFilter(item.id)}
+              onClick={() => {
+                setFilter(item.id);
+                setFiltersOpen(false);
+              }}
               type="button"
             >
               <span>{item.label}</span>
@@ -212,15 +227,16 @@ function MobileActionStrip({
 }) {
   return (
     <div className="mobile-action-strip" aria-label="Quick review actions">
-      <button title="Keep" type="button" onClick={() => act(card.card_id, "keep")} disabled={busy}>
+      <button aria-label="Keep" title="Keep" type="button" onClick={() => act(card.card_id, "keep")} disabled={busy}>
         <Check size={16} />
         <span>Keep</span>
       </button>
-      <button title="Skip" type="button" onClick={() => act(card.card_id, "skip")} disabled={busy}>
+      <button aria-label="Skip" title="Skip" type="button" onClick={() => act(card.card_id, "skip")} disabled={busy}>
         <X size={16} />
         <span>Skip</span>
       </button>
       <button
+        aria-label="False positive"
         title="False positive"
         type="button"
         onClick={() => act(card.card_id, "false_positive")}
@@ -230,6 +246,7 @@ function MobileActionStrip({
         <span>False positive</span>
       </button>
       <button
+        aria-label={showFollowUp ? "Hide profile diff note" : "Draft profile diff"}
         title={showFollowUp ? "Hide profile diff note" : "Draft profile diff"}
         type="button"
         onClick={() => setShowFollowUp((value) => !value)}

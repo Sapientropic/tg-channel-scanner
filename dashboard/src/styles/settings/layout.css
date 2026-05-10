@@ -46,6 +46,10 @@
   box-shadow: inset 0 -3px 0 var(--amber);
 }
 
+.settings-task-switch button[data-empty="true"] strong {
+  color: var(--muted);
+}
+
 .settings-task-switch span,
 .settings-task-switch strong,
 .settings-task-switch small {

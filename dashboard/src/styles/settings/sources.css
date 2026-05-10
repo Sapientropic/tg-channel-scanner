@@ -2,6 +2,35 @@
   align-content: start;
 }
 
+.source-import-details summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  min-height: 44px;
+  color: var(--paper);
+  cursor: pointer;
+  list-style: none;
+}
+
+.source-import-details summary::-webkit-details-marker {
+  display: none;
+}
+
+.source-import-details summary small {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: var(--badge-weight);
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.source-import-form {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
 .source-import-field,
 .source-import-topic {
   display: grid;

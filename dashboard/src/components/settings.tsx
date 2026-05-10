@@ -136,6 +136,7 @@ export function SettingsView({
         <div className="settings-grid sources-settings-grid">
           <SourceImportPanel
             busy={busy}
+            hasSavedSources={Boolean(sourceLibrary?.source_count)}
             importSources={importSources}
             previewSourceImport={previewSourceImport}
             result={sourceImportResult}
@@ -148,22 +149,6 @@ export function SettingsView({
             setSourceTopics={setSourceTopics}
           />
         </div>
-        <details className="settings-evidence">
-          <summary>
-            <Activity size={16} />
-            <span>Source evidence</span>
-          </summary>
-          <div className="settings-evidence-grid">
-            <div className="table-section source-yield-panel">
-              <PanelHeader icon={<Activity size={18} />} title="Yield History" count={sourceStats.length} />
-              {sourceStats.length ? <SourceYieldMap sources={sourceStats} /> : <InlineEmpty title="No source stats yet" />}
-            </div>
-            <div className="table-section source-actions-panel">
-              <PanelHeader icon={<ShieldCheck size={18} />} title="Source Actions" count={sourceInsights.length} />
-              {sourceInsights.length ? <SourceActionGrid insights={sourceInsights} /> : <InlineEmpty title="No source actions yet" />}
-            </div>
-          </div>
-        </details>
       </section>
 
       <section
@@ -214,6 +199,23 @@ export function SettingsView({
           undoFeedbackDecision={undoFeedbackDecision}
         />
       </section>
+
+      <details className="settings-evidence">
+        <summary>
+          <Activity size={16} />
+          <span>Source evidence</span>
+        </summary>
+        <div className="settings-evidence-grid">
+          <div className="table-section source-yield-panel">
+            <PanelHeader icon={<Activity size={18} />} title="Yield History" count={sourceStats.length} />
+            {sourceStats.length ? <SourceYieldMap sources={sourceStats} /> : <InlineEmpty title="No source stats yet" />}
+          </div>
+          <div className="table-section source-actions-panel">
+            <PanelHeader icon={<ShieldCheck size={18} />} title="Source Actions" count={sourceInsights.length} />
+            {sourceInsights.length ? <SourceActionGrid insights={sourceInsights} /> : <InlineEmpty title="No source actions yet" />}
+          </div>
+        </div>
+      </details>
     </section>
   );
 }
@@ -232,15 +234,16 @@ function SettingsTaskSwitch({
   onSelect: (task: SettingsTask) => void;
 }) {
   const tasks: Array<{ id: SettingsTask; label: string; count: number; detail: string }> = [
-    { id: "sources", label: "Sources", count: sourceCount, detail: "Add and manage channels" },
-    { id: "notifications", label: "Notify", count: notificationCount, detail: "Token and delivery" },
-    { id: "learning", label: "Learning", count: feedbackCount, detail: "Export feedback" },
+    { id: "sources", label: "Sources", count: sourceCount, detail: "Add or manage channels" },
+    { id: "notifications", label: "Alerts", count: notificationCount, detail: "Bot token and delivery" },
+    { id: "learning", label: "Feedback", count: feedbackCount, detail: "Export review notes" },
   ];
   return (
     <div className="settings-task-switch" aria-label="Settings task switcher">
       {tasks.map((task) => (
         <button
           aria-pressed={activeTask === task.id}
+          data-empty={task.count === 0 ? "true" : "false"}
           key={task.id}
           onClick={() => onSelect(task.id)}
           type="button"
@@ -712,11 +715,13 @@ function SourceImportPanel({
   previewSourceImport,
   importSources,
   busy,
+  hasSavedSources,
 }: {
   result: SourceImportResult | null;
   previewSourceImport: (sources: string, topic: string) => Promise<SourceImportResult>;
   importSources: (sources: string, topic: string) => Promise<SourceImportResult>;
   busy: boolean;
+  hasSavedSources: boolean;
 }) {
   const [sources, setSources] = useState("");
   const [topic, setTopic] = useState("jobs");
@@ -726,71 +731,79 @@ function SourceImportPanel({
   const canImport = canPreview && previewKey === currentKey && result?.dry_run === true;
   const previewSources = result?.preview_sources ?? [];
   return (
-    <form
-      className="table-section source-import-panel"
-      onSubmit={(event) => {
-        event.preventDefault();
-        if (!canPreview) {
-          return;
-        }
-        void previewSourceImport(sources, topic)
-          .then((next) => {
-            if (next.dry_run) {
-              setPreviewKey(currentKey);
-            }
-          })
-          .catch(() => undefined);
-      }}
-    >
-      <PanelHeader icon={<Upload size={18} />} title="Add Sources" />
-      <label className="source-import-field">
-        <span>Telegram channels</span>
-        <textarea
-          onChange={(event) => setSources(event.target.value)}
-          placeholder={"@remote_jobs\nhttps://t.me/s/miniapps_jobs"}
-          rows={5}
-          value={sources}
-        />
-      </label>
-      <label className="source-import-topic">
-        <span>Topic</span>
-        <input onChange={(event) => setTopic(event.target.value)} type="text" value={topic} />
-      </label>
-      <p className="delivery-note">Paste channel handles or t.me links, one per line. Preview checks duplicates before anything is saved.</p>
-      <div className="source-import-actions">
-        <button className="text-button secondary" disabled={busy || !canPreview} type="submit">
-          <Eye size={15} />
-          <span>{busy ? "Checking" : "Preview sources"}</span>
-        </button>
-        <button
-          className="text-button"
-          disabled={busy || !canImport}
-          onClick={() => void importSources(sources, topic).catch(() => undefined)}
-          type="button"
-        >
-          <Upload size={15} />
-          <span>Import sources</span>
-        </button>
-      </div>
-      {canPreview && !canImport && result?.dry_run && <span className="delivery-dirty">Preview again before importing</span>}
-      {result && (
-        <div className={`source-import-result ${result.written ? "written" : "preview"}`} role="status">
-          <strong>{result.title || (result.written ? "Sources saved" : "Source preview ready")}</strong>
-          <span>
-            {result.added_count} new / {result.updated_count} updated / {result.unchanged_count} already saved
-          </span>
-          {previewSources.length > 0 && (
-            <div className="source-import-preview-list" aria-label="Preview sources">
-              {previewSources.map((source) => (
-                <small key={source.source_id}>{source.label}</small>
-              ))}
-              {result.preview_truncated_count > 0 && <small>+{result.preview_truncated_count} more</small>}
-            </div>
-          )}
-          {result.next_action && <em>{result.next_action}</em>}
+    <details className="table-section source-import-panel source-import-details" open={!hasSavedSources}>
+      <summary>
+        <span className="panel-title">
+          <Upload size={18} />
+          Add Sources
+        </span>
+        {hasSavedSources && <small>Open when adding new channels</small>}
+      </summary>
+      <form
+        className="source-import-form"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (!canPreview) {
+            return;
+          }
+          void previewSourceImport(sources, topic)
+            .then((next) => {
+              if (next.dry_run) {
+                setPreviewKey(currentKey);
+              }
+            })
+            .catch(() => undefined);
+        }}
+      >
+        <label className="source-import-field">
+          <span>Telegram channels</span>
+          <textarea
+            onChange={(event) => setSources(event.target.value)}
+            placeholder={"@remote_jobs\nhttps://t.me/s/miniapps_jobs"}
+            rows={5}
+            value={sources}
+          />
+        </label>
+        <label className="source-import-topic">
+          <span>Topic</span>
+          <input onChange={(event) => setTopic(event.target.value)} type="text" value={topic} />
+        </label>
+        <p className="delivery-note">Paste channel handles or t.me links, one per line. Preview checks duplicates before anything is saved.</p>
+        <div className="source-import-actions">
+          <button className="text-button secondary" disabled={busy || !canPreview} type="submit">
+            <Eye size={15} />
+            <span>{busy ? "Checking" : "Preview sources"}</span>
+          </button>
+          <button
+            className="text-button"
+            disabled={busy || !canImport}
+            onClick={() => void importSources(sources, topic).catch(() => undefined)}
+            type="button"
+          >
+            <Upload size={15} />
+            <span>Import sources</span>
+          </button>
         </div>
-      )}
-    </form>
+        {canPreview && !canImport && result?.dry_run && <span className="delivery-dirty">Preview again before importing</span>}
+        {result && (
+          <div className={`source-import-result ${result.written ? "written" : "preview"}`} role="status">
+            <strong>{result.title || (result.written ? "Sources saved" : "Source preview ready")}</strong>
+            <span>
+              {result.added_count} new / {result.updated_count} updated / {result.unchanged_count} already saved
+            </span>
+            {previewSources.length > 0 && (
+              <div className="source-import-preview-list" aria-label="Preview sources">
+                {previewSources.map((source) => (
+                  <small key={source.source_id}>{source.label}</small>
+                ))}
+                {result.preview_truncated_count > 0 && <small>+{result.preview_truncated_count} more</small>}
+              </div>
+            )}
+            {result.next_action && <em>{result.next_action}</em>}
+          </div>
+        )}
+      </form>
+    </details>
   );
 }
 

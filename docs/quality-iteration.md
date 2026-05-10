@@ -24,7 +24,7 @@ Current truth for the 2026-05-11 quality loop. Product rules stay in `.frontend-
 
 Cannot claim acceptance readiness yet.
 
-The highest current blockers are interaction/information-architecture problems, not build or test failures. Runs evidence and Settings have been materially reduced, but mobile Review still has a filter/action density problem and Settings still needs reviewer pressure before it can be claimed as solved.
+The highest current blockers are interaction/information-architecture problems, not build or test failures. Runs, Settings, and mobile Review have been materially reduced, but external review is degraded because Gemini failed and the latest KIMI P1 fixes still need follow-up pressure before acceptance can be claimed.
 
 ## Repair Roadmap
 
@@ -48,10 +48,10 @@ The highest current blockers are interaction/information-architecture problems, 
    - After each slice: rebuild or typecheck, rerun focused tests, recapture screenshots, and triage reviewer reports.
    - Commit checkpoint when a slice is coherent and verified enough to roll back.
 
-5. Current next slice - mobile Review density:
-   - Reduce the Review filter/action wall on 390px without hiding the user's next useful action.
-   - Keep desktop backlog context visible, but avoid repeating the same counts in multiple places.
-   - Re-run real screenshots and KIMI review before claiming UX quality.
+5. Current next slice - reviewer follow-up and remaining app polish:
+   - Re-check Settings after accepted KIMI P1 fixes.
+   - Keep reducing first-viewport noise without hiding safety or maintenance controls.
+   - Use another independent reviewer because Gemini failed again.
 
 ## Iteration 0 - Ground Truth And Plan
 
@@ -359,15 +359,51 @@ The highest current blockers are interaction/information-architecture problems, 
   - Desktop Settings scroll height is 1000 with zero small targets.
   - Mobile Settings scroll height is 1575, down from the earlier 3051px baseline; no horizontal overflow and zero small targets.
 - External review:
-  - Pending KIMI product/interaction review for this Settings slice; do not claim reviewer-gated acceptance yet.
+  - KIMI task `6d1cd0d36645` returned `pass-with-risks`.
+  - Gemini Flash task `2d1b71a2a758` failed with a Gemini API error and is not counted as a pass.
 - Triage:
   - Accepted: Settings needed task-level IA, not another explanation block.
   - Accepted: Repository controls are expert/maintenance actions and should not be first-scan noise.
-  - Deferred: Add Sources itself still consumes most of the first mobile viewport; reviewer should judge whether this is acceptable or needs a second compression pass.
-- Task state: local checkpoint ready; reviewer gate pending.
+  - Accepted from KIMI P1: mobile switcher needed information scent; fixed in Iteration 12.
+  - Accepted from KIMI P1: empty Feedback count should not read as amber alert; fixed in Iteration 12.
+  - Accepted from KIMI P1/P2: Source Evidence and Add Sources needed lower-noise placement; fixed in Iteration 12.
+- Task state: checkpoint committed; KIMI findings fed into Iteration 12.
 - `needs_human`: final visual/taste acceptance remains user-owned.
-- Residual risk: mobile Review filter density remains the next open UX slice.
+- Residual risk: second independent reviewer signal is degraded because Gemini failed.
 - Memory closeout: pending.
 - Hook enforcement: manual.
 - Artifact hygiene: screenshot evidence remains timestamped under `output/quality-review/`; no generated packet promoted into docs.
-- Next: commit checkpoint, dispatch KIMI review for Settings, then continue to mobile Review density while reviewer is pending.
+- Next: continue with KIMI P1 fixes and mobile Review density.
+
+## Iteration 12 - Review Density And KIMI Settings Remediation
+
+- Target: reduce mobile Review first-viewport noise and immediately fix accepted KIMI P1 findings from the Settings review.
+- Changes:
+  - `dashboard/src/components/inbox.tsx` and `dashboard/src/styles/inbox.css`: mobile Review now defaults to a single current-filter control; all filters expand only when requested.
+  - `dashboard/src/styles/responsive.css`: mobile Review actions now fit in one row; Keep and Skip keep visible labels, secondary actions are icon+aria-label controls.
+  - `dashboard/src/styles/actions.css`: Start `Open settings` CTA now meets the 44px target.
+  - `dashboard/src/components/settings.tsx`: Settings labels changed to Sources / Alerts / Feedback; Source Evidence moved outside task-specific panels; Add Sources collapses by default when saved sources already exist.
+  - `dashboard/src/styles/settings/layout.css` and `settings/sources.css`: empty Feedback count is muted, mobile switcher keeps short detail text, and Add Sources summary is a 44px target.
+- Verification:
+  - `npm test -- --run`: 11 files / 81 tests passed.
+  - `npm run build`: passed.
+  - Real-browser screenshots and metrics: `output/quality-review/20260511-0357-review-settings-p1-fix/` plus final mobile action-label check in `output/quality-review/20260511-0359-review-action-labels/`.
+  - Desktop Start / Review / Runs / Settings: no horizontal overflow and zero small-target findings.
+  - Mobile Start / Review / Runs / Settings: no horizontal overflow and zero small-target findings.
+  - Mobile Review scroll height is 898, down from 1008 before this slice.
+  - Mobile Settings scroll height is 1256, down from 1575 after the first switcher pass and 3051 in the earlier baseline.
+- External review:
+  - KIMI P1 findings from task `6d1cd0d36645` were accepted and remediated locally.
+  - Gemini Flash task `2d1b71a2a758` failed; reviewer gate remains degraded until another independent reviewer checks the post-fix surface.
+- Triage:
+  - Accepted: filter wall should be collapsed by default on mobile.
+  - Accepted: Repository can stay outside the task switcher as a collapsed Settings-level maintenance summary; Source Evidence must not be trapped inside Sources only.
+  - Accepted: returning users with 82 saved sources should see management/search before a full Add Sources form.
+  - Deferred: section-switch transition animation remains P3 polish.
+- Task state: local checkpoint ready; second reviewer still needed.
+- `needs_human`: final visual/taste acceptance remains user-owned.
+- Residual risk: icon-only secondary actions may still need reviewer judgment; Gemini failure means no full heterogeneous pass yet.
+- Memory closeout: pending.
+- Hook enforcement: manual.
+- Artifact hygiene: screenshot evidence remains timestamped under `output/quality-review/`; transient reviewer packet remains under ignored output evidence.
+- Next: commit checkpoint, dispatch another independent reviewer for the post-fix Settings/Review surface, then continue with the next highest-value app polish.
