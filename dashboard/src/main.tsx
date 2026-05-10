@@ -623,6 +623,7 @@ function App() {
                 setupStatus={state.setup_status}
                 scheduler={deskSchedulerStatus}
                 targets={state.delivery_targets}
+                reviewCount={state.inbox.length}
                 telegram={{
                   status: deskTelegram.status,
                   busy: deskTelegram.busy,
@@ -633,6 +634,7 @@ function App() {
                   refresh: deskTelegram.refreshTelegram,
                   cancelLogin: deskTelegram.cancelLogin,
                 }}
+                onOpenReview={() => setActiveTab("inbox")}
                 onRun={runDeskAction}
               />
             )}

@@ -152,12 +152,13 @@
   display: flex;
   gap: 9px;
   align-items: center;
+  min-height: 44px;
   min-width: 0;
 }
 
 .delivery-toggle input {
-  width: 16px;
-  height: 16px;
+  width: 20px;
+  height: 20px;
   flex: 0 0 auto;
   accent-color: var(--signal-high);
 }

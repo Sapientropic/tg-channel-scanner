@@ -235,6 +235,18 @@ describe("Signal Desk journey", () => {
     expect(enabledNotification?.actionId).toBeUndefined();
   });
 
+  it("keeps Review ahead of automation when cards are pending", () => {
+    const baseSetup = { stage: "needs_delivery_target", has_profiles: true, has_runs: true };
+    const steps = buildJourneySteps(actions, {}, baseSetup, telegramReady, schedulerStatus(false), [
+      deliveryTarget({ config: {} }),
+    ]);
+    const summary = buildStartSummary(steps, baseSetup, telegramReady, schedulerStatus(false), [], 3);
+
+    expect(summary.find((item) => item.label === "Next")).toMatchObject({
+      value: "Review 3 cards",
+    });
+  });
+
   it("blocks first scan until Telegram is connected", () => {
     const steps = buildJourneySteps(actions, {}, { stage: "needs_first_run", has_profiles: true, has_runs: false }, {
       ...telegramReady,

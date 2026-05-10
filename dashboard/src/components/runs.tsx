@@ -15,6 +15,7 @@ import {
 } from "../domain/display";
 import { formatPercent } from "../domain/format";
 import {
+  formatRunDiagnosticAction,
   formatRunDiagnostics,
   runBucketSignalScore,
   runDayWindowBuckets,
@@ -23,6 +24,12 @@ import {
 import type { Run } from "../domain/types";
 
 const RECENT_RUN_LIMIT = 8;
+
+type RunHealthDecision = {
+  tone: "ok" | "info" | "warn" | "danger";
+  headline: string;
+  detail: string;
+};
 
 export function RunsView({ runs }: { runs: Run[] }) {
   if (!runs.length) {
@@ -121,6 +128,7 @@ function RunHealthChart({ runs }: { runs: Run[] }) {
   const cards = recentRuns.reduce((sum, run) => sum + (run.review_card_count ?? 0), 0);
   const alerts = recentRuns.reduce((sum, run) => sum + (run.alert_count ?? 0), 0);
   const successRate = totalRuns ? completeRuns / totalRuns : 0;
+  const decision = buildRunHealthDecision(recentRuns);
   return (
     <div className="run-health-chart" aria-label="Recent run health by day">
       <div className="run-health-summary">
@@ -133,6 +141,10 @@ function RunHealthChart({ runs }: { runs: Run[] }) {
         <small>
           {cards} cards / {alerts} alerts
         </small>
+        <div className={`run-health-decision is-${decision.tone}`}>
+          <b>{decision.headline}</b>
+          <span>{decision.detail}</span>
+        </div>
       </div>
       <div className="run-day-bars">
         {buckets.map((bucket) => (
@@ -153,6 +165,52 @@ function RunHealthChart({ runs }: { runs: Run[] }) {
       </div>
     </div>
   );
+}
+
+export function buildRunHealthDecision(runs: Run[]): RunHealthDecision {
+  const totalRuns = runs.length;
+  const failedRuns = runs.filter((run) => run.status.toLowerCase() === "failed").length;
+  const cards = runs.reduce((sum, run) => sum + (run.review_card_count ?? 0), 0);
+  const alerts = runs.reduce((sum, run) => sum + (run.alert_count ?? 0), 0);
+  const diagnosticFailures = runs.reduce((sum, run) => sum + (run.quality?.diagnostic_failure_count ?? 0), 0);
+  const diagnosticWarnings = runs.reduce((sum, run) => sum + (run.quality?.diagnostic_warning_count ?? 0), 0);
+  const latestIssueCode = runs.find((run) => (run.quality?.diagnostic_count ?? 0) > 0)?.quality?.top_diagnostic_code;
+
+  if (failedRuns > 0) {
+    return {
+      tone: "danger",
+      headline: `Fix ${failedRuns} failed run${failedRuns === 1 ? "" : "s"}`,
+      detail: "Treat automation as untrusted until the failed scan is explained.",
+    };
+  }
+  if (diagnosticFailures > 0 || diagnosticWarnings > 0) {
+    return {
+      tone: diagnosticFailures > 0 ? "danger" : "warn",
+      headline: "Diagnostics need attention",
+      detail: latestIssueCode
+        ? formatRunDiagnosticAction({ diagnostic_count: 1, top_diagnostic_code: latestIssueCode })
+        : "Open the latest report diagnostics before tuning profiles.",
+    };
+  }
+  if (alerts > 0) {
+    return {
+      tone: "info",
+      headline: `Review ${alerts} alert candidate${alerts === 1 ? "" : "s"}`,
+      detail: `${cards} review card${cards === 1 ? "" : "s"} appeared in recent runs. Clear Review before enabling live alerts.`,
+    };
+  }
+  if (cards > 0) {
+    return {
+      tone: "info",
+      headline: `Review ${cards} card${cards === 1 ? "" : "s"}`,
+      detail: "There are signals to triage, but no alert candidate yet.",
+    };
+  }
+  return {
+    tone: totalRuns ? "ok" : "info",
+    headline: totalRuns ? "No urgent run issue" : "Run history is empty",
+    detail: totalRuns ? "Recent scans completed without cards, alerts, or diagnostics." : "Run a local scan before judging source quality.",
+  };
 }
 
 function RunsEmptyState({

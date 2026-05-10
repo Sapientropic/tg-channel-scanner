@@ -1,5 +1,6 @@
 import {
   AlertTriangle,
+  ArrowRight,
   Bell,
   CheckCircle2,
   CircleDashed,
@@ -73,6 +74,8 @@ export function ActionsView({
   scheduler,
   telegram,
   targets = [],
+  reviewCount = 0,
+  onOpenReview,
   onRun,
 }: {
   actions: DeskAction[];
@@ -83,6 +86,8 @@ export function ActionsView({
   scheduler?: DeskSchedulerStatus | null;
   telegram: TelegramControls;
   targets?: DeliveryTarget[];
+  reviewCount?: number;
+  onOpenReview?: () => void;
   onRun: (actionId: string) => Promise<void>;
 }) {
   const actionMap = new Map(actions.map((action) => [action.action_id, action]));
@@ -91,18 +96,27 @@ export function ActionsView({
   const currentStep = activeStep ?? steps.find((step) => step.state === "ready") ?? steps.find((step) => step.state === "manual") ?? steps[0];
   const stage = setupStatus?.stage ?? "";
   const stageLabel = SETUP_STAGE_LABELS[stage] ?? "Local setup";
-  const startSummary = buildStartSummary(steps, setupStatus, telegram.status, scheduler, targets);
+  const startSummary = buildStartSummary(steps, setupStatus, telegram.status, scheduler, targets, reviewCount);
   const heroTitle = activeStep ? currentStep?.title : "Signal Desk is ready";
   const heroDetail = activeStep
     ? currentStep?.detail
-    : "Run a practice scan, review cards, or preview automation when you are ready.";
+    : reviewCount
+      ? "Review the current queue before running more scans or changing automation."
+      : "Run a fresh practice scan first. Automation and notifications can wait.";
   const compactReadyMode = !activeStep && (stage === "ready" || stage === "needs_delivery_target");
-  const dailyStepOrder = stage === "needs_delivery_target" ? ["automation", "first-run", "feedback"] : ["first-run", "feedback", "automation"];
-  const dailyStepKeys = new Set(dailyStepOrder);
+  const firstRunStep = steps.find((step) => step.key === "first-run");
+  const secondaryReadyStepOrder = ["feedback", "automation"];
+  const secondaryReadyStepKeys = new Set(["first-run", ...secondaryReadyStepOrder]);
   const visibleSteps = compactReadyMode
-    ? dailyStepOrder.map((key) => steps.find((step) => step.key === key)).filter(Boolean) as JourneyStep[]
+    ? []
     : steps;
-  const parkedSteps = compactReadyMode ? steps.filter((step) => !dailyStepKeys.has(step.key)) : [];
+  const secondaryReadySteps = compactReadyMode
+    ? secondaryReadyStepOrder.map((key) => steps.find((step) => step.key === key)).filter(Boolean) as JourneyStep[]
+    : [];
+  const parkedSteps = compactReadyMode ? steps.filter((step) => !secondaryReadyStepKeys.has(step.key)) : [];
+  const primaryReadyAction = compactReadyMode
+    ? buildPrimaryReadyAction(firstRunStep, reviewCount, Boolean(onOpenReview))
+    : null;
   const summaryBlock = (
     <div className="start-summary" aria-label="Setup summary">
       {startSummary.map((item) => {
@@ -152,22 +166,54 @@ export function ActionsView({
       {loadError && <InlineEmpty title={loadError} />}
       {!actions.length && !loadError && <InlineEmpty title="Signal Desk controls are not exposed by the local server." />}
 
-      <div className="journey-list">
-        {visibleSteps.map((step, index) => (
-          <JourneyStepCard
-            actionMap={actionMap}
-            anyBusy={Boolean(busyActionId)}
-            busyActionId={busyActionId}
-            index={index + 1}
-            key={step.key}
-            onRun={onRun}
-            results={results}
-            step={step}
-            telegram={telegram}
-          />
-        ))}
-      </div>
+      {primaryReadyAction && (
+        <StartPrimaryActionCard
+          action={primaryReadyAction}
+          anyBusy={Boolean(busyActionId)}
+          busyActionId={busyActionId}
+          onOpenReview={onOpenReview}
+          onRun={onRun}
+        />
+      )}
+
+      {!compactReadyMode && (
+        <div className="journey-list">
+          {visibleSteps.map((step, index) => (
+            <JourneyStepCard
+              actionMap={actionMap}
+              anyBusy={Boolean(busyActionId)}
+              busyActionId={busyActionId}
+              index={index + 1}
+              key={step.key}
+              onRun={onRun}
+              results={results}
+              step={step}
+              telegram={telegram}
+            />
+          ))}
+        </div>
+      )}
       {compactReadyMode && summaryBlock}
+      {secondaryReadySteps.length > 0 && (
+        <details className="journey-secondary">
+          <summary>Other controls</summary>
+          <div className="journey-list secondary">
+            {secondaryReadySteps.map((step, index) => (
+              <JourneyStepCard
+                actionMap={actionMap}
+                anyBusy={Boolean(busyActionId)}
+                busyActionId={busyActionId}
+                index={index + 1}
+                key={step.key}
+                onRun={onRun}
+                results={results}
+                step={step}
+                telegram={telegram}
+              />
+            ))}
+          </div>
+        </details>
+      )}
       {parkedSteps.length > 0 && (
         <details className="journey-secondary">
           <summary>Setup checks</summary>
@@ -300,6 +346,7 @@ export function buildStartSummary(
   telegramStatus?: DeskTelegramStatus | null,
   scheduler?: DeskSchedulerStatus | null,
   targets: DeliveryTarget[] = [],
+  reviewCount = 0,
 ): StartSummaryItem[] {
   const stage = setupStatus?.stage ?? "";
   const workspaceReady = Boolean(setupStatus?.has_profiles && stage !== "needs_profiles" && stage !== "needs_enabled_profile");
@@ -310,7 +357,7 @@ export function buildStartSummary(
       : "Needs app details";
   const activeStep = steps.find((step) => step.state === "active");
   const nextValue = activeStep?.title
-    ?? (!setupStatus?.has_runs ? "Run first scan" : stage === "needs_delivery_target" ? "Preview automation" : "Review inbox");
+    ?? (reviewCount > 0 ? `Review ${reviewCount} card${reviewCount === 1 ? "" : "s"}` : !setupStatus?.has_runs ? "Run first scan" : "Run another scan");
   const automationValue = scheduler?.installed ? "On" : scheduler?.available === false ? "Manual" : "Off";
   const notifications = notificationReadiness(targets);
   const notificationAction =
@@ -326,6 +373,78 @@ export function buildStartSummary(
     { label: "Automation", value: automationValue },
     { label: "Next", value: nextValue },
   ];
+}
+
+type PrimaryReadyAction = {
+  kind: "review" | "scan";
+  title: string;
+  detail: string;
+  label: string;
+  actionId?: string;
+};
+
+function buildPrimaryReadyAction(step: JourneyStep | undefined, reviewCount: number, canOpenReview: boolean): PrimaryReadyAction | null {
+  if (reviewCount > 0 && canOpenReview) {
+    return {
+      kind: "review",
+      title: "Review cards first",
+      detail: "Clear the current queue before running more scans or tuning automation.",
+      label: `Review ${reviewCount} card${reviewCount === 1 ? "" : "s"}`,
+    };
+  }
+  const button = step?.buttons.find((item) => item.variant === "primary") ?? step?.buttons[0];
+  if (!button) {
+    return null;
+  }
+  return {
+    kind: "scan",
+    title: step?.title || "Run another scan",
+    detail: "Create fresh review cards. Nothing sends to Telegram unless live delivery is enabled.",
+    label: button.label,
+    actionId: button.actionId,
+  };
+}
+
+function StartPrimaryActionCard({
+  action,
+  anyBusy,
+  busyActionId,
+  onOpenReview,
+  onRun,
+}: {
+  action: PrimaryReadyAction;
+  anyBusy: boolean;
+  busyActionId: string;
+  onOpenReview?: () => void;
+  onRun: (actionId: string) => Promise<void>;
+}) {
+  const busy = Boolean(action.actionId && busyActionId === action.actionId);
+  return (
+    <article className={`start-next-card is-${action.kind}`} aria-label="Recommended next action">
+      <div>
+        <span className="status new">Next</span>
+        <h3>{action.title}</h3>
+        <p>{action.detail}</p>
+      </div>
+      <button
+        className="journey-button"
+        disabled={anyBusy}
+        onClick={() => {
+          if (action.kind === "review") {
+            onOpenReview?.();
+            return;
+          }
+          if (action.actionId) {
+            void onRun(action.actionId);
+          }
+        }}
+        type="button"
+      >
+        {action.kind === "review" ? <ArrowRight size={16} /> : <Play size={16} />}
+        <span>{busy ? "Working" : action.label}</span>
+      </button>
+    </article>
+  );
 }
 
 export function notificationReadiness(targets: DeliveryTarget[]): NotificationReadiness {

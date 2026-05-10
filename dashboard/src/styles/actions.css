@@ -133,6 +133,70 @@
   overflow-wrap: anywhere;
 }
 
+.start-next-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(176px, auto);
+  gap: 14px;
+  align-items: center;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid color-mix(in oklch, var(--teal) 42%, var(--line));
+  background:
+    linear-gradient(90deg, color-mix(in oklch, var(--teal) 12%, transparent), transparent 58%),
+    var(--ink-2);
+  color: var(--paper);
+  box-shadow: var(--panel-shadow);
+}
+
+.start-next-card.is-review {
+  border-color: color-mix(in oklch, var(--amber) 42%, var(--line));
+  background:
+    linear-gradient(90deg, color-mix(in oklch, var(--amber) 12%, transparent), transparent 58%),
+    var(--ink-2);
+}
+
+.start-next-card > div {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.start-next-card .status {
+  justify-self: start;
+  min-height: 24px;
+}
+
+.start-next-card h3 {
+  margin: 0;
+  color: var(--paper);
+  font-family: var(--font-display);
+  font-size: 24px;
+  line-height: 1;
+  overflow-wrap: anywhere;
+}
+
+.start-next-card p {
+  max-width: 66ch;
+  margin: 0;
+  color: color-mix(in oklch, var(--paper) 72%, var(--muted));
+  font-size: 13px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.start-next-card .journey-button {
+  min-height: 48px;
+  padding-inline: 16px;
+  border-color: var(--paper);
+  background: var(--paper);
+  color: var(--ink);
+}
+
+.start-next-card .journey-button:hover,
+.start-next-card .journey-button:focus-visible {
+  background: color-mix(in oklch, var(--paper) 88%, var(--teal));
+}
+
 .journey-list {
   display: grid;
   gap: 10px;

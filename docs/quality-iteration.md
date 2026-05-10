@@ -114,3 +114,31 @@ The dashboard has a strong visual language, but Settings currently fails the ord
 - Hook enforcement: manual.
 - Artifact hygiene: no new raw artifacts.
 - Next: UX slice 3, Start and Runs decision hierarchy.
+
+## Iteration 3 - Start / Runs Decision Hierarchy
+
+- Target: remove the ready-state "multiple equal next steps" problem called out by the UX reviewers.
+- Changes:
+  - `dashboard/src/components/actions.tsx`: ready-state Start now shows one recommended action. Pending Review cards win over scanning; scanning wins over automation. Other controls are collapsed.
+  - `dashboard/src/main.tsx`: Start can open the Review tab directly when there are pending cards.
+  - `dashboard/src/components/runs.tsx`: Runs now converts recent health into a decision summary, with failed runs and diagnostics above card volume.
+  - `dashboard/src/styles/*`: mobile touch targets were tightened for Runs report links and delivery toggles; the Start next-action badge no longer stretches into a full-width stripe.
+  - `tools/quality_visual_audit.py`: added a reusable real-browser screenshot/audit helper so later passes do not depend on one-off scripts.
+- Verification:
+  - `npm test -- --run`: 10 files / 71 tests passed.
+  - `npm run build`: passed.
+  - Real-browser screenshots and metrics: `output/quality-review/20260511-0240/`.
+  - Mobile Start / Review / Runs / Settings: no horizontal overflow and zero small-target findings in the visual audit.
+- External review:
+  - Directly addressed reviewer A P1 Start hierarchy and P2 Runs summary.
+  - Directly addressed reviewer C mobile touch-target follow-up for Runs report links and Settings delivery toggle.
+- Triage:
+  - Accepted: Start should prefer Review when cards are pending; delivery target setup is optional and must not seize the main path.
+  - Accepted: Runs must state whether failures, diagnostics, or Review work should get attention first.
+- Task state: checkpoint ready.
+- `needs_human`: final taste acceptance remains user-owned.
+- Residual risk: desktop compact controls remain below 44px where pointer precision is assumed; mobile audit is clean for the current data shape.
+- Memory closeout: pending.
+- Hook enforcement: manual.
+- Artifact hygiene: screenshots and `visual-audit.json` retained under the timestamped evidence folder only.
+- Next: UX slice 4, mobile Review density and long-title scan.

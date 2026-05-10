@@ -232,6 +232,7 @@
   }
 
   .start-hero-main,
+  .start-next-card,
   .journey-step,
   .telegram-forms {
     grid-template-columns: 1fr;
@@ -393,6 +394,7 @@
   }
 
   .filter-chip,
+  .artifact-link,
   .source-chip.source-link,
   .action-cluster button,
   .journey-button,
