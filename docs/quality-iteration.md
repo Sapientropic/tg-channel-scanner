@@ -269,14 +269,46 @@ The highest current blockers are interaction/information-architecture problems, 
   - Mobile Runs scroll height dropped from 2380 to 1317 in the screenshot audit; desktop Runs is one viewport high again.
   - Mobile Start / Review / Runs / Settings: no horizontal overflow and zero small-target findings.
 - External review:
-  - Pending Orchestra `assign / poll / show / rate` gate with KIMI, Gemini, and Qwen process-integrity review.
+  - Orchestra/KIMI task `badd817414f0` rejected the mobile timeline and mobile Evidence cut-off as P0.
+  - Gemini task `852700f86744` failed with provider rate limit; it is not counted as a pass.
+  - Claude fallback task `673d63a4fdcf` returned no actionable findings; it is not counted as a meaningful product review.
 - Triage:
   - Accepted: grouping without clustering was insufficient; repeated OCR rows still created noise, so the same slice was tightened before checkpoint.
   - Accepted: diagnostic labels outrank aggregate alert volume, so `OCR media skipped` remains the row title even when the cluster includes alert candidates.
-- Task state: locally verified; reviewer gate pending.
+- Task state: superseded by Iteration 9 remediation.
 - `needs_human`: final visual/taste acceptance remains user-owned.
 - Residual risk: Review single-card dead space, mobile Review filter density, and Settings maze remain outside this slice.
 - Memory closeout: pending.
 - Hook enforcement: manual.
 - Artifact hygiene: screenshots and audit JSON stay in timestamped evidence folders only.
-- Next: prepare reviewer packet, run Orchestra gate, then triage findings before choosing the next slice.
+- Next: fix KIMI P0 issues before claiming Runs progress.
+
+## Iteration 9 - KIMI Runs Remediation And Review Backlog Map
+
+- Target: repair KIMI P0 findings on Runs and remove the desktop Review single-card island.
+- Changes:
+  - Runs mobile timeline now preserves seven daily positions with compact day cells instead of merging six empty days into one ambiguous range.
+  - Runs failed-run summary no longer repeats the exact failure count already visible in the timeline and evidence row.
+  - Runs mobile Evidence rows put the report link above lower-priority bars/status details; mobile hides repeated row details so the first report link is visible in the first viewport.
+  - Runs desktop report links now meet the 44px target.
+  - Review desktop now shows a backlog map under the current filtered card so the single-card view no longer floats over dead space; the map is hidden on mobile to avoid duplicating the filter wall.
+- Verification:
+  - `npm test -- --run`: 11 files / 80 tests passed.
+  - `npm run build`: passed.
+  - Real-browser screenshots and metrics: `output/quality-review/20260511-0323-kimi-fix/`.
+  - Mobile Runs scroll height is 983, below the 1000px remediation target from KIMI.
+  - Desktop Runs small-target count is zero after the report-link fix.
+  - Mobile Start / Review / Runs / Settings: no horizontal overflow and zero small-target findings.
+- External review:
+  - KIMI findings were accepted and remediated; process-integrity review still pending.
+- Triage:
+  - Accepted: previous `compact timeline segments` wording was overclaiming; the UI now keeps daily temporal structure.
+  - Accepted: Report access must be visible before decorative/count details on mobile.
+  - Accepted: desktop Review needs backlog context when only one latest-action card is visible.
+- Task state: checkpoint ready after local verification; Qwen integrity gate pending.
+- `needs_human`: final visual/taste acceptance remains user-owned.
+- Residual risk: mobile Review filter density and Settings maze remain open candidates.
+- Memory closeout: pending.
+- Hook enforcement: manual.
+- Artifact hygiene: generated review packets and screenshots stay under `output/quality-review/`.
+- Next: commit checkpoint, run Qwen process-integrity review, then continue to the next high-impact slice.

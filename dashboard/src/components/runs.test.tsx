@@ -26,7 +26,7 @@ describe("run health decision", () => {
       run({ run_id: "run-2", review_card_count: 8, alert_count: 3 }),
     ])).toMatchObject({
       tone: "danger",
-      headline: "Fix 1 failed run",
+      headline: "Fix failed scans",
     });
   });
 
@@ -106,7 +106,7 @@ describe("run health decision", () => {
     expect(clusters[0].outcome.title).toBe("OCR media skipped");
   });
 
-  it("compacts seven mobile day labels into three readable timeline segments", () => {
+  it("keeps the mobile timeline daily while compacting each day", () => {
     const timeline = buildCompactRunTimeline([
       { key: "2026-05-04", label: "05-04", runs: 0, complete: 0, failed: 0, cards: 0, alerts: 0 },
       { key: "2026-05-05", label: "05-05", runs: 1, complete: 1, failed: 0, cards: 0, alerts: 0 },
@@ -116,21 +116,8 @@ describe("run health decision", () => {
       { key: "2026-05-09", label: "05-09", runs: 1, complete: 1, failed: 0, cards: 0, alerts: 0 },
       { key: "2026-05-10", label: "05-10", runs: 0, complete: 0, failed: 0, cards: 0, alerts: 0 },
     ]);
-    expect(timeline).toHaveLength(3);
-    expect(timeline.map((item) => item.label)).toEqual(["05-04-05-06", "05-07-05-09", "05-10"]);
-    expect(timeline[1]).toMatchObject({ tone: "danger", value: "1 failed" });
-  });
-
-  it("merges adjacent empty mobile timeline segments", () => {
-    const timeline = buildCompactRunTimeline([
-      { key: "2026-05-04", label: "05-04", runs: 0, complete: 0, failed: 0, cards: 0, alerts: 0 },
-      { key: "2026-05-05", label: "05-05", runs: 0, complete: 0, failed: 0, cards: 0, alerts: 0 },
-      { key: "2026-05-06", label: "05-06", runs: 0, complete: 0, failed: 0, cards: 0, alerts: 0 },
-      { key: "2026-05-07", label: "05-07", runs: 0, complete: 0, failed: 0, cards: 0, alerts: 0 },
-      { key: "2026-05-08", label: "05-08", runs: 0, complete: 0, failed: 0, cards: 0, alerts: 0 },
-      { key: "2026-05-09", label: "05-09", runs: 0, complete: 0, failed: 0, cards: 0, alerts: 0 },
-      { key: "2026-05-10", label: "05-10", runs: 1, complete: 0, failed: 1, cards: 0, alerts: 0 },
-    ]);
-    expect(timeline.map((item) => item.label)).toEqual(["05-04-05-09", "05-10"]);
+    expect(timeline).toHaveLength(7);
+    expect(timeline.map((item) => item.label)).toEqual(["05-04", "05-05", "05-06", "05-07", "05-08", "05-09", "05-10"]);
+    expect(timeline[4]).toMatchObject({ tone: "danger", value: "1 fail" });
   });
 });

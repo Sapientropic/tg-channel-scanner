@@ -361,32 +361,20 @@ function buildRunCluster(key: string, runs: Run[]): RunEvidenceCluster {
 }
 
 export function buildCompactRunTimeline(buckets: RunDayBucket[]): CompactTimelineItem[] {
-  if (!buckets.length) {
-    return [];
-  }
-  const segmentSize = Math.ceil(buckets.length / 3);
-  const segments = Array.from({ length: Math.ceil(buckets.length / segmentSize) }, (_, index) =>
-    buckets.slice(index * segmentSize, (index + 1) * segmentSize),
-  );
-  const items = segments.map((segment) => {
-    const first = segment[0];
-    const last = segment[segment.length - 1];
-    const runs = segment.reduce((sum, bucket) => sum + bucket.runs, 0);
-    const failed = segment.reduce((sum, bucket) => sum + bucket.failed, 0);
-    const cards = segment.reduce((sum, bucket) => sum + bucket.cards, 0);
-    const alerts = segment.reduce((sum, bucket) => sum + bucket.alerts, 0);
-    const complete = segment.reduce((sum, bucket) => sum + bucket.complete, 0);
-    const label = first.label === last.label ? first.label : `${first.label}-${last.label}`;
+  return buckets.map((bucket) => {
+    const failed = bucket.failed;
+    const runs = bucket.runs;
+    const cards = bucket.cards;
+    const alerts = bucket.alerts;
     const tone: RunTone = failed > 0 ? "danger" : cards > 0 || alerts > 0 ? "info" : runs > 0 ? "ok" : "quiet";
     return {
-      key: `${first.key}-${last.key}`,
+      key: bucket.key,
       tone,
-      label,
-      value: failed > 0 ? `${failed} failed` : runs > 0 ? `${runs} run${runs === 1 ? "" : "s"}` : "quiet",
-      detail: runs > 0 ? `${complete} clear · ${cards} cards · ${alerts} alerts` : "no runs",
+      label: bucket.label,
+      value: failed > 0 ? `${failed} fail` : runs > 0 ? `${runs} run${runs === 1 ? "" : "s"}` : "none",
+      detail: runs > 0 ? `${cards} cards · ${alerts} alerts` : "no scans",
     };
   });
-  return mergeQuietTimelineItems(items);
 }
 
 export function buildRunHealthDecision(runs: Run[]): RunHealthDecision {
@@ -401,8 +389,8 @@ export function buildRunHealthDecision(runs: Run[]): RunHealthDecision {
   if (failedRuns > 0) {
     return {
       tone: "danger",
-      headline: `Fix ${failedRuns} failed run${failedRuns === 1 ? "" : "s"}`,
-      detail: "Treat automation as untrusted until the failed scan is explained.",
+      headline: "Fix failed scans",
+      detail: "Use the failed evidence row before trusting automation.",
     };
   }
   if (diagnosticFailures > 0 || diagnosticWarnings > 0) {
@@ -495,27 +483,6 @@ function buildClusterOutcome(outcome: RunOutcome, totals: { runs: number; cards:
     };
   }
   return outcome;
-}
-
-function mergeQuietTimelineItems(items: CompactTimelineItem[]) {
-  return items.reduce<CompactTimelineItem[]>((merged, item) => {
-    const previous = merged.at(-1);
-    if (previous && previous.tone === "quiet" && item.tone === "quiet") {
-      previous.key = `${previous.key}-${item.key}`;
-      previous.label = `${timelineStartLabel(previous.label)}-${timelineEndLabel(item.label)}`;
-      return merged;
-    }
-    merged.push({ ...item });
-    return merged;
-  }, []);
-}
-
-function timelineStartLabel(label: string) {
-  return label.length >= 5 ? label.slice(0, 5) : label;
-}
-
-function timelineEndLabel(label: string) {
-  return label.length >= 5 ? label.slice(-5) : label;
 }
 
 function runDayKey(run: Run) {

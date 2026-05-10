@@ -130,6 +130,109 @@
   color: var(--ink);
 }
 
+.review-backlog-panel {
+  display: grid;
+  grid-template-columns: minmax(190px, 0.32fr) minmax(0, 0.42fr) minmax(260px, 1fr);
+  gap: 12px;
+  align-items: stretch;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--wash-paper-16);
+  background:
+    linear-gradient(90deg, color-mix(in oklch, var(--signal-low) 4%, transparent) 1px, transparent 1px),
+    var(--wash-paper-5);
+  background-size: 14px 100%;
+}
+
+.review-backlog-copy,
+.review-backlog-preview {
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  min-width: 0;
+}
+
+.review-backlog-copy strong {
+  color: var(--paper);
+  font-size: 15px;
+  line-height: 1.2;
+}
+
+.review-backlog-copy small {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.review-backlog-buckets {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+  min-width: 0;
+}
+
+.review-backlog-buckets button {
+  display: grid;
+  align-content: center;
+  justify-items: start;
+  min-width: 0;
+  min-height: 44px;
+  padding: 7px 9px;
+  border: 1px solid var(--wash-paper-18);
+  background: var(--wash-paper-8);
+  color: var(--paper);
+  cursor: pointer;
+}
+
+.review-backlog-buckets button:hover,
+.review-backlog-buckets button:focus-visible {
+  border-color: var(--amber);
+  background: color-mix(in oklch, var(--signal-medium) 12%, transparent);
+}
+
+.review-backlog-buckets span,
+.review-backlog-buckets strong {
+  min-width: 0;
+  font-size: 11px;
+  font-weight: var(--badge-weight);
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+  text-transform: uppercase;
+}
+
+.review-backlog-buckets strong {
+  color: var(--amber);
+  font-size: 17px;
+}
+
+.review-backlog-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid var(--wash-paper-12);
+  background: var(--wash-paper-6);
+}
+
+.review-backlog-row strong {
+  min-width: 0;
+  color: var(--paper);
+  font-size: 12px;
+  line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.review-backlog-row small {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: var(--badge-weight);
+  text-transform: uppercase;
+}
+
 
 .review-card {
   display: grid;

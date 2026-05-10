@@ -234,6 +234,7 @@
   .start-hero-main,
   .start-next-card,
   .journey-step,
+  .review-backlog-panel,
   .telegram-forms {
     grid-template-columns: 1fr;
   }
@@ -460,6 +461,18 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .review-backlog-panel {
+    display: none;
+  }
+
+  .review-backlog-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .review-backlog-row small {
+    grid-column: 1 / -1;
+  }
+
   .profile-row,
   .run-row,
   .target-row,
@@ -527,8 +540,30 @@
 
   .run-compact-timeline {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(92px, 1fr));
-    gap: 6px;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 4px;
+    align-items: stretch;
+  }
+
+  .run-compact-tile {
+    gap: 3px;
+    min-height: 42px;
+    padding: 5px 3px;
+  }
+
+  .run-compact-tile small,
+  .run-compact-tile span {
+    font-size: 8px;
+    line-height: 1.15;
+  }
+
+  .run-compact-tile strong {
+    font-size: 10px;
+    line-height: 1.1;
+  }
+
+  .run-compact-tile span {
+    display: none;
   }
 
   .run-evidence-head {
@@ -538,6 +573,32 @@
 
   .run-evidence-head span {
     text-align: left;
+  }
+
+  .run-list-head {
+    display: none;
+  }
+
+  .run-row .run-primary {
+    order: 1;
+  }
+
+  .run-row .run-primary span {
+    display: none;
+  }
+
+  .run-row > .status {
+    display: none;
+  }
+
+  .run-row .artifact-link,
+  .run-row .run-report-missing {
+    order: 2;
+  }
+
+  .run-row .run-count-bars,
+  .run-row .run-health {
+    display: none;
   }
 
   .command-strip,

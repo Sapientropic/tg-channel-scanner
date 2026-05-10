@@ -70,17 +70,75 @@ export function InboxView({
         </div>
       </div>
       {filteredCards.length ? (
-        filteredCards.map((card) => (
-          <ReviewCardArticle
-            act={act}
-            busy={busy}
-            card={card}
-            key={card.card_id}
-            profileReportNames={profileReportNames}
-          />
-        ))
+        <>
+          {filteredCards.map((card) => (
+            <ReviewCardArticle
+              act={act}
+              busy={busy}
+              card={card}
+              key={card.card_id}
+              profileReportNames={profileReportNames}
+            />
+          ))}
+          {filteredCards.length < cards.length && (
+            <ReviewBacklogPanel
+              activeFilter={filter}
+              cards={cards}
+              latestRunId={latestRunId}
+              onSelectFilter={setFilter}
+              visibleCount={filteredCards.length}
+            />
+          )}
+        </>
       ) : (
         <InlineEmpty title={filter === "actionable" ? "No latest action cards; switch to All for backlog" : "No cards in this filter"} />
+      )}
+    </section>
+  );
+}
+
+function ReviewBacklogPanel({
+  cards,
+  latestRunId,
+  activeFilter,
+  visibleCount,
+  onSelectFilter,
+}: {
+  cards: ReviewCard[];
+  latestRunId?: string;
+  activeFilter: InboxFilter;
+  visibleCount: number;
+  onSelectFilter: Dispatch<SetStateAction<InboxFilter>>;
+}) {
+  const options = inboxFilterOptions(cards, latestRunId).filter((item) => item.id !== activeFilter && item.count > 0);
+  const activeCardIds = new Set(filterInboxCards(cards, activeFilter, latestRunId).map((card) => card.card_id));
+  const previewCards = cards.filter((card) => !activeCardIds.has(card.card_id)).slice(0, 3);
+  const waitingCount = Math.max(0, cards.length - visibleCount);
+  return (
+    <section className="review-backlog-panel" aria-label="Review backlog map">
+      <div className="review-backlog-copy">
+        <span className="panel-kicker">Backlog map</span>
+        <strong>{waitingCount} waiting outside this view</strong>
+        <small>Use a bucket when the latest action is handled.</small>
+      </div>
+      <div className="review-backlog-buckets">
+        {options.map((item) => (
+          <button key={item.id} type="button" onClick={() => onSelectFilter(item.id)}>
+            <span>{item.label}</span>
+            <strong>{item.count}</strong>
+          </button>
+        ))}
+      </div>
+      {previewCards.length > 0 && (
+        <div className="review-backlog-preview" aria-label="Next backlog cards">
+          {previewCards.map((card) => (
+            <div className="review-backlog-row" key={card.card_id}>
+              <strong>{card.title}</strong>
+              <span className={`rating ${toneClass(card.rating)}`}>{card.rating}</span>
+              <small>{decisionStatusLabel(card.decision_status)}</small>
+            </div>
+          ))}
+        </div>
       )}
     </section>
   );
