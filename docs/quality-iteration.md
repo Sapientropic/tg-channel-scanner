@@ -16,10 +16,10 @@ Current truth for the 2026-05-11 quality loop. The full historical log is archiv
 Cannot claim user acceptance yet; local evidence is strong enough to keep iterating from reviewer-specific P2/P3 rather than broad layout rescue.
 
 What is locally verified:
-- Mobile Start and Settings are exactly one 390x844 viewport after the latest fixes.
-- Mobile Review, Profiles, and Runs are still over one viewport; Review is 948px and Runs is 942px after the KIMI full-surface P1 fix.
+- Mobile Start, Profiles, and Settings are exactly one 390x844 viewport after the latest fixes.
+- Mobile Review and Runs are still over one viewport; Review is 948px and Runs is 942px after the KIMI full-surface P1 fix.
 - Desktop Start / Review / Profiles / Runs / Settings are one viewport high.
-- Latest affected-surface visual audit has no horizontal overflow and zero small-target findings across Review / Runs / Settings.
+- Latest full visual audit has no horizontal overflow and zero small-target findings across Start / Review / Profiles / Runs / Settings.
 
 What blocks a stronger claim:
 - Gemini reviewer route failed from rate limits.
@@ -30,12 +30,13 @@ What blocks a stronger claim:
 
 - Latest full screenshot/audit set: `output/quality-review/20260511-0522-full-after-start/`.
 - Latest affected-surface screenshot/audit set after KIMI full-surface P1 fixes: `output/quality-review/20260511-0600-kimi-full-p1-fix/`.
+- Latest full screenshot/audit set after hiding empty profile drafts: `output/quality-review/20260511-0630-full-after-profiles-noise-cut/`.
 - Latest Settings yield summary screenshot/audit: `output/quality-review/20260511-0530-settings-yield-summary/`.
 - Full reviewer packet: `output/quality-review/20260511-0522-full-after-start/reviewer-packet.md`.
 - Current task state: `docs/quality-task-state.md`.
 
 Latest deterministic checks:
-- `npm test -- --run`: 11 files / 83 tests passed after the KIMI full-surface P1 fix.
+- `npm test -- --run`: 11 files / 84 tests passed after the profile empty-drafts slice.
 - `npm run build`: passed.
 - `git diff --check`: passed, with only Windows line-ending warnings.
 
@@ -45,7 +46,8 @@ Latest deterministic checks:
 - `b403a1e` - Qwen semantic feedback fixed; Runs count bars normalized across visible clusters.
 - `1f85b0d` - Ready-mode Start secondary controls collapsed into one `More controls` disclosure.
 - `0b32fb6` - Saved Sources collapsed summary now shows source yield from existing `source_stats`.
-- Current slice - KIMI full-surface P1 fixes: mobile Runs timeline labels are readable without wrapping, Review titles clamp on mobile, and Settings Repository uses human sync copy.
+- `55d1b43` - KIMI full-surface P1 fixes: mobile Runs timeline labels are readable without wrapping, Review titles clamp on mobile, and Settings Repository uses human sync copy.
+- Current slice - Profiles hides the empty `Preference Drafts = 0` panel and returns mobile Profiles to one viewport.
 
 ## Latest Fixes
 
@@ -68,6 +70,9 @@ Latest deterministic checks:
   - Collapsed Saved Sources now shows existing yield facts such as `3 latest cards · 68 tracked`.
   - Mobile Settings task details are 11px, not 9px.
   - Repository collapsed summary now says `Workspace saved locally` / `Check when needed` instead of `UNCHECKED` / `--`.
+- Profiles:
+  - Empty preference drafts no longer render as a full panel.
+  - Mobile Profiles is now exactly 844px instead of 917px.
 - Docs:
   - README / ROADMAP detail duplication was removed earlier.
   - Full quality history is archived; this file is the single current truth for the running loop.
@@ -81,6 +86,7 @@ Accepted and fixed:
 - Claude Code plans report Runs P0/P1; remaining count-bar P2 was fixed in `b403a1e`.
 - Qwen integrity warning that reviewer-packet claims needed pending-review wording.
 - KIMI full-surface task `8d8822766019`: accepted P1s for Runs date readability, Review mobile title clamp, and Settings Repository human copy.
+- Qwen structural review `0c5099e26020`: `pass-with-risks`; confirmed Claude plans P0/P1 are closed. Its Profiles 917px risk is stale because the current slice lowered Profiles to 844px.
 
 Degraded:
 - Gemini task `fbec77e0e78b` failed from provider rate limit.
@@ -88,12 +94,13 @@ Degraded:
 
 ## Residual Risk
 
-- Mobile Review/Runs/Profile pages remain taller than one viewport even though they are under 950px and have no overflow/small-target findings.
+- Mobile Review and Runs remain taller than one viewport even though they are under 950px and have no overflow/small-target findings.
 - Full heterogeneous reviewer gate is still degraded because Gemini was rate-limited and DeepSeek lacked repo access.
 - Source yield summary avoids fabricated timestamps; deeper recency wording needs a real timestamp field.
+- KIMI post-fix review task `60b877b6c8ca` is still running.
 
 ## Next Action
 
-1. Commit the KIMI full-surface P1 fix checkpoint.
-2. Continue with another real-page review slice, prioritizing any reviewer-backed P1 over cosmetic P3.
+1. Commit the profile empty-drafts checkpoint.
+2. Poll and triage KIMI post-fix task `60b877b6c8ca`.
 3. Near 2026-05-11 13:00 +08:00, stop opening new work and produce a concise evidence-backed handoff.

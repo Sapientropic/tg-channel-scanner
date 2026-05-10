@@ -39,7 +39,7 @@ export function ProfilesView({
   busy: boolean;
 }) {
   return (
-    <section className="split-section">
+    <section className="split-section profiles-section" data-has-drafts={patches.length > 0 ? "true" : "false"}>
       <div className="plain-panel">
         <PanelHeader icon={<UserRoundCog size={18} />} title="Profiles" count={profiles.length} />
         {profiles.length ? (
@@ -81,9 +81,9 @@ export function ProfilesView({
           <InlineEmpty title="No profiles registered" />
         )}
       </div>
-      <div className="plain-panel">
-        <PanelHeader icon={<FileDiff size={18} />} title="Preference Drafts" count={patches.length} />
-        {patches.length ? (
+      {patches.length > 0 && (
+        <div className="plain-panel">
+          <PanelHeader icon={<FileDiff size={18} />} title="Preference Drafts" count={patches.length} />
           <div className="patch-list">
             {patches.map((patch) => {
               const stats = diffStats(patch.diff_text);
@@ -148,10 +148,8 @@ export function ProfilesView({
               );
             })}
           </div>
-        ) : (
-          <InlineEmpty title="No pending preference drafts" />
-        )}
-      </div>
+        </div>
+      )}
     </section>
   );
 }

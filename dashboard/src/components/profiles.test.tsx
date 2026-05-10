@@ -2,7 +2,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
 import { ProfilesView, runtimeSettingsSaveState } from "./profiles";
-import type { Profile } from "../domain/types";
+import type { Profile, ProfilePatch } from "../domain/types";
 
 function profile(overrides: Partial<Profile>): Profile {
   return {
@@ -54,6 +54,36 @@ describe("ProfilesView", () => {
     expect(html).not.toContain("SEMANTIC");
     expect(html).not.toContain("COPY COMMAND");
     expect(html).not.toContain("tgcs monitor run");
+    expect(html).not.toContain("Preference Drafts");
+    expect(html).not.toContain("No pending preference drafts");
+  });
+
+  it("shows preference drafts only when there is work to review", () => {
+    const patch: ProfilePatch = {
+      patch_id: "patch-1",
+      profile_id: "jobs-fast",
+      card_title: "React contract role",
+      note: "Prefer remote React roles.",
+      status: "pending",
+      diff_text: "-old\n+new",
+      created_at: "2026-05-10T00:00:00Z",
+    };
+    const html = renderToStaticMarkup(
+      <ProfilesView
+        profiles={[profile({ enabled: true })]}
+        patches={[patch]}
+        applyPatch={vi.fn()}
+        revertPatch={vi.fn()}
+        setAlertMode={vi.fn()}
+        setProfileEnabled={vi.fn()}
+        setProfileRuntimeSettings={vi.fn()}
+        busy={false}
+      />,
+    );
+
+    expect(html).toContain("Preference Drafts");
+    expect(html).toContain("React contract role");
+    expect(html).toContain("Apply");
   });
 
   it("validates profile scan setting edits before save", () => {

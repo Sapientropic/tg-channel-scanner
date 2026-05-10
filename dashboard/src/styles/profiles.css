@@ -2,6 +2,10 @@
   grid-template-columns: 1fr;
 }
 
+.profiles-section[data-has-drafts="false"] {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .card-main {
   display: grid;
   gap: 10px;
