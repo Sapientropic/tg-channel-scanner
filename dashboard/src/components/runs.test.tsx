@@ -130,6 +130,7 @@ describe("run health decision", () => {
     ]);
     expect(timeline).toHaveLength(7);
     expect(timeline.map((item) => item.label)).toEqual(["05-04", "05-05", "05-06", "05-07", "05-08", "05-09", "05-10"]);
+    expect(timeline[0]).toMatchObject({ value: "", detail: "no scans" });
     expect(timeline[4]).toMatchObject({ tone: "danger", value: "1 fail" });
   });
 

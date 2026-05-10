@@ -213,9 +213,15 @@ function RunHealthChart({ runs }: { runs: Run[] }) {
       </div>
       <div className="run-compact-timeline" aria-label="Compact run timeline">
         {compactTimeline.map((item) => (
-          <div className={`run-compact-tile is-${item.tone}`} key={item.key}>
+          <div
+            aria-label={`${item.label}: ${item.detail}`}
+            className={`run-compact-tile is-${item.tone}`}
+            data-empty={item.value ? "false" : "true"}
+            key={item.key}
+            title={item.detail}
+          >
             <small>{item.label}</small>
-            <strong>{item.value}</strong>
+            {item.value && <strong>{item.value}</strong>}
             <span>{item.detail}</span>
           </div>
         ))}
@@ -382,7 +388,7 @@ export function buildCompactRunTimeline(buckets: RunDayBucket[]): CompactTimelin
       key: bucket.key,
       tone,
       label: bucket.label,
-      value: failed > 0 ? `${failed} fail` : runs > 0 ? `${runs} run${runs === 1 ? "" : "s"}` : "none",
+      value: failed > 0 ? `${failed} fail` : runs > 0 ? `${runs} run${runs === 1 ? "" : "s"}` : "",
       detail: runs > 0 ? `${cards} cards · ${alerts} alerts` : "no scans",
     };
   });

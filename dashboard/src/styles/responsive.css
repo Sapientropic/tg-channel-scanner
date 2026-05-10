@@ -616,6 +616,10 @@
     text-align: center;
   }
 
+  .run-compact-tile[data-empty="true"] {
+    align-content: center;
+  }
+
   .run-compact-tile small,
   .run-compact-tile span {
     font-size: 11px;

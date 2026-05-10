@@ -31,6 +31,7 @@ What blocks a stronger claim:
 - Latest full screenshot/audit set: `output/quality-review/20260511-0522-full-after-start/`.
 - Latest affected-surface screenshot/audit set after KIMI full-surface P1 fixes: `output/quality-review/20260511-0600-kimi-full-p1-fix/`.
 - Latest full screenshot/audit set after hiding empty profile drafts: `output/quality-review/20260511-0630-full-after-profiles-noise-cut/`.
+- Latest full screenshot/audit set after removing Runs `none` noise: `output/quality-review/20260511-0645-full-after-runs-none-noise-cut/`.
 - Latest Settings yield summary screenshot/audit: `output/quality-review/20260511-0530-settings-yield-summary/`.
 - Full reviewer packet: `output/quality-review/20260511-0522-full-after-start/reviewer-packet.md`.
 - Current task state: `docs/quality-task-state.md`.
@@ -47,7 +48,8 @@ Latest deterministic checks:
 - `1f85b0d` - Ready-mode Start secondary controls collapsed into one `More controls` disclosure.
 - `0b32fb6` - Saved Sources collapsed summary now shows source yield from existing `source_stats`.
 - `55d1b43` - KIMI full-surface P1 fixes: mobile Runs timeline labels are readable without wrapping, Review titles clamp on mobile, and Settings Repository uses human sync copy.
-- Current slice - Profiles hides the empty `Preference Drafts = 0` panel and returns mobile Profiles to one viewport.
+- `e8b1d23` - Profiles hides the empty `Preference Drafts = 0` panel and returns mobile Profiles to one viewport.
+- Current slice - Runs compact timeline no longer repeats `none` on empty days; the no-scan meaning remains in `aria-label` / tooltip.
 
 ## Latest Fixes
 
@@ -64,6 +66,7 @@ Latest deterministic checks:
   - Multi-run report links state they are the latest report for one run in a cluster.
   - Count bars now use a shared visible scale so low-volume and high-volume clusters are visually comparable.
   - Mobile compact timeline dates are 11px and no longer split into unreadable fragments.
+  - Empty days in the compact timeline show only the date instead of repeating `none`.
 - Settings:
   - Sources / Alerts / Notes / Yield are top-level tasks.
   - Saved Sources defaults to a collapsed management entry.
@@ -87,6 +90,7 @@ Accepted and fixed:
 - Qwen integrity warning that reviewer-packet claims needed pending-review wording.
 - KIMI full-surface task `8d8822766019`: accepted P1s for Runs date readability, Review mobile title clamp, and Settings Repository human copy.
 - Qwen structural review `0c5099e26020`: `pass-with-risks`; confirmed Claude plans P0/P1 are closed. Its Profiles 917px risk is stale because the current slice lowered Profiles to 844px.
+- KIMI post-fix review `60b877b6c8ca`: `pass-with-risks`; P0/P1 are closed. Accepted its P2 `none` noise finding because it directly matched the user's repeated-noise constraint.
 
 Degraded:
 - Gemini task `fbec77e0e78b` failed from provider rate limit.
@@ -97,10 +101,9 @@ Degraded:
 - Mobile Review and Runs remain taller than one viewport even though they are under 950px and have no overflow/small-target findings.
 - Full heterogeneous reviewer gate is still degraded because Gemini was rate-limited and DeepSeek lacked repo access.
 - Source yield summary avoids fabricated timestamps; deeper recency wording needs a real timestamp field.
-- KIMI post-fix review task `60b877b6c8ca` is still running.
 
 ## Next Action
 
-1. Commit the profile empty-drafts checkpoint.
-2. Poll and triage KIMI post-fix task `60b877b6c8ca`.
+1. Commit the Runs `none` noise checkpoint.
+2. Continue reviewer-driven polish only where evidence shows user-visible noise or interaction friction.
 3. Near 2026-05-11 13:00 +08:00, stop opening new work and produce a concise evidence-backed handoff.
