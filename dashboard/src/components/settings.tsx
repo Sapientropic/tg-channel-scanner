@@ -240,7 +240,7 @@ function SettingsTaskSwitch({
     { id: "sources", label: "Sources", count: sourceCount, detail: "Add or manage channels" },
     { id: "notifications", label: "Alerts", count: notificationCount, detail: "Bot token and delivery" },
     { id: "learning", label: "Notes", count: feedbackCount, detail: "Export review notes" },
-    { id: "evidence", label: "Evidence", count: evidenceCount, detail: "Yield and source actions" },
+    { id: "evidence", label: "Health", count: evidenceCount, detail: "Which sources found posts" },
   ];
   return (
     <div className="settings-task-switch" aria-label="Settings task switcher">
@@ -368,6 +368,7 @@ function SourceLibraryPanel({
   const [selectedTopic, setSelectedTopic] = useState("");
   const [showAllTopics, setShowAllTopics] = useState(false);
   const [showSourceList, setShowSourceList] = useState(false);
+  const [libraryOpen, setLibraryOpen] = useState(false);
   const [visibleCount, setVisibleCount] = useState(SOURCE_LIBRARY_PAGE_SIZE);
   const filteredSources = filterDeskSourcesByQuery(sources, query, selectedTopic);
   const visibleSources = paginatedDeskSources(filteredSources, visibleCount);
@@ -377,6 +378,7 @@ function SourceLibraryPanel({
   const hiddenTopicCount = Math.max(0, topics.length - topicPreview.length);
   const hasFilters = Boolean(query.trim() || selectedTopic);
   const listVisible = showSourceList || hasFilters;
+  const managementOpen = libraryOpen || hasFilters || showSourceList || isLoading || Boolean(error) || !sources.length;
   const countLabel = listVisible
     ? sourceLibraryCountLabel(visibleSources.length, filteredSources.length, hasFilters)
     : `${filteredSources.length} saved; search or manage when needed`;
@@ -390,122 +392,135 @@ function SourceLibraryPanel({
   }, [query, selectedTopic, library?.source_count]);
   return (
     <div className="table-section source-library-panel">
-      <PanelHeader icon={<Database size={18} />} title="Saved Sources" count={library?.source_count} />
-      {error && (
-        <div className="source-library-error" role="status">
-          <strong>Saved sources need a refresh</strong>
-          <span>{error}</span>
-        </div>
-      )}
-      {library && (
-        <div className="source-library-summary" aria-label="Saved source summary">
-          <span>
-            <strong>{library.enabled_count}</strong>
-            active
+      <details
+        className="source-library-details"
+        onToggle={(event) => setLibraryOpen(event.currentTarget.open)}
+        open={managementOpen}
+      >
+        <summary>
+          <span className="panel-title">
+            <Database size={18} />
+            Saved Sources
           </span>
-          <span>
-            <strong>{library.source_count - library.enabled_count}</strong>
-            paused
-          </span>
-          <div className="source-library-topics" aria-label="Filter saved sources by topic" title={library.topics.join(", ")}>
-            {topicPreview.length ? (
-              <>
-                {topicPreview.map((topic) => (
-                  <button
-                    aria-pressed={selectedTopic === topic}
-                    key={topic}
-                    onClick={() => setSelectedTopic(selectedTopic === topic ? "" : topic)}
-                    type="button"
-                  >
-                    {topic}
-                  </button>
-                ))}
-                {(hiddenTopicCount > 0 || showAllTopics) && (
-                  <button
-                    aria-expanded={showAllTopics}
-                    className="topic-overflow-toggle"
-                    onClick={() => setShowAllTopics((current) => !current)}
-                    type="button"
-                  >
-                    {showAllTopics ? "Show fewer" : `+${hiddenTopicCount}`}
-                  </button>
-                )}
-              </>
-            ) : (
-              <small>No topics yet</small>
+          <strong>{library?.source_count ?? sources.length}</strong>
+          <small>{sources.length ? "Open to search or manage" : "No saved sources yet"}</small>
+        </summary>
+        {error && (
+          <div className="source-library-error" role="status">
+            <strong>Saved sources need a refresh</strong>
+            <span>{error}</span>
+          </div>
+        )}
+        {library && (
+          <div className="source-library-summary" aria-label="Saved source summary">
+            <span>
+              <strong>{library.enabled_count}</strong>
+              active
+            </span>
+            <span>
+              <strong>{library.source_count - library.enabled_count}</strong>
+              paused
+            </span>
+            <div className="source-library-topics" aria-label="Filter saved sources by topic" title={library.topics.join(", ")}>
+              {topicPreview.length ? (
+                <>
+                  {topicPreview.map((topic) => (
+                    <button
+                      aria-pressed={selectedTopic === topic}
+                      key={topic}
+                      onClick={() => setSelectedTopic(selectedTopic === topic ? "" : topic)}
+                      type="button"
+                    >
+                      {topic}
+                    </button>
+                  ))}
+                  {(hiddenTopicCount > 0 || showAllTopics) && (
+                    <button
+                      aria-expanded={showAllTopics}
+                      className="topic-overflow-toggle"
+                      onClick={() => setShowAllTopics((current) => !current)}
+                      type="button"
+                    >
+                      {showAllTopics ? "Show fewer" : `+${hiddenTopicCount}`}
+                    </button>
+                  )}
+                </>
+              ) : (
+                <small>No topics yet</small>
+              )}
+            </div>
+          </div>
+        )}
+        {sources.length > 0 && (
+          <div className="source-library-search">
+            <label htmlFor="source-library-query">Find source</label>
+            <input
+              id="source-library-query"
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="@remote_jobs or jobs"
+              type="search"
+              value={query}
+            />
+            <small aria-live="polite">
+              {countLabel}
+            </small>
+            {hasFilters && (
+              <button
+                className="text-button secondary source-library-clear"
+                onClick={() => {
+                  setQuery("");
+                  setSelectedTopic("");
+                }}
+                type="button"
+              >
+                Clear filters
+              </button>
             )}
           </div>
-        </div>
-      )}
-      {sources.length > 0 && (
-        <div className="source-library-search">
-          <label htmlFor="source-library-query">Find source</label>
-          <input
-            id="source-library-query"
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="@remote_jobs or jobs"
-            type="search"
-            value={query}
-          />
-          <small aria-live="polite">
-            {countLabel}
-          </small>
-          {hasFilters && (
+        )}
+        {isLoading ? (
+          <InlineEmpty title="Loading saved sources" />
+        ) : sources.length && !listVisible ? (
+          <div className="source-library-gate" aria-label="Saved source list collapsed">
+            <div>
+              <strong>{library?.source_count ?? sources.length} saved sources</strong>
+              <span>Use search for one source, or open the list only when you need bulk cleanup.</span>
+            </div>
             <button
-              className="text-button secondary source-library-clear"
-              onClick={() => {
-                setQuery("");
-                setSelectedTopic("");
-              }}
+              className="text-button secondary"
+              onClick={() => setShowSourceList(true)}
               type="button"
             >
-              Clear filters
+              Show first {SOURCE_LIBRARY_PAGE_SIZE}
             </button>
-          )}
-        </div>
-      )}
-      {isLoading ? (
-        <InlineEmpty title="Loading saved sources" />
-      ) : sources.length && !listVisible ? (
-        <div className="source-library-gate" aria-label="Saved source list collapsed">
-          <div>
-            <strong>{library?.source_count ?? sources.length} saved sources</strong>
-            <span>Use search for one source, or open the list only when you need bulk cleanup.</span>
           </div>
-          <button
-            className="text-button secondary"
-            onClick={() => setShowSourceList(true)}
-            type="button"
-          >
-            Show first {SOURCE_LIBRARY_PAGE_SIZE}
-          </button>
-        </div>
-      ) : sources.length ? (
-        <div className="source-library-list">
-          {visibleSources.map((source) => (
-            <SourceLibraryRow
-              busy={busy}
-              key={source.source_id}
-              setSourceEnabled={setSourceEnabled}
-              setSourceTopics={setSourceTopics}
-              source={source}
-            />
-          ))}
-          {!filteredSources.length && <InlineEmpty title="No saved source matches" />}
-          {hiddenSourceCount > 0 && (
-            <button
-              className="text-button secondary source-library-more"
-              onClick={() => setVisibleCount((count) => count + SOURCE_LIBRARY_PAGE_SIZE)}
-              type="button"
-            >
-              <span>Load 8 more</span>
-              <small>{hiddenSourceCount} remaining</small>
-            </button>
-          )}
-        </div>
-      ) : (
-        !error && <InlineEmpty title="No saved sources yet" />
-      )}
+        ) : sources.length ? (
+          <div className="source-library-list">
+            {visibleSources.map((source) => (
+              <SourceLibraryRow
+                busy={busy}
+                key={source.source_id}
+                setSourceEnabled={setSourceEnabled}
+                setSourceTopics={setSourceTopics}
+                source={source}
+              />
+            ))}
+            {!filteredSources.length && <InlineEmpty title="No saved source matches" />}
+            {hiddenSourceCount > 0 && (
+              <button
+                className="text-button secondary source-library-more"
+                onClick={() => setVisibleCount((count) => count + SOURCE_LIBRARY_PAGE_SIZE)}
+                type="button"
+              >
+                <span>Load 8 more</span>
+                <small>{hiddenSourceCount} remaining</small>
+              </button>
+            )}
+          </div>
+        ) : (
+          !error && <InlineEmpty title="No saved sources yet" />
+        )}
+      </details>
     </div>
   );
 }

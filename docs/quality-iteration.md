@@ -24,7 +24,7 @@ Current truth for the 2026-05-11 quality loop. Product rules stay in `.frontend-
 
 Cannot claim acceptance readiness yet.
 
-The highest current blockers are interaction/information-architecture problems, not build or test failures. Runs, Settings, mobile Review, and Profiles have been materially reduced, but the latest Qwen P0/P1 fixes still need follow-up reviewer pressure before acceptance can be claimed.
+The highest current blockers are interaction/information-architecture problems, not build or test failures. Runs, Settings, mobile Review, and Profiles have been materially reduced, and KIMI's latest Review/Settings P1 findings were fixed locally in Iteration 14. A follow-up reviewer gate is still required before acceptance can be claimed.
 
 ## Repair Roadmap
 
@@ -49,9 +49,10 @@ The highest current blockers are interaction/information-architecture problems, 
    - Commit checkpoint when a slice is coherent and verified enough to roll back.
 
 5. Current next slice - reviewer follow-up and remaining app polish:
-   - Re-check Review/Settings after accepted Qwen P0/P1 fixes.
+   - Re-check Review/Settings after accepted Qwen and KIMI P0/P1 fixes.
    - Keep reducing first-viewport noise without hiding safety or maintenance controls.
    - Use another independent reviewer because Gemini failed again.
+   - Keep the recovered Claude Code plans report in the queue only for remaining Runs P2s; its P0/P1 items were already fixed in Iteration 10.
 
 ## Iteration 0 - Ground Truth And Plan
 
@@ -440,3 +441,37 @@ The highest current blockers are interaction/information-architecture problems, 
 - Hook enforcement: manual.
 - Artifact hygiene: screenshot evidence remains timestamped under `output/quality-review/`.
 - Next: commit checkpoint, request post-Qwen reviewer follow-up, then continue with the next high-value surface.
+
+## Iteration 14 - KIMI Follow-Up P1 Cleanup
+
+- Target: address KIMI follow-up task `bc6ce42d0d85` without pretending the prior Qwen fix was enough.
+- Changes:
+  - `dashboard/src/components/inbox.tsx`: mobile and desktop Review actions now use user-facing `Not a match` and `Compare` language instead of `FP`, `Diff`, or false-positive jargon.
+  - `dashboard/src/styles/responsive.css`: mobile Review quick actions use a 2x2 grid so longer labels remain readable and tappable.
+  - `dashboard/src/components/settings.tsx`: the Settings Evidence task is now labeled `Health` with the detail `Which sources found posts`.
+  - `dashboard/src/components/settings.tsx` and `dashboard/src/styles/settings/sources.css`: Saved Sources is collapsed behind a compact summary by default; search and management are still one disclosure away.
+  - Re-read `C:\Users\Administrator\.claude\plans\fallback-gemini-reviewer-vast-nest.md`; its Runs P0/P1 findings were already handled in Iteration 10, with only P2 candidates left.
+- Verification:
+  - `npm test -- --run`: 11 files / 81 tests passed.
+  - `npm run build`: passed.
+  - `git diff --check`: passed, with only Windows line-ending warnings.
+  - Real-browser screenshots and metrics: `output/quality-review/20260511-0430-kimi-followup-fix/`.
+  - Desktop Start / Review / Profiles / Runs / Settings: no horizontal overflow and zero small-target findings.
+  - Mobile Start / Review / Profiles / Runs / Settings: no horizontal overflow and zero small-target findings.
+  - Mobile Settings scroll height is now 844px, down from 1258px after Iteration 13 and 3051px in the early baseline.
+  - Mobile Review is 948px tall; this is higher than Iteration 13 because the clearer 2x2 labels take space, but it avoids cryptic jargon and remains just over one viewport.
+- External review:
+  - KIMI task `bc6ce42d0d85` was accepted for Review/Settings P1s.
+  - Follow-up reviewer pressure is still needed before acceptance claims.
+- Triage:
+  - Accepted: `FP` and `Diff` are insider labels; visible actions should use ordinary language even if the card becomes slightly taller.
+  - Accepted: Settings should not default to a saved-source management wall for returning users.
+  - Accepted: the Evidence label was too self-referential; `Health` plus source-yield detail gives better scent in the task switcher.
+  - Deferred: Start first-viewport CTA polish and Runs P2 visual normalization remain lower priority unless a reviewer promotes them.
+- Task state: local checkpoint ready after visual verification.
+- `needs_human`: final visual/taste acceptance remains user-owned.
+- Residual risk: Mobile Review is still 104px beyond the 844px viewport; forcing it lower would likely reintroduce cryptic labels or hide useful context.
+- Memory closeout: pending.
+- Hook enforcement: manual.
+- Artifact hygiene: screenshot evidence remains timestamped under `output/quality-review/`; no local Claude plans file was copied into project docs.
+- Next: commit checkpoint, dispatch reviewer follow-up, then decide between Start polish and Runs P2 cleanup.

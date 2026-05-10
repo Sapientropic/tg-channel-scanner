@@ -236,24 +236,24 @@ function MobileActionStrip({
         <span>Skip</span>
       </button>
       <button
-        aria-label="False positive"
-        title="False positive"
+        aria-label="Mark as not a match"
+        title="Mark as not a match"
         type="button"
         onClick={() => act(card.card_id, "false_positive")}
         disabled={busy}
       >
         <Ban size={16} />
-        <span>FP</span>
+        <span>Not a match</span>
       </button>
       <button
-        aria-label={showFollowUp ? "Hide profile diff note" : "Draft profile diff"}
-        title={showFollowUp ? "Hide profile diff note" : "Draft profile diff"}
+        aria-label={showFollowUp ? "Hide compare note" : "Compare profile change"}
+        title={showFollowUp ? "Hide compare note" : "Compare profile change"}
         type="button"
         onClick={() => setShowFollowUp((value) => !value)}
         disabled={busy}
       >
         <FileDiff size={16} />
-        <span>{showFollowUp ? "Hide" : "Diff"}</span>
+        <span>{showFollowUp ? "Hide" : "Compare"}</span>
       </button>
     </div>
   );
@@ -394,41 +394,41 @@ function CardActions({
           <span>Skip</span>
         </button>
         <button
-          title="False positive"
+          title="Mark as not a match"
           type="button"
           onClick={() => act(card.card_id, "false_positive")}
           disabled={busy}
         >
           <Ban size={16} />
-          <span>False positive</span>
+          <span>Not a match</span>
         </button>
         {!showFollowUp && (
-          <button title="Draft profile diff" type="button" onClick={() => setShowFollowUp(true)} disabled={busy}>
+          <button title="Compare profile change" type="button" onClick={() => setShowFollowUp(true)} disabled={busy}>
             <FileDiff size={16} />
-            <span>Draft diff</span>
+            <span>Compare</span>
           </button>
         )}
       </div>
       {showFollowUp && (
         <div className="follow-up">
           <div className="follow-up-head">
-            <label htmlFor={noteId}>Profile diff note</label>
+            <label htmlFor={noteId}>Compare note</label>
             <button
               className="follow-up-close"
-              title="Hide profile diff note"
+              title="Hide compare note"
               type="button"
               onClick={() => setShowFollowUp(false)}
               disabled={busy}
             >
               <X size={14} />
-              <span>Hide diff</span>
+              <span>Hide</span>
             </button>
           </div>
           <div className="follow-up-control">
             <textarea
               id={noteId}
               ref={textareaRef}
-              aria-label="Profile diff note"
+              aria-label="Compare note"
               value={note}
               onChange={(event) => setNote(event.target.value)}
               placeholder="Describe what future matches should change"
@@ -436,16 +436,16 @@ function CardActions({
             />
           </div>
           <div className="follow-up-footer">
-            <small>Creates a reviewable profile diff. The note stays local and is not included in exports.</small>
+            <small>Creates a reviewable profile change. The note stays local and is not included in exports.</small>
             <button
               className="follow-up-submit"
-              title={note.trim() ? "Create profile diff" : "Add a note first"}
+              title={note.trim() ? "Create profile change" : "Add a note first"}
               type="button"
               onClick={() => act(card.card_id, "follow_up", note.trim())}
               disabled={busy || !note.trim()}
             >
               <FileDiff size={16} />
-              <span>{note.trim() ? "Create diff" : "Add note"}</span>
+              <span>{note.trim() ? "Create change" : "Add note"}</span>
             </button>
           </div>
         </div>
