@@ -54,7 +54,7 @@ Latest deterministic checks:
 - `53af224` - Runs compact timeline no longer repeats `none` on empty days; the no-scan meaning remains in `aria-label` / tooltip.
 - `c039f8a` - Mobile Review triage is a compact filter row and the first card fits in one viewport.
 - `bfe8065` - Mobile Runs is compacted to one viewport without reintroducing unreadable timeline labels.
-- Current slice - Final KIMI P2s fixed: mobile Review filter shows `Latest 1`; Runs timeline tile alignment is unified.
+- `993a89a` - Final KIMI P2s fixed: mobile Review filter shows `Latest 1`; Runs timeline tile alignment is unified.
 
 ## Latest Fixes
 
@@ -112,6 +112,5 @@ Degraded:
 
 ## Next Action
 
-1. Commit the final KIMI P2 fix checkpoint.
-2. Continue reviewer-driven polish only where evidence shows user-visible noise or interaction friction.
-3. Near 2026-05-11 13:00 +08:00, stop opening new work and produce a concise evidence-backed handoff.
+1. Continue only evidence-backed polish where a real page or reviewer shows user-visible noise.
+2. Near 2026-05-11 13:00 +08:00, stop opening new work and produce a concise evidence-backed handoff.
