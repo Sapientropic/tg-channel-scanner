@@ -492,6 +492,9 @@ function telegramState(stage: string, telegramReady: boolean): JourneyState {
   if (telegramReady) {
     return "done";
   }
+  if (stage === "ready" || stage === "needs_delivery_target") {
+    return "ready";
+  }
   if (stage === "needs_profiles" || stage === "needs_enabled_profile") {
     return "blocked";
   }
@@ -501,6 +504,9 @@ function telegramState(stage: string, telegramReady: boolean): JourneyState {
 function telegramStateLabel(stage: string, telegramReady: boolean) {
   if (telegramReady) {
     return "Connected";
+  }
+  if (stage === "ready" || stage === "needs_delivery_target") {
+    return "Optional";
   }
   if (stage === "needs_profiles" || stage === "needs_enabled_profile") {
     return "Workspace first";

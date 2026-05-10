@@ -327,7 +327,7 @@ function SourceLibraryPanel({
       <PanelHeader icon={<Database size={18} />} title="Saved Sources" count={library?.source_count} />
       {error && (
         <div className="source-library-error" role="status">
-          <strong>Source library unavailable</strong>
+          <strong>Saved sources need a refresh</strong>
           <span>{error}</span>
         </div>
       )}

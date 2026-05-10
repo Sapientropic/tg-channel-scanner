@@ -358,5 +358,23 @@ async function readJson(response: Response) {
 }
 
 export function errorMessage(error: unknown) {
-  return error instanceof Error ? error.message : String(error);
+  const message = error instanceof Error ? error.message : String(error);
+  return normalizeDashboardError(message);
+}
+
+export function normalizeDashboardError(message: string) {
+  const text = message.trim();
+  if (!text) {
+    return "Signal Desk hit an unknown local error. Refresh once; if it repeats, restart the dashboard server.";
+  }
+  if (/failed to fetch|networkerror|load failed/i.test(text)) {
+    return "Local dashboard API is unreachable. Start or restart Signal Desk, then refresh.";
+  }
+  if (/internal server error|http 500/i.test(text)) {
+    return "Local dashboard API hit an internal error. Refresh once; if it repeats, restart Signal Desk.";
+  }
+  if (/invalid .* response/i.test(text)) {
+    return "Local dashboard API returned data this screen cannot read. Refresh once; if it repeats, restart Signal Desk.";
+  }
+  return text;
 }

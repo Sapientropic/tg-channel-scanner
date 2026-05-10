@@ -247,6 +247,21 @@ describe("Signal Desk journey", () => {
     });
   });
 
+  it("does not let optional Telegram setup seize the ready-state path", () => {
+    const readyButDisconnected = { ...telegramReady, session_ready: false, credentials_ready: false };
+    const baseSetup = { stage: "ready", has_profiles: true, has_runs: true };
+    const steps = buildJourneySteps(actions, {}, baseSetup, readyButDisconnected, schedulerStatus(false));
+    const summary = buildStartSummary(steps, baseSetup, readyButDisconnected, schedulerStatus(false), [], 2);
+
+    expect(steps.find((step) => step.key === "telegram")).toMatchObject({
+      state: "ready",
+      stateLabel: "Optional",
+    });
+    expect(summary.find((item) => item.label === "Next")).toMatchObject({
+      value: "Review 2 cards",
+    });
+  });
+
   it("blocks first scan until Telegram is connected", () => {
     const steps = buildJourneySteps(actions, {}, { stage: "needs_first_run", has_profiles: true, has_runs: false }, {
       ...telegramReady,

@@ -190,3 +190,29 @@ The dashboard has a strong visual language, but Settings currently fails the ord
 - Hook enforcement: manual.
 - Artifact hygiene: invalid transient-error screenshots kept only as raw evidence; use 0305 as current visual reference.
 - Next: desktop compact-control polish and local API error-state clarity.
+
+## Iteration 6 - Local API Error Recovery
+
+- Target: keep transient local API failures from dumping raw server language into the UI or stealing the user's main task.
+- Changes:
+  - `dashboard/src/api/client.ts`: `errorMessage` now normalizes network failures, HTTP 500s, and invalid response shapes into short local recovery guidance.
+  - `dashboard/src/components/settings.tsx`: Saved Sources error title now says what needs attention instead of only saying unavailable.
+  - `dashboard/src/components/actions.tsx`: optional Telegram setup no longer becomes the active Start step when the workspace is already ready and Review cards exist.
+  - Added focused tests for error normalization and ready-state Telegram optionality.
+- Verification:
+  - `npm test -- --run`: 11 files / 75 tests passed.
+  - `npm run build`: passed.
+  - Real-browser screenshots and metrics: `output/quality-review/20260511-0325/`.
+  - Start remained Review-first even while a local API subcall surfaced a normalized recovery notice.
+- External review:
+  - Addresses the ordinary-user/ADHD concern that raw "Internal Server Error" text is high-friction and low-action.
+- Triage:
+  - Accepted: API subcall failures may show a notice, but they must not redirect a ready user away from pending Review work.
+  - Preserved: specific validation errors, such as invalid topic tags, still pass through unchanged.
+- Task state: checkpoint ready.
+- `needs_human`: final taste acceptance remains user-owned.
+- Residual risk: if the primary `/api/state` endpoint fails, the app still has to fall back to the empty/error shell; that path needs a separate visual pass.
+- Memory closeout: pending.
+- Hook enforcement: manual.
+- Artifact hygiene: screenshot evidence remains timestamped; no generated evidence was promoted into docs.
+- Next: desktop compact-control polish if it does not make the desk less scannable.
