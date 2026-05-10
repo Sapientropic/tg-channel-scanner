@@ -1,0 +1,267 @@
+.patch-card {
+  grid-template-columns: 1fr;
+}
+
+.card-main {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding: 16px 0;
+}
+
+.patch-card .card-main {
+  padding: 16px;
+}
+
+.patch-context-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: var(--label-weight);
+  text-transform: uppercase;
+}
+
+.patch-context-row code {
+  min-width: 0;
+  color: var(--ink-link);
+  text-transform: none;
+}
+
+.patch-diff-stat {
+  color: var(--tone-medium-text);
+}
+
+.patch-readiness {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid color-mix(in oklch, var(--paper-3) 68%, var(--ink-warm));
+  background: var(--surface-warm);
+}
+
+.patch-readiness strong,
+.patch-readiness span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.patch-readiness strong {
+  color: var(--ink-link);
+  font-size: 12px;
+  font-weight: var(--badge-weight);
+  text-transform: uppercase;
+}
+
+.patch-readiness span {
+  color: var(--ink-warm);
+  font-size: 12px;
+  line-height: 1.42;
+}
+
+.patch-readiness.ready {
+  border-color: color-mix(in oklch, var(--signal-high) 58%, var(--paper-3));
+  background: var(--surface-link);
+}
+
+.patch-readiness.blocked {
+  border-color: color-mix(in oklch, var(--signal-danger) 58%, var(--paper-3));
+  background: var(--tone-danger-bg);
+}
+
+.patch-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.patch-diff-details {
+  display: grid;
+  gap: 8px;
+}
+
+.patch-diff-details summary {
+  display: inline-flex;
+  width: max-content;
+  max-width: 100%;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 9px;
+  border: 1px solid color-mix(in oklch, var(--paper-3) 68%, var(--ink-warm));
+  background: var(--surface-warm);
+  color: var(--ink-warm);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: var(--badge-weight);
+  text-transform: uppercase;
+}
+
+.patch-diff-details summary::-webkit-details-marker {
+  display: none;
+}
+
+.patch-diff-details[open] summary {
+  background: var(--surface-action);
+}
+
+
+.profile-row {
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+}
+
+.profile-row.paused {
+  border-left: 3px solid color-mix(in oklch, var(--muted) 70%, var(--paper-3));
+  background: color-mix(in oklch, var(--ink-2) 78%, var(--paper));
+}
+
+.profile-primary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+}
+
+.profile-primary strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.profile-rhythm {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
+  gap: 6px;
+  min-width: 0;
+}
+
+.profile-rhythm span {
+  min-width: 0;
+  padding: 5px 7px;
+  border: 1px solid color-mix(in oklch, var(--signal-high) 20%, transparent);
+  background: color-mix(in oklch, var(--signal-high) 6%, transparent);
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: var(--badge-weight);
+  line-height: 1.15;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-transform: none;
+}
+
+.profile-control-groups {
+  display: grid;
+  grid-template-columns: minmax(170px, 0.8fr) minmax(220px, 1.2fr);
+  gap: 9px;
+  min-width: 0;
+}
+
+.profile-control-group {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.profile-control-label {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: var(--label-weight);
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.profile-enable-button {
+  justify-content: center;
+  width: 100%;
+  min-width: 0;
+}
+
+.profile-enable-button.secondary {
+  background: color-mix(in oklch, var(--paper) 8%, transparent);
+  color: var(--paper);
+}
+
+.profile-row.paused .mode-controls {
+  opacity: 0.64;
+}
+
+.profile-paused-note {
+  min-width: 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.profile-edit-settings {
+  justify-content: center;
+  width: 100%;
+  min-width: 0;
+}
+
+.profile-runtime-settings {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+  min-width: 0;
+  padding-top: 2px;
+}
+
+.profile-runtime-settings label {
+  display: grid;
+  grid-template-columns: minmax(84px, 0.42fr) minmax(96px, 1fr) minmax(70px, auto);
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  min-height: 42px;
+  padding: 0 8px;
+  border: 1px solid color-mix(in oklch, var(--signal-high) 18%, transparent);
+  background: color-mix(in oklch, var(--signal-high) 5%, transparent);
+}
+
+.profile-runtime-settings label span,
+.profile-runtime-settings small {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: var(--badge-weight);
+  line-height: 1;
+  text-transform: none;
+  white-space: nowrap;
+}
+
+.profile-runtime-settings input {
+  width: 100%;
+  min-width: 44px;
+  border: 1px solid color-mix(in oklch, var(--paper-3) 72%, var(--ink-warm));
+  background: var(--field-bg);
+  color: var(--field-ink);
+  font: inherit;
+  font-size: 13px;
+  font-weight: var(--label-weight);
+  min-height: 28px;
+  padding: 0 6px;
+}
+
+.profile-save-settings {
+  justify-content: center;
+  width: 100%;
+  min-width: 0;
+}
+
+.profile-save-settings:not(:disabled) {
+  background: var(--accent);
+  color: var(--ink);
+}
+
+.profile-runtime-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  min-width: 0;
+}
+

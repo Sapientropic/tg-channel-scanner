@@ -1,0 +1,114 @@
+import type { ReactNode } from "react";
+import { RefreshCw, ShieldCheck } from "lucide-react";
+
+import signalIcon from "../assets/tgcs-signal-icon.png";
+import type { Tab } from "../domain/types";
+
+const projectRepoUrl = "https://github.com/Sapientropic/tg-channel-scanner";
+
+export function ConsoleHeader({ busy, onRefresh }: { busy: boolean; onRefresh: () => void }) {
+  return (
+    <header className="console-header">
+      <div className="brand-station">
+        <a
+          className="pixel-mark"
+          href={projectRepoUrl}
+          target="_blank"
+          rel="noreferrer"
+          aria-label="Open TGCS Git repository"
+          title="Open Git repository"
+        >
+          <img src={signalIcon} alt="" />
+        </a>
+        <div className="brand-copy">
+          <p className="eyebrow">TG Channel Scanner</p>
+          <h1>Signal Desk</h1>
+          <div className="header-readout" aria-label="Local dashboard boundary">
+            <span>SQLite local</span>
+            <span>127.0.0.1</span>
+            <span>raw text redacted</span>
+          </div>
+        </div>
+      </div>
+      <button className="refresh-button" onClick={onRefresh} disabled={busy} title="Refresh state" type="button">
+        <RefreshCw size={18} className={busy ? "spin" : ""} />
+        <span>Refresh</span>
+      </button>
+    </header>
+  );
+}
+
+export function NavigationRail({
+  tabs,
+  activeTab,
+  tabCounts,
+  setActiveTab,
+}: {
+  tabs: Array<{ tab: Tab; icon: ReactNode; label: string }>;
+  activeTab: Tab;
+  tabCounts: Record<Tab, number>;
+  setActiveTab: (tab: Tab) => void;
+}) {
+  return (
+    <aside className="nav-rail" aria-label="Dashboard navigation">
+      <nav className="tabs" aria-label="Dashboard tabs">
+        {tabs.map((tab) => (
+          <TabButton key={tab.tab} {...tab} active={activeTab} count={tabCounts[tab.tab]} setActive={setActiveTab} />
+        ))}
+      </nav>
+      <div className="rail-note">
+        <ShieldCheck size={16} />
+        <span>Tokens stay outside SQLite</span>
+      </div>
+    </aside>
+  );
+}
+
+function TabButton({
+  tab,
+  active,
+  count,
+  setActive,
+  icon,
+  label,
+}: {
+  tab: Tab;
+  active: Tab;
+  count: number;
+  setActive: (tab: Tab) => void;
+  icon: ReactNode;
+  label: string;
+}) {
+  return (
+    <button
+      className={active === tab ? "tab active" : "tab"}
+      aria-current={active === tab ? "page" : undefined}
+      onClick={() => setActive(tab)}
+      type="button"
+    >
+      <span className="tab-icon">{icon}</span>
+      <span className="tab-label">{label}</span>
+      <span className="tab-count">{count}</span>
+    </button>
+  );
+}
+
+export function WorkbenchHeader({
+  meta,
+}: {
+  meta: {
+    title: string;
+    detail: string;
+    value: string;
+    tone: "amber" | "teal" | "rust" | "blue";
+  };
+}) {
+  return (
+    <header className="board-header" title={meta.detail}>
+      <div>
+        <h2>{meta.title}</h2>
+      </div>
+      <strong className={`board-token ${meta.tone}`}>{meta.value}</strong>
+    </header>
+  );
+}

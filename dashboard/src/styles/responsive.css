@@ -1,0 +1,481 @@
+@media (max-width: 1500px) {
+  .review-card {
+    grid-template-columns: 12px minmax(0, 1fr);
+  }
+
+  .card-actions {
+    grid-column: 1 / -1;
+    align-items: start;
+    border-left: 0;
+    border-top: 1px solid var(--paper-3);
+  }
+
+  .review-card:not([data-actions-expanded="true"]) .action-cluster {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+@media (min-width: 1180px) and (max-width: 1500px) {
+  .review-card {
+    grid-template-columns: 10px minmax(0, 1fr) minmax(176px, 196px);
+    gap: 12px;
+  }
+
+  .card-actions {
+    grid-column: auto;
+    border-top: 0;
+    border-left: 1px solid var(--paper-3);
+    padding: 12px;
+  }
+
+  .review-card:not([data-actions-expanded="true"]) .action-cluster {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (min-width: 901px) {
+  /*
+    Expanded diff authoring is a different mode from quick triage. The card
+    marks that state explicitly so the editor can become a two-zone workbench
+    without asking CSS to infer parent layout from child selectors.
+  */
+  .review-card[data-actions-expanded="true"] {
+    grid-template-columns: 12px minmax(0, 1fr);
+    gap: 0 16px;
+  }
+
+  .review-card[data-actions-expanded="true"] .card-main {
+    padding-right: 16px;
+  }
+
+  .review-card[data-actions-expanded="true"] .card-actions {
+    grid-column: 1 / -1;
+    grid-template-columns: minmax(248px, 320px) minmax(0, 1fr);
+    gap: 16px;
+    align-items: start;
+    padding: 16px;
+    border-left: 0;
+    border-top: 1px solid var(--paper-3);
+  }
+
+  .review-card[data-actions-expanded="true"] .action-cluster {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-self: start;
+    padding-right: 16px;
+    border-right: 1px solid var(--paper-3);
+  }
+
+  .review-card[data-actions-expanded="true"] .action-cluster-label {
+    display: block;
+  }
+
+  .review-card[data-actions-expanded="true"] .action-cluster button:nth-of-type(3) {
+    grid-column: 1 / -1;
+  }
+
+  .review-card[data-actions-expanded="true"] .follow-up {
+    align-content: start;
+  }
+
+  .review-card[data-actions-expanded="true"] .follow-up-control textarea {
+    min-height: 108px;
+  }
+
+  .review-card[data-actions-expanded="true"] .follow-up-submit {
+    flex: 0 0 auto;
+    justify-self: end;
+    width: auto;
+    min-width: 154px;
+    padding-inline: 18px;
+  }
+}
+
+@media (max-width: 900px) {
+  .validation-brief,
+  .workbench,
+  .split-section,
+  .insight-list,
+  .setup-banner,
+  .review-card {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-grid {
+    grid-template-areas:
+      "delivery"
+      "source-import"
+      "source-library"
+      "feedback"
+      "actions"
+      "yield";
+  }
+
+  .pulse-panel {
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .nav-rail {
+    order: 2;
+    position: static;
+  }
+
+  .main-board {
+    order: 1;
+  }
+
+  .inbox-toolbar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .inbox-filter-group {
+    justify-content: flex-start;
+  }
+
+  .tabs {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+
+  .tab {
+    grid-template-columns: 24px minmax(0, 1fr);
+  }
+
+  .tab-count {
+    display: none;
+  }
+
+  .card-spine {
+    display: none;
+  }
+
+  .card-main {
+    padding: 16px;
+  }
+
+  .card-actions {
+    grid-template-columns: 1fr;
+    border-left: 0;
+    border-top: 1px solid var(--paper-3);
+  }
+
+  .action-cluster {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .review-card:not([data-actions-expanded="true"]) .action-cluster,
+  .review-card[data-actions-expanded="true"] .action-cluster {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .review-card[data-actions-expanded="true"] .action-cluster-label {
+    display: block;
+  }
+
+  .review-card[data-actions-expanded="true"] .action-cluster button:nth-of-type(3) {
+    grid-column: 1 / -1;
+  }
+
+  .follow-up-control {
+    grid-template-columns: 1fr;
+  }
+
+  .follow-up-footer {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .validation-stats,
+  .validation-gauges,
+  .validation-body {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .start-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .start-summary div {
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .start-summary div:last-child {
+    border-bottom: 0;
+  }
+
+  .start-hero-main,
+  .journey-step,
+  .telegram-forms {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 680px) {
+  .app-shell {
+    width: min(100vw - 20px, 720px);
+    padding-top: 12px;
+  }
+
+  .console-header {
+    min-height: 0;
+    align-items: center;
+    flex-direction: row;
+    gap: 10px;
+    padding: 10px;
+  }
+
+  .brand-station {
+    align-items: center;
+    gap: 10px;
+  }
+
+  .pixel-mark {
+    width: 48px;
+    min-width: 48px;
+    font-size: 20px;
+  }
+
+  h1 {
+    font-size: 31px;
+    line-height: 0.9;
+  }
+
+  .header-readout {
+    display: flex;
+    gap: 0;
+    margin-top: 5px;
+  }
+
+  .header-readout span {
+    min-height: 20px;
+    padding: 0 6px;
+    font-size: 9px;
+  }
+
+  .header-readout span:nth-child(n + 2) {
+    display: none;
+  }
+
+  .refresh-button {
+    align-self: center;
+    justify-content: center;
+    min-height: 44px;
+    width: 46px;
+    padding: 0;
+  }
+
+  .refresh-button span {
+    display: none;
+  }
+
+  .empty-state {
+    grid-template-columns: 1fr;
+  }
+
+  .metric-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .metric-tile {
+    min-height: 52px;
+    padding: 8px 6px 14px;
+  }
+
+  .metric-tile span {
+    font-size: 8px;
+  }
+
+  .metric-tile strong {
+    font-size: 22px;
+  }
+
+  .pulse-panel {
+    min-height: 56px;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .pulse-panel strong {
+    font-size: 32px;
+  }
+
+  .signal-next-action {
+    display: none;
+  }
+
+  .signal-brief {
+    gap: 8px;
+    padding: 10px;
+  }
+
+  .validation-brief summary,
+  .validation-body,
+  .validation-stats,
+  .validation-gauges {
+    grid-template-columns: 1fr;
+  }
+
+  .empty-radar,
+  .empty-icon,
+  .empty-copy,
+  .setup-checklist,
+  .empty-readout {
+    grid-column: 1;
+  }
+
+  .metric-tile {
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .metric-tile:last-child {
+    border-bottom: 0;
+  }
+
+  .card-title-row {
+    display: grid;
+  }
+
+  .board-token {
+    min-width: 46px;
+    min-height: 46px;
+  }
+
+  .tabs {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+
+  .tab {
+    grid-template-columns: 1fr;
+    justify-items: center;
+    min-height: 48px;
+    padding: 0 6px;
+  }
+
+  .tab-label {
+    font-size: 10px;
+  }
+
+  .rail-note {
+    display: none;
+  }
+
+  .action-cluster {
+    grid-template-columns: 1fr;
+  }
+
+  .review-card:not([data-actions-expanded="true"]) .action-cluster {
+    grid-template-columns: 1fr;
+  }
+
+  .review-card[data-actions-expanded="true"] .action-cluster {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .profile-row,
+  .run-row,
+  .target-row,
+  .source-stat-row {
+    grid-template-columns: 1fr;
+    gap: 7px;
+  }
+
+  .profile-control-groups {
+    grid-template-columns: 1fr;
+  }
+
+  .profile-runtime-settings {
+    grid-template-columns: 1fr;
+  }
+
+  .mode-controls {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .repository-toolbar {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .repository-toolbar .git-actions,
+  .repository-toolbar .git-message {
+    grid-column: 1 / -1;
+  }
+
+  .empty-radar {
+    min-height: 132px;
+  }
+
+  .empty-state {
+    min-height: auto;
+    gap: 14px;
+    padding: 16px;
+  }
+
+  .empty-copy h3 {
+    font-size: 30px;
+  }
+
+  .run-health-chart {
+    grid-template-columns: 1fr;
+  }
+
+  .run-day-bar {
+    min-height: 48px;
+  }
+
+  .run-day-bars {
+    gap: 6px;
+  }
+
+  .run-day-bucket {
+    justify-items: center;
+  }
+
+  .run-day-bucket small {
+    display: block;
+    white-space: nowrap;
+  }
+
+  .command-strip,
+  .signal-brief {
+    grid-template-columns: 1fr;
+  }
+
+  .journey-controls {
+    grid-template-columns: 1fr;
+  }
+
+  .telegram-status-grid,
+  .desk-confirm-actions,
+  .delivery-actions,
+  .source-import-actions,
+  .source-library-row,
+  .source-library-search,
+  .source-library-summary,
+  .telegram-form-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .source-library-search span {
+    grid-column: auto;
+  }
+
+  .source-library-side {
+    justify-items: stretch;
+  }
+
+  .source-library-side .text-button {
+    width: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 1ms !important;
+  }
+}

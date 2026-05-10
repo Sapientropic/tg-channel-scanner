@@ -1,0 +1,70 @@
+import { renderToStaticMarkup } from "react-dom/server";
+import { describe, expect, it, vi } from "vitest";
+
+import { ProfilesView, runtimeSettingsSaveState } from "./profiles";
+import type { Profile } from "../domain/types";
+
+function profile(overrides: Partial<Profile>): Profile {
+  return {
+    profile_id: "jobs-fast",
+    display_name: "Jobs Fast",
+    display_path: "Profiles/jobs.md",
+    enabled: true,
+    alert_schedule_mode: "work_hours",
+    source_topics: ["jobs"],
+    scan_window_hours: 2,
+    semantic_max_messages: 20,
+    delivery_target_count: 1,
+    updated_at: "2026-05-10T00:00:00Z",
+    ...overrides,
+  };
+}
+
+describe("ProfilesView", () => {
+  it("renders monitoring controls as human actions", () => {
+    const html = renderToStaticMarkup(
+      <ProfilesView
+        profiles={[profile({ enabled: true }), profile({ profile_id: "market-news", display_name: "Market News", enabled: false })]}
+        patches={[]}
+        applyPatch={vi.fn()}
+        revertPatch={vi.fn()}
+        setAlertMode={vi.fn()}
+        setProfileEnabled={vi.fn()}
+        setProfileRuntimeSettings={vi.fn()}
+        busy={false}
+      />,
+    );
+
+    expect(html).toContain("Pause");
+    expect(html).toContain("Resume");
+    expect(html).toContain("Jobs Fast: Pause monitoring");
+    expect(html).toContain("Market News: Resume monitoring");
+    expect(html).toContain("Monitoring");
+    expect(html).toContain("Paused");
+    expect(html).toContain("2h history");
+    expect(html).toContain("20 messages");
+    expect(html).toContain("1 notification");
+    expect(html).toContain("Scan settings");
+    expect(html).not.toContain("per run");
+    expect(html).not.toContain("WINDOW");
+    expect(html).not.toContain("ITEMS");
+    expect(html).toContain("Resume monitoring to adjust alerts.");
+    expect(html).toMatch(/disabled=""/);
+    expect(html).not.toContain("Profiles/jobs.md");
+    expect(html).not.toContain("SEMANTIC");
+    expect(html).not.toContain("COPY COMMAND");
+    expect(html).not.toContain("tgcs monitor run");
+  });
+
+  it("validates profile scan setting edits before save", () => {
+    expect(runtimeSettingsSaveState(2, 20, "2", "20")).toMatchObject({ canSave: false });
+    expect(runtimeSettingsSaveState(2, 20, "5", "35")).toMatchObject({
+      canSave: true,
+      scan_window_hours: 5,
+      semantic_max_messages: 35,
+    });
+    expect(runtimeSettingsSaveState(2, 20, "0", "35")).toMatchObject({ canSave: false });
+    expect(runtimeSettingsSaveState(2, 20, "5", "501")).toMatchObject({ canSave: false });
+    expect(runtimeSettingsSaveState(2, 20, "six", "35")).toMatchObject({ canSave: false });
+  });
+});

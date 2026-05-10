@@ -1,19 +1,39 @@
-import { StrictMode, useEffect, useMemo, useState, type ReactNode } from "react";
+import { StrictMode, useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import {
   Inbox,
+  Rocket,
   Play,
-  RefreshCw,
   Settings,
-  ShieldCheck,
   UserRoundCog,
 } from "lucide-react";
-import signalIcon from "./assets/tgcs-signal-icon.png";
+import {
+  applyProfilePatch,
+  checkGitUpdates as checkGitUpdatesRequest,
+  errorMessage,
+  exportFeedback as exportFeedbackRequest,
+  importDeskSources,
+  loadDeskSources,
+  loadDeskSchedulerStatus,
+  postReviewCardAction,
+  previewDeskSourceImport,
+  pullLatestGit,
+  revertProfilePatch,
+  saveDeskDeliveryTarget,
+  setDeskSourceEnabled as setDeskSourceEnabledRequest,
+  setDeskSourceTopics as setDeskSourceTopicsRequest,
+  setProfileAlertMode,
+  setProfileEnabled as setProfileEnabledRequest,
+  setProfileRuntimeSettings as setProfileRuntimeSettingsRequest,
+  testDeskDeliveryTarget,
+} from "./api/client";
+import { ActionsView } from "./components/actions";
 import { CommandStrip, OpportunitySummaryPanel, ValidationSummaryPanel } from "./components/board-status";
 import { InboxView } from "./components/inbox";
 import { ProfilesView } from "./components/profiles";
 import { RunsView } from "./components/runs";
 import { SettingsView } from "./components/settings";
+import { ConsoleHeader, NavigationRail, WorkbenchHeader } from "./components/shell";
 import { StatusRail } from "./components/status-rail";
 import { buildProfileReportNames } from "./domain/display";
 import { isActionableInboxCard } from "./domain/inbox";
@@ -23,42 +43,67 @@ import {
   buildTabCounts,
   hasBlockingOpportunitySummary,
 } from "./domain/projections";
-import {
-  emptyDashboardState,
-  sanitizeDashboardState,
-  sanitizeFeedbackExportResult,
-  sanitizeGitUpdateStatus,
-} from "./domain/sanitize";
+import { useDashboardState } from "./hooks/use-dashboard-state";
+import { useDeskActions } from "./hooks/use-desk-actions";
+import { useDeskTelegram } from "./hooks/use-desk-telegram";
 import type {
-  DashboardState,
+  DeliveryTestResult,
+  DeskSchedulerStatus,
+  DeskSourcesResult,
   FeedbackExportResult,
   GitUpdateStatus,
+  SourceImportResult,
   Tab,
 } from "./domain/types";
 import "./styles.css";
 
-const projectRepoUrl = "https://github.com/Sapientropic/tg-channel-scanner";
-
 const tabShell: Array<{ tab: Tab; icon: ReactNode; label: string }> = [
   { tab: "inbox", icon: <Inbox size={17} />, label: "Inbox" },
+  { tab: "actions", icon: <Rocket size={17} />, label: "Start" },
   { tab: "profiles", icon: <UserRoundCog size={17} />, label: "Profiles" },
   { tab: "runs", icon: <Play size={17} />, label: "Runs" },
   { tab: "settings", icon: <Settings size={17} />, label: "Settings" },
 ];
+const startStepCount = 6;
+
+type DeskActionConfirmation = {
+  actionId: string;
+  title: string;
+  detail: string;
+  confirmLabel: string;
+};
 
 function App() {
   const { state, refresh, loadError } = useDashboardState();
+  const {
+    actions: deskActions,
+    results: deskActionResults,
+    busyActionId,
+    loadError: deskActionsLoadError,
+    runError: deskActionRunError,
+    runAction,
+  } = useDeskActions();
+  const deskTelegram = useDeskTelegram();
   const [activeTab, setActiveTab] = useState<Tab>("inbox");
   const [busy, setBusy] = useState(false);
   const [gitBusy, setGitBusy] = useState(false);
   const [gitStatus, setGitStatus] = useState<GitUpdateStatus | null>(null);
   const [feedbackExport, setFeedbackExport] = useState<FeedbackExportResult | null>(null);
+  const [deliveryTest, setDeliveryTest] = useState<DeliveryTestResult | null>(null);
+  const [sourceImportResult, setSourceImportResult] = useState<SourceImportResult | null>(null);
+  const [deskSources, setDeskSources] = useState<DeskSourcesResult | null>(null);
+  const [deskSourcesError, setDeskSourcesError] = useState<string | null>(null);
+  const [deskSchedulerStatus, setDeskSchedulerStatus] = useState<DeskSchedulerStatus | null>(null);
+  const [deskSchedulerError, setDeskSchedulerError] = useState<string | null>(null);
+  const [pendingDeskAction, setPendingDeskAction] = useState<DeskActionConfirmation | null>(null);
+  const pendingDeskActionReturnFocus = useRef<HTMLElement | null>(null);
+  const [settingsFocusTarget, setSettingsFocusTarget] = useState<"notifications" | null>(null);
   const [notice, setNotice] = useState<{ tone: "success" | "error"; text: string } | null>(null);
 
   const metrics = useMemo(() => buildMetrics(state), [state]);
   const profileReportNames = useMemo(() => buildProfileReportNames(state.profiles), [state.profiles]);
-  const tabCounts = useMemo(() => buildTabCounts(state), [state]);
-  const boardMeta = useMemo(() => buildBoardMeta(activeTab, state), [activeTab, state]);
+  const tabCounts = useMemo(() => buildTabCounts(state, startStepCount), [state]);
+  const boardMeta = useMemo(() => buildBoardMeta(activeTab, state, startStepCount), [activeTab, state]);
   const latestRunId = state.runs[0]?.run_id;
   const hasLatestActionCards = state.inbox.some((card) => isActionableInboxCard(card, latestRunId));
   const hasBlockingSummary = hasBlockingOpportunitySummary(state.opportunity_summary);
@@ -67,10 +112,55 @@ function App() {
   const showValidationSummary = activeTab === "inbox" && !hasLatestActionCards;
   const showBoardStatusStack = showCommandStrip || showOpportunitySummary || showValidationSummary;
 
+  useEffect(() => {
+    const controller = new AbortController();
+    loadDeskSources(controller.signal)
+      .then((sources) => {
+        setDeskSources(sources);
+        setDeskSourcesError(null);
+      })
+      .catch((error) => {
+        if (!controller.signal.aborted) {
+          setDeskSourcesError(errorMessage(error));
+        }
+      });
+    return () => controller.abort();
+  }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    loadDeskSchedulerStatus(controller.signal)
+      .then((scheduler) => {
+        setDeskSchedulerStatus(scheduler);
+        setDeskSchedulerError(null);
+      })
+      .catch((error) => {
+        if (!controller.signal.aborted) {
+          setDeskSchedulerError(errorMessage(error));
+        }
+      });
+    return () => controller.abort();
+  }, []);
+
+  async function refreshDeskSources() {
+    const sources = await loadDeskSources();
+    setDeskSources(sources);
+    setDeskSourcesError(null);
+    return sources;
+  }
+
+  async function refreshDeskSchedulerStatus() {
+    const scheduler = await loadDeskSchedulerStatus();
+    setDeskSchedulerStatus(scheduler);
+    setDeskSchedulerError(null);
+    return scheduler;
+  }
+
   async function refreshNow() {
     setBusy(true);
     try {
       await refresh();
+      await refreshDeskSchedulerStatus().catch((error) => setDeskSchedulerError(errorMessage(error)));
       setNotice({ tone: "success", text: "State refreshed" });
     } catch (error) {
       setNotice({ tone: "error", text: errorMessage(error) });
@@ -83,12 +173,7 @@ function App() {
     setBusy(true);
     setNotice(null);
     try {
-      const response = await fetch(`/api/review-cards/${encodeURIComponent(cardId)}/action`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action, note }),
-      });
-      await assertOk(response);
+      await postReviewCardAction(cardId, action, note);
       await refresh();
       setNotice({ tone: "success", text: action === "follow_up" ? "Profile diff drafted" : "Inbox updated" });
     } catch (error) {
@@ -102,12 +187,7 @@ function App() {
     setBusy(true);
     setNotice(null);
     try {
-      const response = await fetch(`/api/profile-patches/${encodeURIComponent(patchId)}/apply`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
-      });
-      await assertOk(response);
+      await applyProfilePatch(patchId);
       await refresh();
       setNotice({ tone: "success", text: "Profile snapshot saved and diff applied" });
     } catch (error) {
@@ -121,12 +201,7 @@ function App() {
     setBusy(true);
     setNotice(null);
     try {
-      const response = await fetch(`/api/profile-patches/${encodeURIComponent(patchId)}/revert`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
-      });
-      await assertOk(response);
+      await revertProfilePatch(patchId);
       await refresh();
       setNotice({ tone: "success", text: "Profile diff reverted from saved snapshot" });
     } catch (error) {
@@ -140,12 +215,7 @@ function App() {
     setBusy(true);
     setNotice(null);
     try {
-      const response = await fetch(`/api/profiles/${encodeURIComponent(profileId)}/alert-mode`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mode }),
-      });
-      await assertOk(response);
+      await setProfileAlertMode(profileId, mode);
       await refresh();
       setNotice({ tone: "success", text: "Alert mode updated" });
     } catch (error) {
@@ -159,16 +229,7 @@ function App() {
     setGitBusy(true);
     setNotice(null);
     try {
-      const response = await fetch("/api/git/check-updates", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
-      });
-      const payload = await readJson(response);
-      const git = sanitizeGitUpdateStatus(payload.git);
-      if (!git) {
-        throw new Error("Invalid git status response");
-      }
+      const git = await checkGitUpdatesRequest();
       setGitStatus(git);
       setNotice({ tone: "success", text: "Remote status checked" });
     } catch (error) {
@@ -182,20 +243,142 @@ function App() {
     setBusy(true);
     setNotice(null);
     try {
-      const response = await fetch("/api/feedback/export", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
-      });
-      const payload = await readJson(response);
-      const result = sanitizeFeedbackExportResult(payload.export);
-      if (!result) {
-        throw new Error("Invalid feedback export response");
-      }
+      const result = await exportFeedbackRequest();
       setFeedbackExport(result);
       setNotice({ tone: "success", text: `Feedback exported: ${result.feedback_count} rows` });
     } catch (error) {
       setNotice({ tone: "error", text: errorMessage(error) });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function setProfileEnabled(profileId: string, enabled: boolean) {
+    setBusy(true);
+    setNotice(null);
+    try {
+      await setProfileEnabledRequest(profileId, enabled);
+      await refresh();
+      setNotice({ tone: "success", text: enabled ? "Profile enabled" : "Profile paused" });
+    } catch (error) {
+      setNotice({ tone: "error", text: errorMessage(error) });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function setProfileRuntimeSettings(profileId: string, settings: { scan_window_hours?: number; semantic_max_messages?: number }) {
+    setBusy(true);
+    setNotice(null);
+    try {
+      await setProfileRuntimeSettingsRequest(profileId, settings);
+      await refresh();
+      setNotice({ tone: "success", text: "Profile scan settings saved" });
+    } catch (error) {
+      setNotice({ tone: "error", text: errorMessage(error) });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function saveDeliveryTarget(targetId: string, chatId: string, enabled: boolean) {
+    setBusy(true);
+    setNotice(null);
+    try {
+      await saveDeskDeliveryTarget(targetId, chatId, enabled);
+      await refresh();
+      setNotice({ tone: "success", text: enabled ? "Notifications enabled" : "Notification target saved muted" });
+    } catch (error) {
+      setNotice({ tone: "error", text: errorMessage(error) });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function testDeliveryTarget(targetId: string, chatId: string) {
+    setBusy(true);
+    setNotice(null);
+    try {
+      const result = await testDeskDeliveryTarget(targetId, chatId);
+      setDeliveryTest(result);
+      setNotice({ tone: result.ok ? "success" : "error", text: result.detail || result.status });
+    } catch (error) {
+      setNotice({ tone: "error", text: errorMessage(error) });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function previewSourceImport(sources: string, topic: string) {
+    setBusy(true);
+    setNotice(null);
+    try {
+      const result = await previewDeskSourceImport(sources, topic);
+      setSourceImportResult(result);
+      setNotice({ tone: "success", text: result.detail || result.title || "Source preview ready" });
+      return result;
+    } catch (error) {
+      setNotice({ tone: "error", text: errorMessage(error) });
+      throw error;
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function importSources(sources: string, topic: string) {
+    setBusy(true);
+    setNotice(null);
+    try {
+      const result = await importDeskSources(sources, topic);
+      setSourceImportResult(result);
+      await refresh();
+      try {
+        await refreshDeskSources();
+      } catch (error) {
+        setDeskSourcesError(errorMessage(error));
+      }
+      setNotice({ tone: "success", text: result.detail || result.title || "Sources saved" });
+      return result;
+    } catch (error) {
+      setNotice({ tone: "error", text: errorMessage(error) });
+      throw error;
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function setSourceEnabled(sourceId: string, enabled: boolean) {
+    setBusy(true);
+    setNotice(null);
+    try {
+      const sources = await setDeskSourceEnabledRequest(sourceId, enabled);
+      setDeskSources(sources);
+      setDeskSourcesError(null);
+      await refresh();
+      setNotice({ tone: "success", text: enabled ? "Source enabled" : "Source paused" });
+    } catch (error) {
+      const message = errorMessage(error);
+      setDeskSourcesError(message);
+      setNotice({ tone: "error", text: message });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function setSourceTopics(sourceId: string, topics: string[]) {
+    setBusy(true);
+    setNotice(null);
+    try {
+      const sources = await setDeskSourceTopicsRequest(sourceId, topics);
+      setDeskSources(sources);
+      setDeskSourcesError(null);
+      await refresh();
+      setNotice({ tone: "success", text: "Source topics saved" });
+    } catch (error) {
+      const message = errorMessage(error);
+      setDeskSourcesError(message);
+      setNotice({ tone: "error", text: message });
+      throw error;
     } finally {
       setBusy(false);
     }
@@ -212,16 +395,7 @@ function App() {
     setGitBusy(true);
     setNotice(null);
     try {
-      const response = await fetch("/api/git/pull-latest", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ confirm: true }),
-      });
-      const payload = await readJson(response);
-      const git = sanitizeGitUpdateStatus(payload.git);
-      if (!git) {
-        throw new Error("Invalid git status response");
-      }
+      const git = await pullLatestGit();
       setGitStatus(git);
       setNotice({ tone: "success", text: "Pulled latest upstream changes" });
     } catch (error) {
@@ -231,36 +405,67 @@ function App() {
     }
   }
 
+  async function executeDeskAction(actionId: string, body: Record<string, unknown> = {}) {
+    if (actionId === "schedule_install_dry_run") {
+      body.confirm = true;
+    }
+    if (actionId === "schedule_remove_dry_run") {
+      body.confirm = true;
+    }
+    try {
+      const result = await runAction(actionId, body);
+      if (actionId === "schedule_install_dry_run" || actionId === "schedule_remove_dry_run") {
+        await refreshDeskSchedulerStatus().catch((error) => setDeskSchedulerError(errorMessage(error)));
+      }
+      if (result.status === "success") {
+        await refresh();
+        setNotice({ tone: "success", text: result.title });
+        return;
+      }
+      setNotice({ tone: result.status === "needs_human" ? "success" : "error", text: result.title });
+    } catch (error) {
+      setNotice({ tone: "error", text: errorMessage(error) });
+    }
+  }
+
+  async function runDeskAction(actionId: string) {
+    setNotice(null);
+    if (actionId === "live_delivery_human") {
+      setActiveTab("settings");
+      setSettingsFocusTarget("notifications");
+      setNotice({ tone: "success", text: "Opened notification settings" });
+      return;
+    }
+    const confirmation = deskActionConfirmation(actionId);
+    if (confirmation) {
+      pendingDeskActionReturnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+      setPendingDeskAction(confirmation);
+      return;
+    }
+    await executeDeskAction(actionId);
+  }
+
+  const cancelPendingDeskAction = useCallback(() => {
+    setPendingDeskAction(null);
+  }, []);
+
+  const clearSettingsFocusTarget = useCallback(() => {
+    setSettingsFocusTarget(null);
+  }, []);
+
+  const confirmPendingDeskAction = useCallback(() => {
+    setPendingDeskAction((confirmation) => {
+      if (confirmation) {
+        void executeDeskAction(confirmation.actionId);
+      }
+      return null;
+    });
+  }, []);
+
   return (
     <main className="app-shell" data-testid="tgcs-dashboard">
       <div className="pixel-grid" aria-hidden="true" />
-      <header className="console-header">
-        <div className="brand-station">
-          <a
-            className="pixel-mark"
-            href={projectRepoUrl}
-            target="_blank"
-            rel="noreferrer"
-            aria-label="Open TGCS Git repository"
-            title="Open Git repository"
-          >
-            <img src={signalIcon} alt="" />
-          </a>
-          <div className="brand-copy">
-            <p className="eyebrow">TG Channel Scanner</p>
-            <h1>Signal Desk</h1>
-            <div className="header-readout" aria-label="Local dashboard boundary">
-              <span>SQLite local</span>
-              <span>127.0.0.1</span>
-              <span>raw text redacted</span>
-            </div>
-          </div>
-        </div>
-        <button className="refresh-button" onClick={refreshNow} disabled={busy} title="Refresh state" type="button">
-          <RefreshCw size={18} className={busy ? "spin" : ""} />
-          <span>Refresh</span>
-        </button>
-      </header>
+      <ConsoleHeader busy={busy || Boolean(busyActionId) || Boolean(deskTelegram.busy)} onRefresh={refreshNow} />
 
       {(notice || loadError) && (
         <div className={`notice ${notice?.tone === "error" || loadError ? "error" : "success"}`} role="status">
@@ -269,23 +474,7 @@ function App() {
       )}
 
       <section className="workbench">
-        <aside className="nav-rail" aria-label="Dashboard navigation">
-          <nav className="tabs" aria-label="Dashboard tabs">
-            {tabShell.map((tab) => (
-              <TabButton
-                key={tab.tab}
-                {...tab}
-                active={activeTab}
-                count={tabCounts[tab.tab]}
-                setActive={setActiveTab}
-              />
-            ))}
-          </nav>
-          <div className="rail-note">
-            <ShieldCheck size={16} />
-            <span>Tokens stay outside SQLite</span>
-          </div>
-        </aside>
+        <NavigationRail tabs={tabShell} activeTab={activeTab} tabCounts={tabCounts} setActiveTab={setActiveTab} />
 
         <section className="main-board" aria-label={boardMeta.title}>
           <WorkbenchHeader meta={boardMeta} />
@@ -307,6 +496,28 @@ function App() {
                 busy={busy}
               />
             )}
+            {activeTab === "actions" && (
+              <ActionsView
+                actions={deskActions}
+                results={deskActionResults}
+                busyActionId={busyActionId}
+                loadError={deskActionsLoadError || deskActionRunError || deskSchedulerError || ""}
+                setupStatus={state.setup_status}
+                scheduler={deskSchedulerStatus}
+                targets={state.delivery_targets}
+                telegram={{
+                  status: deskTelegram.status,
+                  busy: deskTelegram.busy,
+                  error: deskTelegram.error,
+                  saveCredentials: deskTelegram.saveCredentials,
+                  sendCode: deskTelegram.sendCode,
+                  verifyCode: deskTelegram.verifyCode,
+                  refresh: deskTelegram.refreshTelegram,
+                  cancelLogin: deskTelegram.cancelLogin,
+                }}
+                onRun={runDeskAction}
+              />
+            )}
             {activeTab === "profiles" && (
               <ProfilesView
                 profiles={state.profiles}
@@ -314,6 +525,8 @@ function App() {
                 applyPatch={applyPatch}
                 revertPatch={revertPatch}
                 setAlertMode={setAlertMode}
+                setProfileEnabled={setProfileEnabled}
+                setProfileRuntimeSettings={setProfileRuntimeSettings}
                 busy={busy}
               />
             )}
@@ -327,7 +540,19 @@ function App() {
                   feedbackSummary={state.feedback_summary}
                   feedbackExport={feedbackExport}
                   exportFeedback={exportFeedback}
+                  deliveryTest={deliveryTest}
+                  sourceLibrary={deskSources}
+                  sourceLibraryError={deskSourcesError}
+                  sourceImportResult={sourceImportResult}
+                  saveDeliveryTarget={saveDeliveryTarget}
+                  testDeliveryTarget={testDeliveryTarget}
+                  previewSourceImport={previewSourceImport}
+                  importSources={importSources}
+                  setSourceEnabled={setSourceEnabled}
+                  setSourceTopics={setSourceTopics}
                   busy={busy}
+                  focusTarget={settingsFocusTarget}
+                  onFocusHandled={clearSettingsFocusTarget}
                 />
                 <StatusRail
                   gitStatus={gitStatus}
@@ -340,108 +565,119 @@ function App() {
           </div>
         </section>
       </section>
+      {pendingDeskAction && (
+        <DeskActionConfirmDialog
+          confirmation={pendingDeskAction}
+          returnFocusRef={pendingDeskActionReturnFocus}
+          busy={Boolean(busyActionId)}
+          onCancel={cancelPendingDeskAction}
+          onConfirm={confirmPendingDeskAction}
+        />
+      )}
     </main>
   );
 }
 
-function useDashboardState() {
-  const [state, setState] = useState<DashboardState>(emptyDashboardState);
-  const [loadError, setLoadError] = useState("");
-
-  async function load(signal?: AbortSignal) {
-    const response = await fetch("/api/state", { signal });
-    await assertOk(response);
-    const payload = (await response.json()) as Partial<DashboardState>;
-    setState(sanitizeDashboardState(payload));
-    setLoadError("");
+function deskActionConfirmation(actionId: string): DeskActionConfirmation | null {
+  if (actionId === "schedule_install_dry_run") {
+    return {
+      actionId,
+      title: "Turn on dry-run checks?",
+      detail: "Signal Desk will run local dry-run checks every 15 minutes in the background. No live Telegram alerts will be sent.",
+      confirmLabel: "Turn on dry-run checks",
+    };
   }
+  if (actionId === "schedule_remove_dry_run") {
+    return {
+      actionId,
+      title: "Turn off dry-run checks?",
+      detail: "Background dry-run checks will stop. Manual scans in Signal Desk will still work.",
+      confirmLabel: "Turn off dry-run checks",
+    };
+  }
+  return null;
+}
+
+function DeskActionConfirmDialog({
+  busy,
+  confirmation,
+  onCancel,
+  onConfirm,
+  returnFocusRef,
+}: {
+  busy: boolean;
+  confirmation: DeskActionConfirmation;
+  onCancel: () => void;
+  onConfirm: () => void;
+  returnFocusRef: MutableRefObject<HTMLElement | null>;
+}) {
+  const cancelButtonRef = useRef<HTMLButtonElement | null>(null);
+  const dialogRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
-    const controller = new AbortController();
-    load(controller.signal).catch((error) => {
-      if (error instanceof DOMException && error.name === "AbortError") {
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    cancelButtonRef.current?.focus();
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onCancel();
         return;
       }
-      setLoadError(errorMessage(error));
-      setState(emptyDashboardState);
-    });
-    return () => controller.abort();
-  }, []);
-
-  return { state, refresh: () => load(), loadError };
-}
-
-function TabButton({
-  tab,
-  active,
-  count,
-  setActive,
-  icon,
-  label,
-}: {
-  tab: Tab;
-  active: Tab;
-  count: number;
-  setActive: (tab: Tab) => void;
-  icon: ReactNode;
-  label: string;
-}) {
-  return (
-    <button className={active === tab ? "tab active" : "tab"} onClick={() => setActive(tab)} type="button">
-      <span className="tab-icon">{icon}</span>
-      <span className="tab-label">{label}</span>
-      <span className="tab-count">{count}</span>
-    </button>
-  );
-}
-
-function WorkbenchHeader({
-  meta,
-}: {
-  meta: {
-    title: string;
-    detail: string;
-    value: string;
-    tone: "amber" | "teal" | "rust" | "blue";
-  };
-}) {
-  return (
-    <header className="board-header" title={meta.detail}>
-      <div>
-        <h2>{meta.title}</h2>
-      </div>
-      <strong className={`board-token ${meta.tone}`}>{meta.value}</strong>
-    </header>
-  );
-}
-
-async function assertOk(response: Response) {
-  if (response.ok) {
-    return;
-  }
-  let detail = response.statusText;
-  try {
-    const payload = await response.json();
-    if (payload && typeof payload.error === "string") {
-      detail = payload.error;
+      if (event.key !== "Tab") {
+        return;
+      }
+      const focusable = Array.from(dialogRef.current?.querySelectorAll<HTMLButtonElement>("button:not(:disabled)") ?? []);
+      if (!focusable.length) {
+        return;
+      }
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
     }
-  } catch {
-    // Keep the HTTP status text when the server did not return JSON.
-  }
-  throw new Error(detail || `HTTP ${response.status}`);
-}
 
-async function readJson(response: Response) {
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    const message = typeof payload.error === "string" ? payload.error : response.statusText || `HTTP ${response.status}`;
-    throw new Error(message);
-  }
-  return payload as Record<string, unknown>;
-}
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+      document.body.style.overflow = previousOverflow;
+      returnFocusRef.current?.focus();
+      returnFocusRef.current = null;
+    };
+  }, [onCancel, returnFocusRef]);
 
-function errorMessage(error: unknown) {
-  return error instanceof Error ? error.message : String(error);
+  return (
+    <div className="desk-confirm-backdrop" onClick={(event) => event.currentTarget === event.target && onCancel()} role="presentation">
+      <section
+        className="desk-confirm-dialog"
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="desk-confirm-title"
+        aria-describedby="desk-confirm-detail"
+      >
+        <div>
+          <span className="panel-kicker">Confirm automation</span>
+          <h2 id="desk-confirm-title">{confirmation.title}</h2>
+          <p id="desk-confirm-detail">{confirmation.detail}</p>
+        </div>
+        <div className="desk-confirm-actions">
+          <button className="journey-button secondary" disabled={busy} onClick={onCancel} ref={cancelButtonRef} type="button">
+            Cancel
+          </button>
+          <button className="journey-button" disabled={busy} onClick={onConfirm} type="button">
+            {confirmation.confirmLabel}
+          </button>
+        </div>
+      </section>
+    </div>
+  );
 }
 
 createRoot(document.getElementById("root")!).render(

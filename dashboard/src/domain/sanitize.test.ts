@@ -2,10 +2,17 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   emptyDashboardState,
+  sanitizeDeskActions,
+  sanitizeDeskActionResult,
+  sanitizeDeskSchedulerStatus,
+  sanitizeDeskSourcesResult,
+  sanitizeDeskTelegramStatus,
+  sanitizeDeliveryTestResult,
   sanitizeDashboardState,
   sanitizeFeedbackExportResult,
   sanitizeGitUpdateStatus,
   sanitizeInboxCards,
+  sanitizeSourceImportResult,
 } from "./sanitize";
 
 const validCard = {
@@ -132,6 +139,20 @@ describe("dashboard state sanitizers", () => {
 
   it("sanitizes optional dashboard summary sections instead of trusting objects", () => {
     const state = sanitizeDashboardState({
+      delivery_targets: [
+        {
+          target_id: "telegram-bot-default",
+          type: "telegram_bot",
+          enabled: true,
+          config: {
+            chat_id: "123456",
+            bot_token: "secret",
+            token: "secret",
+            mode: "live",
+          },
+          updated_at: "2026-05-10T00:00:00Z",
+        },
+      ],
       opportunity_summary: {
         status: "failed",
         diagnostics: "bad",
@@ -152,6 +173,8 @@ describe("dashboard state sanitizers", () => {
     expect(state.validation_summary).toEqual({ by_action: { keep: 1 }, next_action: { detail: "Review outcomes" } });
     expect(state.feedback_summary).toEqual({ recent_impacts: [{ item_title: "Kept role" }], by_rating: { high: 1 } });
     expect(state.setup_status).toEqual({ checks: [{ check_id: "profiles", label: "Profiles", status: "active" }] });
+    expect(state.delivery_targets[0].config).toEqual({ chat_id: "123456" });
+    expect(JSON.stringify(state.delivery_targets)).not.toContain("secret");
   });
 
   it("sanitizes nested optional objects instead of object-level casting", () => {
@@ -202,6 +225,136 @@ describe("dashboard state sanitizers", () => {
       decision_state: { status: "new", signals: ["salary"], explanations: { salary: "clear" } },
     });
     expect(state.inbox[1].item).toEqual({});
+  });
+
+  it("sanitizes notification dry-run result envelopes", () => {
+    expect(
+      sanitizeDeliveryTestResult({
+        schema_version: "desk_delivery_test_result_v1",
+        target_id: "telegram-bot-default",
+        target_type: "telegram_bot",
+        mode: "live",
+        ok: true,
+        status: "dry_run",
+        title: "Notification test",
+        detail: "Checked",
+      }),
+    ).toEqual({
+      schema_version: "desk_delivery_test_result_v1",
+      target_id: "telegram-bot-default",
+      target_type: "telegram_bot",
+      mode: "dry-run",
+      ok: true,
+      status: "dry_run",
+      title: "Notification test",
+      detail: "Checked",
+    });
+    expect(sanitizeDeliveryTestResult({ target_id: "telegram-bot-default", target_type: "telegram_bot" })).toBeNull();
+  });
+
+  it("sanitizes source import result envelopes without trusting backend-only fields", () => {
+    expect(
+      sanitizeSourceImportResult({
+        schema_version: "desk_source_import_result_v1",
+        dry_run: true,
+        written: false,
+        topic: " jobs ",
+        added_count: 2,
+        updated_count: 1,
+        unchanged_count: -4,
+        source_count: 3,
+        registry_path: " .tgcs/sources.json ",
+        preview_truncated_count: 8,
+        preview_sources: [
+          { label: " remote_jobs ", source_id: " telegram:remote_jobs ", token: "secret" },
+          { label: "", source_id: "bad" },
+        ],
+        title: " Source preview ready ",
+        detail: " Review first. ",
+        command: "tgcs sources import private.txt",
+      }),
+    ).toEqual({
+      schema_version: "desk_source_import_result_v1",
+      dry_run: true,
+      written: false,
+      topic: "jobs",
+      added_count: 2,
+      updated_count: 1,
+      unchanged_count: 0,
+      source_count: 3,
+      registry_path: ".tgcs/sources.json",
+      preview_sources: [{ label: "remote_jobs", source_id: "telegram:remote_jobs" }],
+      preview_truncated_count: 8,
+      title: "Source preview ready",
+      detail: "Review first.",
+    });
+    expect(sanitizeSourceImportResult({ topic: "jobs" })).toBeNull();
+  });
+
+  it("sanitizes saved source library envelopes without leaking backend-only fields", () => {
+    expect(
+      sanitizeDeskSourcesResult({
+        schema_version: "desk_sources_v1",
+        source_count: 2,
+        enabled_count: 1,
+        topics: [" jobs ", 7, "ai"],
+        registry_path: " .tgcs/sources.json ",
+        sources: [
+          {
+            schema_version: "desk_source_v1",
+            source_id: " telegram:remote_jobs ",
+            label: " Remote Jobs ",
+            channel: " remote_jobs ",
+            enabled: true,
+            topics: ["jobs", "", 42],
+            priority: " high ",
+            scan_window_hours: 48,
+            token: "secret",
+            command: "tgcs sources import private.txt",
+          },
+          {
+            source_id: "telegram:quiet_jobs",
+            label: "Quiet Jobs",
+            channel: "quiet_jobs",
+            enabled: false,
+            topics: "jobs",
+            priority: 2,
+            scan_window_hours: -1,
+          },
+          { source_id: "bad", label: "", channel: "broken" },
+        ],
+      }),
+    ).toEqual({
+      schema_version: "desk_sources_v1",
+      source_count: 2,
+      enabled_count: 1,
+      topics: ["jobs", "ai"],
+      registry_path: ".tgcs/sources.json",
+      sources: [
+        {
+          schema_version: "desk_source_v1",
+          source_id: "telegram:remote_jobs",
+          label: "Remote Jobs",
+          channel: "remote_jobs",
+          enabled: true,
+          topics: ["jobs"],
+          priority: "high",
+          scan_window_hours: 48,
+        },
+        {
+          schema_version: undefined,
+          source_id: "telegram:quiet_jobs",
+          label: "Quiet Jobs",
+          channel: "quiet_jobs",
+          enabled: false,
+          topics: [],
+          priority: "normal",
+          scan_window_hours: 24,
+        },
+      ],
+    });
+    expect(JSON.stringify(sanitizeDeskSourcesResult({ registry_path: ".tgcs/sources.json", sources: [] }))).not.toContain("secret");
+    expect(sanitizeDeskSourcesResult({ sources: [] })).toBeNull();
   });
 
   it("drops nested optional objects when every known field is invalid", () => {
@@ -303,6 +456,165 @@ describe("dashboard state sanitizers", () => {
     expect(sanitizeFeedbackExportResult({ feedback_count: -1, output_path: "output/feedback/review-feedback.jsonl" })).toBeNull();
     expect(sanitizeFeedbackExportResult({ feedback_count: 1.5, output_path: "output/feedback/review-feedback.jsonl" })).toBeNull();
     expect(sanitizeFeedbackExportResult({ feedback_count: 1, output_path: "   " })).toBeNull();
+  });
+
+  it("sanitizes Desk action payloads without trusting backend-only fields", () => {
+    const actions = sanitizeDeskActions({
+      schema_version: "desk_actions_v1",
+      actions: [
+        {
+          schema_version: "desk_action_v1",
+          action_id: " monitor_jobs_dry_run ",
+          group: " run ",
+          title: " Dry-run monitor ",
+          detail: "Preview local report generation.",
+          run_mode: "execute",
+          display_command: " tgcs monitor run --profile-id jobs-fast --delivery-mode dry-run ",
+          next_action: "Open the report.",
+          argv: ["monitor", "run"],
+        },
+        {
+          schema_version: "desk_action_v1",
+          action_id: "schedule_install_dry_run",
+          group: "Schedule",
+          title: "Turn on dry-run automation",
+          detail: "Create a local dry-run schedule.",
+          run_mode: "confirm_execute",
+          display_command: "Windows Task Scheduler: jobs-fast dry-run",
+          next_action: "Review future cards in Signal Desk.",
+          argv: ["blocked", "frontend", "must", "ignore"],
+        },
+        { action_id: "broken", title: "Missing required fields" },
+        "bad",
+      ],
+    });
+
+    expect(actions).toEqual([
+      {
+        schema_version: "desk_action_v1",
+        action_id: "monitor_jobs_dry_run",
+        group: "run",
+        title: "Dry-run monitor",
+        detail: "Preview local report generation.",
+        run_mode: "execute",
+        display_command: "tgcs monitor run --profile-id jobs-fast --delivery-mode dry-run",
+        next_action: "Open the report.",
+      },
+      {
+        schema_version: "desk_action_v1",
+        action_id: "schedule_install_dry_run",
+        group: "Schedule",
+        title: "Turn on dry-run automation",
+        detail: "Create a local dry-run schedule.",
+        run_mode: "confirm_execute",
+        display_command: "Windows Task Scheduler: jobs-fast dry-run",
+        next_action: "Review future cards in Signal Desk.",
+      },
+    ]);
+    expect(actions[0]).not.toHaveProperty("argv");
+    expect(actions[1]).not.toHaveProperty("argv");
+  });
+
+  it("sanitizes Desk action results for rendering", () => {
+    expect(
+      sanitizeDeskActionResult({
+        schema_version: "desk_action_result_v1",
+        action_id: "feedback_export",
+        status: " success ",
+        title: " Feedback exported ",
+        detail: "2 records ready.",
+        display_command: " tgcs feedback export ",
+        exit_code: 0,
+        artifact_path: " output/feedback/review-feedback.jsonl ",
+        next_action: "Share the export.",
+        finished_at: " 2026-05-10T16:30:00+08:00 ",
+        stdout: "ignored",
+      }),
+    ).toEqual({
+      schema_version: "desk_action_result_v1",
+      action_id: "feedback_export",
+      status: "success",
+      title: "Feedback exported",
+      detail: "2 records ready.",
+      display_command: "tgcs feedback export",
+      exit_code: 0,
+      artifact_path: "output/feedback/review-feedback.jsonl",
+      next_action: "Share the export.",
+      finished_at: "2026-05-10T16:30:00+08:00",
+    });
+
+    expect(
+      sanitizeDeskActionResult({
+        action_id: "login_human",
+        status: "needs_human",
+        title: "Login requires terminal",
+        display_command: "tgcs login",
+        exit_code: "not-a-number",
+      }),
+    ).toMatchObject({
+      schema_version: "desk_action_result_v1",
+      action_id: "login_human",
+      status: "needs_human",
+      exit_code: null,
+    });
+    expect(sanitizeDeskActionResult({ status: "success", title: "Missing id" })).toBeNull();
+    expect(sanitizeDeskActionResult({ action_id: "feedback_export", status: " ", title: "Bad status" })).toBeNull();
+  });
+
+  it("sanitizes Desk scheduler status without trusting command output", () => {
+    expect(
+      sanitizeDeskSchedulerStatus({
+        schema_version: "desk_scheduler_status_v1",
+        available: true,
+        installed: true,
+        status: " installed ",
+        task_label: " jobs-fast dry-run ",
+        interval_minutes: 15.8,
+        detail: " Checks every 15 minutes. ",
+        next_action: " Review Inbox. ",
+        checked_at: " 2026-05-10T00:00:00Z ",
+        stdout: "ignored",
+        command: "schtasks /Query",
+      }),
+    ).toEqual({
+      schema_version: "desk_scheduler_status_v1",
+      available: true,
+      installed: true,
+      status: "installed",
+      task_label: "jobs-fast dry-run",
+      interval_minutes: 0,
+      detail: "Checks every 15 minutes.",
+      next_action: "Review Inbox.",
+      checked_at: "2026-05-10T00:00:00Z",
+    });
+
+    expect(sanitizeDeskSchedulerStatus({ available: true, installed: false })).toBeNull();
+  });
+
+  it("sanitizes Desk Telegram status without trusting secret backend fields", () => {
+    expect(
+      sanitizeDeskTelegramStatus({
+        schema_version: "desk_telegram_status_v1",
+        credentials_ready: true,
+        session_ready: false,
+        login_state: " code_sent ",
+        detail: "Code sent.",
+        next_step: "Enter code.",
+        config_path: " ~/.config/tgcli/config.toml ",
+        session_path: " ~/.config/tgcli/session ",
+        api_hash: "secret",
+      }),
+    ).toEqual({
+      schema_version: "desk_telegram_status_v1",
+      credentials_ready: true,
+      session_ready: false,
+      login_state: "code_sent",
+      detail: "Code sent.",
+      next_step: "Enter code.",
+      config_path: "~/.config/tgcli/config.toml",
+      session_path: "~/.config/tgcli/session",
+    });
+    expect(sanitizeDeskTelegramStatus({ credentials_ready: true })).toBeNull();
   });
 
   it("filters non-object inbox entries instead of casting them through", () => {

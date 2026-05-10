@@ -29,24 +29,31 @@ export function buildMetrics(state: DashboardState): Metric[] {
   ];
 }
 
-export function buildTabCounts(state: DashboardState): Record<Tab, number> {
+export function buildTabCounts(state: DashboardState, actionCount = 0): Record<Tab, number> {
   const feedbackCount = state.feedback_summary?.exportable_count ?? 0;
   const deliveryBlockers = state.delivery_targets.filter((target) => !target.enabled).length;
   return {
     inbox: state.inbox.length,
+    actions: actionCount,
     profiles: state.profiles.length,
     runs: state.runs.length,
     settings: deliveryBlockers + state.source_insights.length + feedbackCount,
   };
 }
 
-export function buildBoardMeta(activeTab: Tab, state: DashboardState) {
+export function buildBoardMeta(activeTab: Tab, state: DashboardState, actionCount = 0) {
   const metas: Record<Tab, { title: string; detail: string; value: string; tone: "amber" | "teal" | "rust" | "blue" }> = {
     inbox: {
       title: "Review",
       detail: state.inbox.length ? "Pending cards sorted by latest signal." : "Queue clear.",
       value: `${state.inbox.length}`,
       tone: "amber",
+    },
+    actions: {
+      title: "Start",
+      detail: "Guided setup and run controls for people who do not want a CLI.",
+      value: `${actionCount}`,
+      tone: "teal",
     },
     profiles: {
       title: "Profiles",

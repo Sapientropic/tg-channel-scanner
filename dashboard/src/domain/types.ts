@@ -82,6 +82,47 @@ export type SourceInsight = {
   stats: SourceStat;
 };
 
+export type SourceImportResult = {
+  schema_version?: "desk_source_import_result_v1";
+  dry_run: boolean;
+  written: boolean;
+  topic: string;
+  added_count: number;
+  updated_count: number;
+  unchanged_count: number;
+  source_count: number;
+  registry_path: string;
+  preview_sources: Array<{
+    label: string;
+    source_id: string;
+  }>;
+  preview_truncated_count: number;
+  title?: string;
+  detail?: string;
+  next_action?: string;
+  finished_at?: string;
+};
+
+export type DeskSource = {
+  schema_version?: "desk_source_v1";
+  source_id: string;
+  label: string;
+  channel: string;
+  enabled: boolean;
+  topics: string[];
+  priority: string;
+  scan_window_hours: number;
+};
+
+export type DeskSourcesResult = {
+  schema_version?: "desk_sources_v1";
+  source_count: number;
+  enabled_count: number;
+  topics: string[];
+  registry_path: string;
+  sources: DeskSource[];
+};
+
 export type DashboardNextAction = {
   label?: string;
   detail?: string;
@@ -157,6 +198,19 @@ export type DeliveryTarget = {
   status_label?: string;
   detail?: string;
   updated_at: string;
+};
+
+export type DeliveryTestResult = {
+  schema_version?: "desk_delivery_test_result_v1";
+  target_id: string;
+  target_type: string;
+  mode: "dry-run";
+  ok: boolean;
+  status: string;
+  title?: string;
+  detail?: string;
+  error?: string;
+  finished_at?: string;
 };
 
 export type ProfilePatch = {
@@ -282,7 +336,58 @@ export type SetupCheck = {
   command?: string;
 };
 
-export type Tab = "inbox" | "profiles" | "runs" | "settings";
+export type DeskActionRunMode = "execute" | "confirm_execute" | "needs_human" | string;
+
+export type DeskAction = {
+  schema_version: "desk_action_v1";
+  action_id: string;
+  group: string;
+  title: string;
+  detail: string;
+  run_mode: DeskActionRunMode;
+  display_command: string;
+  next_action: string;
+};
+
+export type DeskActionStatus = "success" | "failed" | "needs_human" | "blocked" | string;
+
+export type DeskActionResult = {
+  schema_version: "desk_action_result_v1";
+  action_id: string;
+  status: DeskActionStatus;
+  title: string;
+  detail: string;
+  display_command: string;
+  exit_code: number | null;
+  artifact_path: string;
+  next_action: string;
+  finished_at: string;
+};
+
+export type DeskSchedulerStatus = {
+  schema_version: "desk_scheduler_status_v1";
+  available: boolean;
+  installed: boolean;
+  status: string;
+  task_label: string;
+  interval_minutes: number;
+  detail: string;
+  next_action: string;
+  checked_at: string;
+};
+
+export type DeskTelegramStatus = {
+  schema_version: "desk_telegram_status_v1";
+  credentials_ready: boolean;
+  session_ready: boolean;
+  login_state: string;
+  detail: string;
+  next_step: string;
+  config_path: string;
+  session_path: string;
+};
+
+export type Tab = "inbox" | "actions" | "profiles" | "runs" | "settings";
 
 export type Metric = {
   label: string;

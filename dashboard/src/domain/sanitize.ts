@@ -1,6 +1,13 @@
 import type {
   DashboardState,
   DashboardNextAction,
+  DeskSourcesResult,
+  DeskSource,
+  DeskAction,
+  DeskActionResult,
+  DeskSchedulerStatus,
+  DeskTelegramStatus,
+  DeliveryTestResult,
   DeliveryTarget,
   FeedbackImpact,
   FeedbackExportResult,
@@ -13,6 +20,7 @@ import type {
   RunArtifact,
   SetupCheck,
   SourceInsight,
+  SourceImportResult,
   SourceRef,
   SourceStat,
   ValidationSummary,
@@ -93,6 +101,109 @@ export function sanitizeFeedbackExportResult(value: unknown): FeedbackExportResu
   };
 }
 
+export function sanitizeDeskActions(value: unknown): DeskAction[] {
+  const payload = isRecord(value) ? value : {};
+  return sanitizeObjectArray(payload.actions, "desk_actions.actions").flatMap((record, index) => {
+    const actionId = optionalString(record.action_id);
+    const group = optionalString(record.group);
+    const title = optionalString(record.title);
+    const detail = optionalString(record.detail);
+    const runMode = optionalString(record.run_mode);
+    const displayCommand = optionalString(record.display_command);
+    const nextAction = optionalString(record.next_action);
+    if (!actionId || !group || !title || !detail || !runMode || !displayCommand || !nextAction) {
+      console.warn(`[tgcs dashboard schema] desk_actions.actions[${index}] missing required display field`, record);
+      return [];
+    }
+    return [
+      {
+        schema_version: "desk_action_v1",
+        action_id: actionId,
+        group,
+        title,
+        detail,
+        run_mode: runMode,
+        display_command: displayCommand,
+        next_action: nextAction,
+      },
+    ];
+  });
+}
+
+export function sanitizeDeskActionResult(value: unknown): DeskActionResult | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+  const actionId = optionalString(value.action_id);
+  const status = optionalString(value.status);
+  const title = optionalString(value.title);
+  const displayCommand = optionalString(value.display_command);
+  if (!actionId || !status || !title || !displayCommand) {
+    return null;
+  }
+  const exitCode = typeof value.exit_code === "number" && Number.isInteger(value.exit_code) ? value.exit_code : null;
+  return {
+    schema_version: "desk_action_result_v1",
+    action_id: actionId,
+    status,
+    title,
+    detail: optionalString(value.detail) ?? "",
+    display_command: displayCommand,
+    exit_code: exitCode,
+    artifact_path: optionalString(value.artifact_path) ?? "",
+    next_action: optionalString(value.next_action) ?? "",
+    finished_at: optionalString(value.finished_at) ?? "",
+  };
+}
+
+export function sanitizeDeskSchedulerStatus(value: unknown): DeskSchedulerStatus | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+  const status = optionalString(value.status);
+  const taskLabel = optionalString(value.task_label);
+  const detail = optionalString(value.detail);
+  const nextAction = optionalString(value.next_action);
+  const checkedAt = optionalString(value.checked_at);
+  const intervalMinutes = typeof value.interval_minutes === "number" && Number.isInteger(value.interval_minutes)
+    ? Math.max(0, value.interval_minutes)
+    : 0;
+  if (!status || !taskLabel || !detail || !nextAction || !checkedAt) {
+    return null;
+  }
+  return {
+    schema_version: "desk_scheduler_status_v1",
+    available: value.available === true,
+    installed: value.installed === true,
+    status,
+    task_label: taskLabel,
+    interval_minutes: intervalMinutes,
+    detail,
+    next_action: nextAction,
+    checked_at: checkedAt,
+  };
+}
+
+export function sanitizeDeskTelegramStatus(value: unknown): DeskTelegramStatus | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+  const loginState = optionalString(value.login_state);
+  if (!loginState) {
+    return null;
+  }
+  return {
+    schema_version: "desk_telegram_status_v1",
+    credentials_ready: value.credentials_ready === true,
+    session_ready: value.session_ready === true,
+    login_state: loginState,
+    detail: optionalString(value.detail) ?? "",
+    next_step: optionalString(value.next_step) ?? "",
+    config_path: optionalString(value.config_path) ?? "",
+    session_path: optionalString(value.session_path) ?? "",
+  };
+}
+
 function sanitizeProfiles(value: unknown): Profile[] {
   return sanitizeObjectArray(value, "profiles").flatMap((record, index) => {
     const profileId = requiredString(index, "profile_id", record.profile_id, "profiles");
@@ -149,11 +260,118 @@ function sanitizeDeliveryTargets(value: unknown): DeliveryTarget[] {
       target_id: targetId,
       type,
       enabled: typeof record.enabled === "boolean" ? record.enabled : false,
-      config: isRecord(record.config) ? record.config : {},
+      config: sanitizeDeliveryTargetConfig(record.config),
       updated_at: stringOrDefault(record.updated_at, ""),
     };
     assignOptionalStrings(target, record, ["display_name", "status_label", "detail"]);
     return [target];
+  });
+}
+
+function sanitizeDeliveryTargetConfig(value: unknown): Record<string, unknown> {
+  const record = isRecord(value) ? value : {};
+  const chatId = optionalString(record.chat_id);
+  return chatId ? { chat_id: chatId } : {};
+}
+
+export function sanitizeDeliveryTestResult(value: unknown): DeliveryTestResult | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+  const targetId = optionalString(value.target_id);
+  const targetType = optionalString(value.target_type);
+  const status = optionalString(value.status);
+  if (!targetId || !targetType || !status) {
+    return null;
+  }
+  const result: DeliveryTestResult = {
+    schema_version: value.schema_version === "desk_delivery_test_result_v1" ? value.schema_version : undefined,
+    target_id: targetId,
+    target_type: targetType,
+    mode: "dry-run",
+    ok: value.ok === true,
+    status,
+  };
+  assignOptionalStrings(result, value, ["title", "detail", "error", "finished_at"]);
+  return result;
+}
+
+export function sanitizeSourceImportResult(value: unknown): SourceImportResult | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+  const topic = optionalString(value.topic);
+  const registryPath = optionalString(value.registry_path);
+  if (!topic || !registryPath) {
+    return null;
+  }
+  const result: SourceImportResult = {
+    schema_version: value.schema_version === "desk_source_import_result_v1" ? value.schema_version : undefined,
+    dry_run: value.dry_run === true,
+    written: value.written === true,
+    topic,
+    added_count: nonNegativeIntegerOrDefault(value.added_count, 0),
+    updated_count: nonNegativeIntegerOrDefault(value.updated_count, 0),
+    unchanged_count: nonNegativeIntegerOrDefault(value.unchanged_count, 0),
+    source_count: nonNegativeIntegerOrDefault(value.source_count, 0),
+    registry_path: registryPath,
+    preview_sources: sanitizeSourceImportPreviewSources(value.preview_sources),
+    preview_truncated_count: nonNegativeIntegerOrDefault(value.preview_truncated_count, 0),
+  };
+  assignOptionalStrings(result, value, ["title", "detail", "next_action", "finished_at"]);
+  return result;
+}
+
+export function sanitizeDeskSourcesResult(value: unknown): DeskSourcesResult | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+  const registryPath = optionalString(value.registry_path);
+  if (!registryPath) {
+    return null;
+  }
+  return {
+    schema_version: value.schema_version === "desk_sources_v1" ? value.schema_version : undefined,
+    source_count: nonNegativeIntegerOrDefault(value.source_count, 0),
+    enabled_count: nonNegativeIntegerOrDefault(value.enabled_count, 0),
+    topics: stringArray(value.topics),
+    registry_path: registryPath,
+    sources: sanitizeDeskSources(value.sources),
+  };
+}
+
+function sanitizeDeskSources(value: unknown): DeskSource[] {
+  return sanitizeObjectArray(value, "desk_sources.sources").flatMap((record, index) => {
+    const sourceId = optionalString(record.source_id);
+    const label = optionalString(record.label);
+    const channel = optionalString(record.channel);
+    if (!sourceId || !label || !channel) {
+      console.warn(`[tgcs dashboard schema] desk_sources.sources[${index}] missing required display field`, record);
+      return [];
+    }
+    return [
+      {
+        schema_version: record.schema_version === "desk_source_v1" ? record.schema_version : undefined,
+        source_id: sourceId,
+        label,
+        channel,
+        enabled: record.enabled !== false,
+        topics: stringArray(record.topics),
+        priority: optionalString(record.priority) ?? "normal",
+        scan_window_hours: nonNegativeIntegerOrDefault(record.scan_window_hours, 24),
+      },
+    ];
+  });
+}
+
+function sanitizeSourceImportPreviewSources(value: unknown): SourceImportResult["preview_sources"] {
+  return sanitizeObjectArray(value, "source_import.preview_sources").flatMap((record) => {
+    const label = optionalString(record.label);
+    const sourceId = optionalString(record.source_id);
+    if (!label || !sourceId) {
+      return [];
+    }
+    return [{ label, source_id: sourceId }];
   });
 }
 

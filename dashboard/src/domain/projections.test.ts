@@ -33,7 +33,8 @@ describe("dashboard projections", () => {
       feedback_summary: { exportable_count: 3 },
     });
     expect(buildMetrics(dashboard).map((metric) => metric.label)).toEqual(["Runs", "Alerts", "Profiles", "Sources"]);
-    expect(buildTabCounts(dashboard)).toEqual({ inbox: 0, profiles: 1, runs: 1, settings: 4 });
+    expect(buildTabCounts(dashboard, 8)).toEqual({ inbox: 0, actions: 8, profiles: 1, runs: 1, settings: 4 });
+    expect(buildBoardMeta("actions", dashboard, 8).title).toBe("Start");
     expect(buildBoardMeta("settings", dashboard).title).toBe("Operations");
     expect(settingsActionCount(dashboard)).toBe(4);
   });

@@ -1,0 +1,337 @@
+:root {
+  color: var(--paper);
+  background: var(--ink);
+  font-family: var(--font-body);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  --font-body: "Atkinson Hyperlegible", "Inter", "Segoe UI", "Microsoft YaHei", "PingFang SC", "Noto Sans SC", sans-serif;
+  --font-display: "Bahnschrift", "Segoe UI", "SF Pro Display", -apple-system, "Helvetica Neue", "DIN Alternate", "Arial Narrow", "Microsoft YaHei", "PingFang SC", sans-serif;
+  --font-mono: "Cascadia Code", "SFMono-Regular", Consolas, "Liberation Mono", ui-monospace, monospace;
+  --ink: oklch(0.175 0.032 248);
+  --ink-2: oklch(0.215 0.031 247);
+  --ink-3: oklch(0.265 0.029 244);
+  --ink-4: oklch(0.315 0.028 238);
+  --paper: oklch(0.91 0.026 92);
+  --paper-2: oklch(0.97 0.018 91);
+  --paper-3: oklch(0.82 0.031 92);
+  --line: oklch(0.40 0.028 230);
+  --line-strong: oklch(0.62 0.047 190);
+  --signal-high: oklch(0.74 0.12 170);
+  --signal-medium: oklch(0.80 0.117 84);
+  --signal-low: oklch(0.72 0.034 221);
+  --signal-danger: oklch(0.69 0.142 35);
+  --accent: oklch(0.72 0.103 188);
+  --amber: var(--signal-medium);
+  --teal: var(--signal-high);
+  --rust: var(--signal-danger);
+  --blue: var(--signal-low);
+  --muted: oklch(0.68 0.028 204);
+  --shadow: oklch(0.08 0.022 249);
+  --tone-high-bg: color-mix(in oklch, var(--signal-high) 24%, var(--paper-2));
+  --tone-high-text: oklch(0.31 0.091 171);
+  --tone-medium-bg: color-mix(in oklch, var(--signal-medium) 28%, var(--paper-2));
+  --tone-medium-text: oklch(0.39 0.078 75);
+  --tone-low-bg: color-mix(in oklch, var(--signal-low) 24%, var(--paper-2));
+  --tone-low-text: oklch(0.36 0.03 232);
+  --tone-danger-bg: color-mix(in oklch, var(--signal-danger) 24%, var(--paper-2));
+  --tone-danger-text: oklch(0.34 0.12 35);
+  --tone-neutral-bg: color-mix(in oklch, var(--paper-3) 42%, var(--paper-2));
+  --tone-neutral-text: oklch(0.42 0.018 92);
+  --surface-warm: color-mix(in oklch, var(--paper-3) 52%, var(--paper-2));
+  --surface-warm-strong: color-mix(in oklch, var(--paper-3) 30%, var(--paper-2));
+  --surface-action: color-mix(in oklch, var(--signal-medium) 16%, var(--paper-2));
+  --surface-link: color-mix(in oklch, var(--signal-high) 17%, var(--paper-2));
+  --ink-warm: oklch(0.32 0.028 92);
+  --ink-link: oklch(0.36 0.065 188);
+  --label-weight: 700;
+  --badge-weight: 800;
+  --shadow-hard: 4px 4px 0 var(--shadow);
+  --shadow-hard-strong: 6px 6px 0 var(--shadow);
+  --panel-shadow: var(--shadow-hard);
+  --field-border: color-mix(in oklch, var(--paper-3) 58%, var(--ink-4));
+  --field-bg: var(--paper-2);
+  --code-bg: var(--ink-2);
+  --code-ink: color-mix(in oklch, var(--signal-high) 38%, var(--paper));
+  --meter-gradient: linear-gradient(90deg, var(--signal-high), var(--signal-medium));
+  --command-ink: var(--tone-high-text);
+  /* Wash scale: suffix = percent of --paper mixed into transparency. */
+  --wash-paper-3: color-mix(in oklch, var(--paper) 3%, transparent);
+  --wash-paper-4: color-mix(in oklch, var(--paper) 4%, transparent);
+  --wash-paper-5: color-mix(in oklch, var(--paper) 5%, transparent);
+  --wash-paper-6: color-mix(in oklch, var(--paper) 6%, transparent);
+  --wash-paper-7: color-mix(in oklch, var(--paper) 7%, transparent);
+  --wash-paper-8: color-mix(in oklch, var(--paper) 8%, transparent);
+  --wash-paper-10: color-mix(in oklch, var(--paper) 10%, transparent);
+  --wash-paper-11: color-mix(in oklch, var(--paper) 11%, transparent);
+  --wash-paper-12: color-mix(in oklch, var(--paper) 12%, transparent);
+  --wash-paper-14: color-mix(in oklch, var(--paper) 14%, transparent);
+  --wash-paper-15: color-mix(in oklch, var(--paper) 15%, transparent);
+  --wash-paper-16: color-mix(in oklch, var(--paper) 16%, transparent);
+  --wash-paper-18: color-mix(in oklch, var(--paper) 18%, transparent);
+}
+
+@supports not (color: color-mix(in oklch, red, blue)) {
+  :root {
+    /*
+      Primary tokens stay OKLCH above. Fallback literals below are sRGB
+      approximations of those OKLCH tokens and mixes, rounded once so older
+      renderers keep paper washes, chips, and field borders visible. Keep them
+      paired with the primary token values when changing the palette.
+    */
+    --ink: #05111e;
+    --ink-2: #0d1b27;
+    --ink-3: #192732;
+    --ink-4: #24343e;
+    --paper: #e7e1ce;
+    --paper-2: #faf5e8;
+    --paper-3: #cbc4ae;
+    --line: #384b54;
+    --line-strong: #65908c;
+    --signal-high: #4bc39f;
+    --signal-medium: #e1b75f;
+    --signal-low: #8eaab4;
+    --signal-danger: #e5775c;
+    --accent: #47b9b0;
+    --amber: var(--signal-medium);
+    --teal: var(--signal-high);
+    --rust: var(--signal-danger);
+    --blue: var(--signal-low);
+    --muted: #859ea0;
+    --shadow: #000206;
+    --tone-high-bg: #d5e9d6;
+    --tone-high-text: #003e2a;
+    --tone-medium-bg: #f3e4c4;
+    --tone-medium-text: #5d3e07;
+    --tone-low-bg: #dfe3db;
+    --tone-low-text: #2d404a;
+    --tone-danger-bg: #f8d7c6;
+    --tone-danger-text: #681500;
+    --tone-neutral-bg: #e6e0cf;
+    --tone-neutral-text: #504d42;
+    --surface-warm: #e1dbc9;
+    --surface-warm-strong: #ebe6d6;
+    --surface-action: #f6ebd3;
+    --surface-link: #e0eddb;
+    --ink-warm: #383322;
+    --ink-link: #004843;
+    --field-border: #80847d;
+    --code-ink: #b4d7bc;
+    --meter-gradient: linear-gradient(90deg, var(--signal-high), var(--signal-medium));
+    --command-ink: var(--tone-high-text);
+    --wash-paper-3: rgba(231, 225, 206, 0.03);
+    --wash-paper-4: rgba(231, 225, 206, 0.04);
+    --wash-paper-5: rgba(231, 225, 206, 0.05);
+    --wash-paper-6: rgba(231, 225, 206, 0.06);
+    --wash-paper-7: rgba(231, 225, 206, 0.07);
+    --wash-paper-8: rgba(231, 225, 206, 0.08);
+    --wash-paper-10: rgba(231, 225, 206, 0.1);
+    --wash-paper-11: rgba(231, 225, 206, 0.11);
+    --wash-paper-12: rgba(231, 225, 206, 0.12);
+    --wash-paper-14: rgba(231, 225, 206, 0.14);
+    --wash-paper-15: rgba(231, 225, 206, 0.15);
+    --wash-paper-16: rgba(231, 225, 206, 0.16);
+    --wash-paper-18: rgba(231, 225, 206, 0.18);
+  }
+
+  body {
+    background:
+      linear-gradient(90deg, rgba(225, 183, 95, 0.045) 1px, transparent 1px),
+      linear-gradient(rgba(75, 195, 159, 0.035) 1px, transparent 1px),
+      linear-gradient(180deg, #102131, var(--ink));
+    background-size: 32px 32px, 32px 32px, auto;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  font-family: var(--font-body);
+  font-variant-numeric: tabular-nums;
+  background:
+    linear-gradient(90deg, color-mix(in oklch, var(--signal-medium) 4.5%, transparent) 1px, transparent 1px),
+    linear-gradient(color-mix(in oklch, var(--signal-high) 3.5%, transparent) 1px, transparent 1px),
+    linear-gradient(180deg, oklch(0.20 0.03 246), var(--ink));
+  background-size: 32px 32px, 32px 32px, auto;
+}
+
+button,
+textarea,
+input,
+select {
+  font: inherit;
+}
+
+button {
+  touch-action: manipulation;
+}
+
+h1,
+h2,
+h3,
+p {
+  margin: 0;
+}
+
+h1 {
+  color: var(--paper);
+  font-family: var(--font-display);
+  font-size: clamp(38px, 4.2vw, 56px);
+  font-weight: 700;
+  line-height: 0.95;
+  letter-spacing: 0;
+}
+
+h2 {
+  color: var(--paper);
+  font-size: clamp(22px, 2.7vw, 34px);
+  line-height: 1.05;
+}
+
+h3 {
+  font-size: 17px;
+  line-height: 1.3;
+}
+
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes boot-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes tile-rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes side-panel-in {
+  from {
+    opacity: 0;
+    transform: translateX(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes card-enter {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes icon-awake {
+  0% {
+    opacity: 0;
+    transform: scale(0.92);
+    filter: saturate(0.5);
+  }
+
+  55% {
+    opacity: 1;
+    transform: scale(1.04);
+  }
+
+  100% {
+    opacity: 1;
+    transform: scale(1);
+    filter: saturate(1.08);
+  }
+}
+
+@keyframes icon-scan {
+  0% {
+    transform: translateY(-120%);
+    opacity: 0;
+  }
+
+  18% {
+    opacity: 0.75;
+  }
+
+  52% {
+    opacity: 0.28;
+  }
+
+  100% {
+    transform: translateY(120%);
+    opacity: 0;
+  }
+}
+
+@keyframes header-sweep {
+  0% {
+    transform: translateX(-120%);
+    opacity: 0;
+  }
+
+  16% {
+    opacity: 1;
+  }
+
+  46% {
+    opacity: 0.42;
+  }
+
+  100% {
+    transform: translateX(120%);
+    opacity: 0;
+  }
+}
+
+@keyframes meter-charge {
+  from {
+    clip-path: inset(0 100% 0 0);
+  }
+
+  to {
+    clip-path: inset(0 0 0 0);
+  }
+}
+
+@keyframes active-tab-lock {
+  0% {
+    transform: translateX(-2px);
+  }
+
+  50% {
+    transform: translateX(2px);
+  }
+
+  100% {
+    transform: translateX(0);
+  }
+}
+

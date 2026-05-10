@@ -1,8 +1,9 @@
-import { Bell, BellOff, Check, FileDiff, RefreshCw, Sun, UserRoundCog } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Bell, BellOff, Check, FileDiff, Pause, Play, RefreshCw, Save, SlidersHorizontal, Sun, UserRoundCog, X } from "lucide-react";
 
 import { InlineEmpty, PanelHeader } from "./common";
 import { alertMode, diffStats, toneClass } from "../domain/display";
-import { formatDate, formatScanWindow, formatSemanticCap, formatTargetCount, profileDisplayName, titleCaseLabel } from "../domain/format";
+import { formatDate, formatScanWindow, profileDisplayName, titleCaseLabel } from "../domain/format";
 import type { Profile, ProfilePatch } from "../domain/types";
 
 export function ProfilesView({
@@ -11,6 +12,8 @@ export function ProfilesView({
   applyPatch,
   revertPatch,
   setAlertMode,
+  setProfileEnabled,
+  setProfileRuntimeSettings,
   busy,
 }: {
   profiles: Profile[];
@@ -18,6 +21,8 @@ export function ProfilesView({
   applyPatch: (patchId: string) => void;
   revertPatch: (patchId: string) => void;
   setAlertMode: (profileId: string, mode: string) => void;
+  setProfileEnabled: (profileId: string, enabled: boolean) => void;
+  setProfileRuntimeSettings: (profileId: string, settings: { scan_window_hours?: number; semantic_max_messages?: number }) => void;
   busy: boolean;
 }) {
   return (
@@ -27,23 +32,35 @@ export function ProfilesView({
         {profiles.length ? (
           <div className="table-list">
             {profiles.map((profile) => (
-              <div className="table-row profile-row" key={profile.profile_id}>
+              <div className={`table-row profile-row ${profile.enabled ? "" : "paused"}`} key={profile.profile_id}>
                 <div className="profile-primary">
                   <strong>{profile.display_name || profileDisplayName(profile.profile_id)}</strong>
                   <span className={profile.enabled ? "status enabled" : "status disabled"}>
-                    {profile.enabled ? "enabled" : "disabled"}
+                    {profile.enabled ? "Monitoring" : "Paused"}
                   </span>
                 </div>
-                <code title={profile.display_path || "Profile path unavailable"}>
-                  {profile.display_path || "Profile path unavailable"}
-                </code>
-                <div className="profile-rhythm" aria-label={`${profile.profile_id} monitor shape`}>
-                  <span>{formatScanWindow(profile.scan_window_hours)}</span>
-                  <span>{formatSemanticCap(profile.semantic_max_messages)}</span>
-                  <span>{profile.source_topics?.[0] ? titleCaseLabel(profile.source_topics[0]) : "No topic"}</span>
-                  <span>{formatTargetCount(profile.delivery_target_count)}</span>
+                <div className="profile-rhythm" aria-label={`Scan settings for ${profile.display_name || profileDisplayName(profile.profile_id)}`}>
+                  <span title="How far back each scan checks">{profileScanWindowLabel(profile)}</span>
+                  <span title="Maximum messages reviewed per scan">{profileItemLimitLabel(profile)}</span>
+                  <span title="Source group used by this monitor">{profileTopicLabel(profile)}</span>
+                  <span title="Notification destinations configured">{profileNotificationLabel(profile)}</span>
                 </div>
-                <AlertModeControl profile={profile} setAlertMode={setAlertMode} busy={busy} />
+                <div className="profile-control-groups">
+                  <div className="profile-control-group">
+                    <span className="profile-control-label">Monitoring</span>
+                    <ProfileEnabledControl profile={profile} setProfileEnabled={setProfileEnabled} busy={busy} />
+                  </div>
+                  <div className="profile-control-group">
+                    <span className="profile-control-label">Alerts</span>
+                    <AlertModeControl profile={profile} setAlertMode={setAlertMode} busy={busy} />
+                    {!profile.enabled && <span className="profile-paused-note">Resume monitoring to adjust alerts.</span>}
+                  </div>
+                </div>
+                <ProfileRuntimeSettingsControl
+                  profile={profile}
+                  setProfileRuntimeSettings={setProfileRuntimeSettings}
+                  busy={busy}
+                />
               </div>
             ))}
           </div>
@@ -126,6 +143,130 @@ export function ProfilesView({
   );
 }
 
+function ProfileRuntimeSettingsControl({
+  profile,
+  setProfileRuntimeSettings,
+  busy,
+}: {
+  profile: Profile;
+  setProfileRuntimeSettings: (profileId: string, settings: { scan_window_hours?: number; semantic_max_messages?: number }) => void;
+  busy: boolean;
+}) {
+  const currentScanWindow = typeof profile.scan_window_hours === "number" ? profile.scan_window_hours : 24;
+  const currentItemLimit = typeof profile.semantic_max_messages === "number" ? profile.semantic_max_messages : 20;
+  const [scanWindowHours, setScanWindowHours] = useState(String(currentScanWindow));
+  const [itemLimit, setItemLimit] = useState(String(currentItemLimit));
+  const [editing, setEditing] = useState(false);
+
+  useEffect(() => {
+    setScanWindowHours(String(currentScanWindow));
+    setItemLimit(String(currentItemLimit));
+  }, [currentScanWindow, currentItemLimit]);
+
+  const saveState = runtimeSettingsSaveState(currentScanWindow, currentItemLimit, scanWindowHours, itemLimit);
+
+  if (!editing) {
+    return (
+      <button className="profile-edit-settings text-button" disabled={busy} onClick={() => setEditing(true)} type="button">
+        <SlidersHorizontal size={15} />
+        <span>Scan settings</span>
+      </button>
+    );
+  }
+
+  return (
+    <div className="profile-runtime-settings" aria-label={`Editable scan settings for ${profile.display_name || profileDisplayName(profile.profile_id)}`}>
+      <label>
+        <span>Scan history</span>
+        <input
+          aria-label={`${profile.profile_id} scan window hours`}
+          disabled={busy}
+          inputMode="numeric"
+          max={168}
+          min={1}
+          onChange={(event) => setScanWindowHours(event.target.value)}
+          step={1}
+          type="number"
+          value={scanWindowHours}
+        />
+        <small>hours</small>
+      </label>
+      <label>
+        <span>Messages</span>
+        <input
+          aria-label={`${profile.profile_id} item limit`}
+          disabled={busy}
+          inputMode="numeric"
+          max={500}
+          min={1}
+          onChange={(event) => setItemLimit(event.target.value)}
+          step={1}
+          type="number"
+          value={itemLimit}
+        />
+        <small>per scan</small>
+      </label>
+      <div className="profile-runtime-actions">
+        <button
+          className="profile-save-settings text-button"
+          disabled={busy || !saveState.canSave}
+          onClick={() => {
+            if (!saveState.canSave) {
+              return;
+            }
+            setProfileRuntimeSettings(profile.profile_id, {
+              scan_window_hours: saveState.scan_window_hours,
+              semantic_max_messages: saveState.semantic_max_messages,
+            });
+            setEditing(false);
+          }}
+          type="button"
+        >
+          <Save size={15} />
+          <span>Save</span>
+        </button>
+        <button
+          className="profile-cancel-settings text-button"
+          disabled={busy}
+          onClick={() => {
+            setScanWindowHours(String(currentScanWindow));
+            setItemLimit(String(currentItemLimit));
+            setEditing(false);
+          }}
+          type="button"
+        >
+          <X size={15} />
+          <span>Cancel</span>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function ProfileEnabledControl({
+  profile,
+  setProfileEnabled,
+  busy,
+}: {
+  profile: Profile;
+  setProfileEnabled: (profileId: string, enabled: boolean) => void;
+  busy: boolean;
+}) {
+  const nextEnabled = !profile.enabled;
+  return (
+    <button
+      aria-label={`${profile.display_name || profileDisplayName(profile.profile_id)}: ${nextEnabled ? "Resume monitoring" : "Pause monitoring"}`}
+      className={`profile-enable-button text-button ${profile.enabled ? "secondary" : ""}`}
+      disabled={busy}
+      onClick={() => setProfileEnabled(profile.profile_id, nextEnabled)}
+      type="button"
+    >
+      {profile.enabled ? <Pause size={15} /> : <Play size={15} />}
+      <span>{profile.enabled ? "Pause" : "Resume"}</span>
+    </button>
+  );
+}
+
 function AlertModeControl({
   profile,
   setAlertMode,
@@ -142,14 +283,14 @@ function AlertModeControl({
     { value: "muted", label: "Mute", icon: <BellOff size={14} /> },
   ];
   return (
-    <div className="mode-controls" aria-label={`${profile.profile_id} alert mode`}>
+    <div className="mode-controls" aria-label={`${profile.profile_id} alerts`}>
       {modes.map((item) => (
         <button
           className={mode === item.value ? "mode-button active" : "mode-button"}
           key={item.value}
           type="button"
           title={item.label}
-          disabled={busy}
+          disabled={busy || !profile.enabled}
           onClick={() => setAlertMode(profile.profile_id, item.value)}
         >
           {item.icon}
@@ -158,4 +299,44 @@ function AlertModeControl({
       ))}
     </div>
   );
+}
+
+function profileScanWindowLabel(profile: Profile) {
+  const formatted = formatScanWindow(profile.scan_window_hours).toLowerCase();
+  return formatted === "window n/a" ? "Scan history" : formatted.replace(" scan", " history");
+}
+
+function profileItemLimitLabel(profile: Profile) {
+  if (typeof profile.semantic_max_messages !== "number") {
+    return "Item limit";
+  }
+  return `${profile.semantic_max_messages} messages`;
+}
+
+function profileTopicLabel(profile: Profile) {
+  return profile.source_topics?.[0] ? titleCaseLabel(profile.source_topics[0]) : "All topics";
+}
+
+function profileNotificationLabel(profile: Profile) {
+  if (typeof profile.delivery_target_count !== "number") {
+    return "Notifications";
+  }
+  return profile.delivery_target_count === 1 ? "1 notification" : `${profile.delivery_target_count} notifications`;
+}
+
+export function runtimeSettingsSaveState(
+  currentScanWindow: number,
+  currentItemLimit: number,
+  scanWindowText: string,
+  itemLimitText: string,
+) {
+  const scanValue = Number(scanWindowText);
+  const itemValue = Number(itemLimitText);
+  const validScan = Number.isInteger(scanValue) && scanValue >= 1 && scanValue <= 168;
+  const validItems = Number.isInteger(itemValue) && itemValue >= 1 && itemValue <= 500;
+  return {
+    canSave: validScan && validItems && (scanValue !== currentScanWindow || itemValue !== currentItemLimit),
+    scan_window_hours: scanValue,
+    semantic_max_messages: itemValue,
+  };
 }
