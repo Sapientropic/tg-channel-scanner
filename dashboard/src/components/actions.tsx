@@ -96,6 +96,40 @@ export function ActionsView({
   const heroDetail = activeStep
     ? currentStep?.detail
     : "Run a practice scan, review cards, or preview automation when you are ready.";
+  const compactReadyMode = !activeStep && (stage === "ready" || stage === "needs_delivery_target");
+  const dailyStepOrder = stage === "needs_delivery_target" ? ["automation", "first-run", "feedback"] : ["first-run", "feedback", "automation"];
+  const dailyStepKeys = new Set(dailyStepOrder);
+  const visibleSteps = compactReadyMode
+    ? dailyStepOrder.map((key) => steps.find((step) => step.key === key)).filter(Boolean) as JourneyStep[]
+    : steps;
+  const parkedSteps = compactReadyMode ? steps.filter((step) => !dailyStepKeys.has(step.key)) : [];
+  const summaryBlock = (
+    <div className="start-summary" aria-label="Setup summary">
+      {startSummary.map((item) => {
+        const actionId = item.actionId;
+        const showAction = Boolean(actionId && actionMap.has(actionId));
+        return (
+          <div className={showAction ? "is-actionable" : ""} key={item.label}>
+            <span>{item.label}</span>
+            <strong>{item.value}</strong>
+            {showAction && actionId && (
+              <button
+                aria-label={`${item.label}: ${item.actionLabel}`}
+                className="start-summary-action"
+                disabled={Boolean(busyActionId)}
+                onClick={() => void onRun(actionId)}
+                title={item.actionLabel}
+                type="button"
+              >
+                {item.actionLabel === "Open settings" ? <Wrench size={14} /> : <Bell size={14} />}
+                <span>{item.actionLabel}</span>
+              </button>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
 
   return (
     <section className="actions-view start-view">
@@ -113,37 +147,13 @@ export function ActionsView({
         </div>
       </section>
 
-      <div className="start-summary" aria-label="Setup summary">
-        {startSummary.map((item) => {
-          const actionId = item.actionId;
-          const showAction = Boolean(actionId && actionMap.has(actionId));
-          return (
-            <div className={showAction ? "is-actionable" : ""} key={item.label}>
-              <span>{item.label}</span>
-              <strong>{item.value}</strong>
-              {showAction && actionId && (
-                <button
-                  aria-label={`${item.label}: ${item.actionLabel}`}
-                  className="start-summary-action"
-                  disabled={Boolean(busyActionId)}
-                onClick={() => void onRun(actionId)}
-                title={item.actionLabel}
-                type="button"
-              >
-                {item.actionLabel === "Open settings" ? <Wrench size={14} /> : <Bell size={14} />}
-                <span>{item.actionLabel}</span>
-              </button>
-              )}
-            </div>
-          );
-        })}
-      </div>
+      {!compactReadyMode && summaryBlock}
 
       {loadError && <InlineEmpty title={loadError} />}
       {!actions.length && !loadError && <InlineEmpty title="Signal Desk controls are not exposed by the local server." />}
 
       <div className="journey-list">
-        {steps.map((step, index) => (
+        {visibleSteps.map((step, index) => (
           <JourneyStepCard
             actionMap={actionMap}
             anyBusy={Boolean(busyActionId)}
@@ -157,6 +167,27 @@ export function ActionsView({
           />
         ))}
       </div>
+      {compactReadyMode && summaryBlock}
+      {parkedSteps.length > 0 && (
+        <details className="journey-secondary">
+          <summary>Setup checks</summary>
+          <div className="journey-list secondary">
+            {parkedSteps.map((step, index) => (
+              <JourneyStepCard
+                actionMap={actionMap}
+                anyBusy={Boolean(busyActionId)}
+                busyActionId={busyActionId}
+                index={index + 1}
+                key={step.key}
+                onRun={onRun}
+                results={results}
+                step={step}
+                telegram={telegram}
+              />
+            ))}
+          </div>
+        </details>
+      )}
     </section>
   );
 }

@@ -30,9 +30,10 @@ export function OpportunitySummaryPanel({ summary }: { summary?: OpportunitySumm
           <strong>{summary.next_action.label || "Review run"}</strong>
           <DecisionMemoryLine counts={summary.decision_counts} />
           {summary.next_action.command && (
-            <div className="signal-command">
-              <CopyableCommand command={summary.next_action.command} label="next action" compact iconOnly />
-            </div>
+            <details className="signal-command">
+              <summary>Troubleshooting command</summary>
+              <CopyableCommand command={summary.next_action.command} label="next action" compact />
+            </details>
           )}
         </div>
       )}

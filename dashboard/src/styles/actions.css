@@ -139,6 +139,30 @@
   min-width: 0;
 }
 
+.journey-secondary {
+  min-width: 0;
+  border: 1px dashed color-mix(in oklch, var(--paper) 18%, transparent);
+  background: color-mix(in oklch, var(--ink) 88%, transparent);
+}
+
+.journey-secondary > summary {
+  padding: 10px 12px;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: var(--badge-weight);
+  text-transform: uppercase;
+}
+
+.journey-secondary > summary:hover,
+.journey-secondary > summary:focus-visible {
+  color: var(--paper);
+}
+
+.journey-secondary .journey-list {
+  padding: 0 10px 10px;
+}
+
 .journey-step {
   display: grid;
   grid-template-columns: 34px minmax(0, 1fr) minmax(218px, 0.27fr);
@@ -309,6 +333,21 @@
   color: color-mix(in oklch, var(--paper) 72%, var(--muted));
   font-size: 13px;
   line-height: 1.45;
+}
+
+.desk-confirm-dialog .journey-button {
+  min-height: 44px;
+}
+
+.desk-confirm-dialog .journey-button.secondary {
+  border-color: var(--wash-paper-18);
+  background: color-mix(in oklch, var(--paper) 10%, transparent);
+  color: var(--paper);
+}
+
+.desk-confirm-dialog .journey-button.secondary:hover,
+.desk-confirm-dialog .journey-button.secondary:focus-visible {
+  background: color-mix(in oklch, var(--paper) 16%, transparent);
 }
 
 .desk-confirm-actions {

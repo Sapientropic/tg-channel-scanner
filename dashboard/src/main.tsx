@@ -10,6 +10,7 @@ import {
 import {
   applyProfilePatch,
   checkGitUpdates as checkGitUpdatesRequest,
+  clearFeedbackDecisions as clearFeedbackDecisionsRequest,
   clearDeskNotificationToken as clearDeskNotificationTokenRequest,
   errorMessage,
   exportFeedback as exportFeedbackRequest,
@@ -29,6 +30,7 @@ import {
   setProfileEnabled as setProfileEnabledRequest,
   setProfileRuntimeSettings as setProfileRuntimeSettingsRequest,
   testDeskDeliveryTarget,
+  undoReviewCardAction,
 } from "./api/client";
 import { ActionsView } from "./components/actions";
 import { CommandStrip, OpportunitySummaryPanel, ValidationSummaryPanel } from "./components/board-status";
@@ -62,7 +64,7 @@ import type {
 import "./styles.css";
 
 const tabShell: Array<{ tab: Tab; icon: ReactNode; label: string }> = [
-  { tab: "inbox", icon: <Inbox size={17} />, label: "Inbox" },
+  { tab: "inbox", icon: <Inbox size={17} />, label: "Review" },
   { tab: "actions", icon: <Rocket size={17} />, label: "Start" },
   { tab: "profiles", icon: <UserRoundCog size={17} />, label: "Profiles" },
   { tab: "runs", icon: <Play size={17} />, label: "Runs" },
@@ -117,6 +119,12 @@ function App() {
   const showOpportunitySummary = activeTab === "inbox" && (!hasLatestActionCards || hasBlockingSummary);
   const showValidationSummary = activeTab === "inbox" && !hasLatestActionCards;
   const showBoardStatusStack = showCommandStrip || showOpportunitySummary || showValidationSummary;
+
+  useEffect(() => {
+    // Mobile bottom navigation can otherwise carry the previous tab's scroll
+    // offset into the next screen, hiding the new tab's main decision surface.
+    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+  }, [activeTab]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -274,7 +282,52 @@ function App() {
     try {
       const result = await exportFeedbackRequest();
       setFeedbackExport(result);
-      setNotice({ tone: "success", text: `Feedback exported: ${result.feedback_count} rows` });
+      await refresh();
+      setNotice({ tone: "success", text: `${result.feedback_count} decisions applied to future reports` });
+    } catch (error) {
+      setNotice({ tone: "error", text: feedbackClearErrorMessage(error) });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function feedbackClearErrorMessage(error: unknown) {
+    const message = errorMessage(error);
+    if (/404|not found/i.test(message)) {
+      return "Signal Desk server is out of date. Close and reopen Signal Desk, then retry Clear learning decisions.";
+    }
+    return message;
+  }
+
+  async function clearFeedback() {
+    setBusy(true);
+    setNotice(null);
+    let successText = "";
+    try {
+      const clearedCount = await clearFeedbackDecisionsRequest();
+      setFeedbackExport(null);
+      await refresh();
+      successText = clearedCount > 0 ? `${clearedCount} learning decisions cleared` : "No learning decisions to clear";
+    } catch (error) {
+      setNotice({ tone: "error", text: errorMessage(error) });
+    } finally {
+      setBusy(false);
+    }
+    if (successText) {
+      setNotice({ tone: "success", text: successText });
+    }
+  }
+
+  async function undoFeedbackDecision(cardId: string) {
+    if (!cardId) {
+      return;
+    }
+    setBusy(true);
+    setNotice(null);
+    try {
+      await undoReviewCardAction(cardId);
+      await refresh();
+      setNotice({ tone: "success", text: "Decision undone" });
     } catch (error) {
       setNotice({ tone: "error", text: errorMessage(error) });
     } finally {
@@ -605,6 +658,9 @@ function App() {
                   feedbackSummary={state.feedback_summary}
                   feedbackExport={feedbackExport}
                   exportFeedback={exportFeedback}
+                  clearFeedback={clearFeedback}
+                  undoFeedbackDecision={undoFeedbackDecision}
+                  runAgainWithLearning={() => void runDeskAction("monitor_jobs_dry_run")}
                   deliveryTest={deliveryTest}
                   notificationTokenStatus={notificationTokenStatus}
                   notificationTokenError={notificationTokenError}
@@ -716,8 +772,9 @@ function DeskActionConfirmDialog({
     return () => {
       document.removeEventListener("keydown", handleKeyDown);
       document.body.style.overflow = previousOverflow;
-      returnFocusRef.current?.focus();
+      const restoreFocusTarget = returnFocusRef.current;
       returnFocusRef.current = null;
+      window.setTimeout(() => restoreFocusTarget?.focus(), 0);
     };
   }, [onCancel, returnFocusRef]);
 

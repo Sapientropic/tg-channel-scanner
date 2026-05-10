@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { SOURCE_LIBRARY_PAGE_SIZE, filterDeskSourcesByQuery, paginatedDeskSources, sourceTopicsEditState } from "./settings";
+import {
+  SOURCE_LIBRARY_PAGE_SIZE,
+  filterDeskSourcesByQuery,
+  paginatedDeskSources,
+  sourceLibraryCountLabel,
+  sourceTopicsEditState,
+} from "./settings";
 import type { DeskSource } from "../domain/types";
 
 function source(overrides: Partial<DeskSource>): DeskSource {
@@ -74,5 +80,13 @@ describe("Settings source topic editor", () => {
 
     expect(paginatedDeskSources(sources).map((item) => item.source_id)).toHaveLength(SOURCE_LIBRARY_PAGE_SIZE);
     expect(paginatedDeskSources(sources, SOURCE_LIBRARY_PAGE_SIZE + 24)).toHaveLength(SOURCE_LIBRARY_PAGE_SIZE + 3);
+  });
+
+  it("labels source counts as pagination or matching state", () => {
+    expect(sourceLibraryCountLabel(8, 82, false)).toBe("Showing first 8 of 82");
+    expect(sourceLibraryCountLabel(12, 12, false)).toBe("Showing all 12");
+    expect(sourceLibraryCountLabel(4, 4, true)).toBe("4 matching shown");
+    expect(sourceLibraryCountLabel(8, 82, true)).toBe("8 of 82 matching shown");
+    expect(sourceLibraryCountLabel(0, 0, true)).toBe("No matching sources");
   });
 });

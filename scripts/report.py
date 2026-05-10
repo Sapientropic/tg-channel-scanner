@@ -2078,6 +2078,19 @@ def _link_or_text(href: object, label: object, *, label_is_html: bool = False) -
     return str(label) if label_is_html else _esc(label)
 
 
+def readable_url_label(value: object, *, field_name: str = "") -> str:
+    parsed = urlparse(str(value or "").strip())
+    field = field_name.lower()
+    if field in {"apply_url", "application_url"}:
+        return "Apply"
+    if field == "origin_url":
+        return "Open source"
+    if parsed.netloc:
+        host = parsed.netloc.removeprefix("www.")
+        return host[:34] + "..." if len(host) > 37 else host
+    return "Open link"
+
+
 def _tg_md_to_html(text: str) -> str:
     """Convert Telegram-flavored markdown to safe HTML snippets.
 
@@ -2224,8 +2237,11 @@ def _data_json(value: object) -> str:
 
 def _feedback_attrs(item: dict, item_title: str, message_lookup: dict | None) -> str:
     payload = {"source_message_refs": source_refs_for_job(item, message_lookup)}
+    basis = json.dumps({"title": item_title, "refs": payload["source_message_refs"]}, ensure_ascii=False, sort_keys=True)
+    card_key = hashlib.sha1(basis.encode("utf-8")).hexdigest()[:16]
     return (
         'data-feedback-card '
+        f'data-feedback-card-id="{card_key}" '
         f'data-item-title="{_esc(item_title)}" '
         f'data-feedback-payload="{_data_json(payload)}"'
     )
@@ -2238,6 +2254,7 @@ def _feedback_controls() -> str:
         <button type="button" data-feedback-value="keep">Keep</button>
         <button type="button" data-feedback-value="skip">Skip</button>
         <button type="button" data-feedback-value="false_positive">False positive</button>
+        <button type="button" data-feedback-undo>Undo</button>
       </div>"""
 
 
@@ -2252,6 +2269,7 @@ def _render_feedback_panel() -> str:
     </div>
     <div class="feedback-actions">
       <button type="button" data-feedback-export>Export JSONL</button>
+      <button type="button" data-feedback-clear>Clear report feedback</button>
       <output data-feedback-status aria-live="polite"></output>
     </div>
   </section>"""
@@ -2327,12 +2345,12 @@ def _render_generic_card(
             elif f.name == "link":
                 values = val_list or [str(val)]
                 rendered = _inline_html_group(
-                    [_link_or_text(str(v), str(v)) for v in _split_inline_values(values)]
+                    [_link_or_text(str(v), readable_url_label(v, field_name=f.name)) for v in _split_inline_values(values)]
                 )
             elif f.name == "url" or f.name.endswith("_url"):
                 values = val_list or [str(val)]
                 rendered = _inline_html_group(
-                    [_link_or_text(str(v), str(v)) for v in _split_inline_values(values)]
+                    [_link_or_text(str(v), readable_url_label(v, field_name=f.name)) for v in _split_inline_values(values)]
                 )
             else:
                 display = ", ".join(str(v) for v in val_list) if val_list else str(val)

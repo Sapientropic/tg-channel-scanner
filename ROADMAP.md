@@ -226,9 +226,9 @@ Already in scope or recently addressed:
   the primary decision surface, Yield History now combines an all-source heatmap
   with compact top-source evidence, zero-value chips are suppressed, and
   exported files/reports use user-facing labels instead of raw internal paths.
-  The Settings board is named around operations and counts only actionable
-  delivery, feedback, and source-decision work rather than total tracked
-  sources.
+  The Settings board uses plain user-facing settings language and counts only
+  actionable delivery, feedback, and source-decision work rather than total
+  tracked sources.
   Dashboard state now projects profiles and runs to display fields and
   report-only artifacts, keeping raw profile config, absolute paths, scan
   artifacts, registry paths, hashes, and target ids out of the default UI

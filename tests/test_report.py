@@ -654,6 +654,8 @@ fields:
         self.assertEqual(html.count("Strong fit."), 1)
         self.assertIn('href="https://example.com/apply"', html)
         self.assertIn('rel="noopener noreferrer"', html)
+        self.assertIn(">Apply</a>", html)
+        self.assertNotIn(">https://example.com/apply</a>", html)
         self.assertIn("Apply URL", html)
         self.assertNotIn("Apply_Url", html)
 
@@ -1088,6 +1090,10 @@ fields:
         self.assertIn("tgcs-feedback-v1", html)
         self.assertIn("application/x-ndjson", html)
         self.assertIn("&quot;source_message_refs&quot;", html)
+        self.assertIn('data-feedback-undo', html)
+        self.assertIn('data-feedback-clear', html)
+        self.assertIn('"schema_version":"tgcs-report-feedback-state-v2"', html)
+        self.assertIn("feedbackByCard", html)
 
     def test_report_main_state_dir_persists_seen_state_and_json_summary(self):
         report = load_report_module(self)

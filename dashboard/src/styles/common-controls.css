@@ -532,6 +532,15 @@ pre {
   grid-column: 1 / -1;
 }
 
+.setup-command summary {
+  grid-column: 1 / -1;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: var(--badge-weight);
+  text-transform: uppercase;
+}
+
 .setup-command code {
   display: flex;
   align-items: center;
@@ -545,7 +554,13 @@ pre {
   overflow-wrap: anywhere;
 }
 
-.setup-command button {
+.setup-command .copy-command-button {
+  width: max-content;
+  min-width: 0;
+  padding: 0 10px;
+}
+
+.setup-command button:not(.copy-command-button) {
   display: grid;
   place-items: center;
   min-width: 0;

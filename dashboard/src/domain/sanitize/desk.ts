@@ -47,11 +47,19 @@ export function sanitizeFeedbackExportResult(value: unknown): FeedbackExportResu
   if (typeof feedbackCount !== "number" || !Number.isInteger(feedbackCount) || feedbackCount < 0) {
     return null;
   }
-  return {
+  const result: FeedbackExportResult = {
     schema_version: "feedback_export_result_v1",
     feedback_count: feedbackCount,
     output_path: value.output_path.trim(),
   };
+  if (typeof value.changed_since_last_export === "boolean") {
+    result.changed_since_last_export = value.changed_since_last_export;
+  }
+  const exportedAt = optionalString(value.exported_at);
+  if (exportedAt) {
+    result.exported_at = exportedAt;
+  }
+  return result;
 }
 
 export function sanitizeDeskActions(value: unknown): DeskAction[] {

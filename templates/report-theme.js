@@ -151,18 +151,34 @@
     }
     var feedbackKey = "tgcs-feedback-v1:" + page.getAttribute("data-report-id");
     var status = document.querySelector("[data-feedback-status]");
+    var emptyStateJson = '{"schema_version":"tgcs-report-feedback-state-v2","feedbackByCard":{},"falseNegatives":[]}';
 
-    function readEntries() {
+    function emptyState() {
+      return JSON.parse(emptyStateJson);
+    }
+
+    function readState() {
       try {
-        return JSON.parse(window.localStorage.getItem(feedbackKey) || "[]");
+        var parsed = JSON.parse(window.localStorage.getItem(feedbackKey) || emptyStateJson);
+        if (Array.isArray(parsed)) {
+          return migrateEntries(parsed);
+        }
+        if (!parsed || typeof parsed !== "object") {
+          return emptyState();
+        }
+        return {
+          schema_version: "tgcs-report-feedback-state-v2",
+          feedbackByCard: parsed.feedbackByCard && typeof parsed.feedbackByCard === "object" ? parsed.feedbackByCard : {},
+          falseNegatives: Array.isArray(parsed.falseNegatives) ? parsed.falseNegatives : []
+        };
       } catch (error) {
-        return [];
+        return emptyState();
       }
     }
 
-    function writeEntries(entries) {
+    function writeState(state) {
       try {
-        window.localStorage.setItem(feedbackKey, JSON.stringify(entries));
+        window.localStorage.setItem(feedbackKey, JSON.stringify(state));
         return true;
       } catch (error) {
         return false;
@@ -175,6 +191,13 @@
       }
     }
 
+    function cardKey(card) {
+      if (!card) {
+        return "";
+      }
+      return card.getAttribute("data-feedback-card-id") || card.getAttribute("data-item-title") || "";
+    }
+
     function payloadForCard(card) {
       try {
         return JSON.parse(card.getAttribute("data-feedback-payload") || "{}");
@@ -183,11 +206,34 @@
       }
     }
 
-    function appendEntry(entry) {
-      var entries = readEntries();
-      entries.push(entry);
-      if (writeEntries(entries)) {
-        setStatus(entries.length + " feedback rows saved locally.");
+    function migrateEntries(entries) {
+      var state = emptyState();
+      entries.forEach(function (entry) {
+        if (!entry || typeof entry !== "object") {
+          return;
+        }
+        if (entry.feedback === "false_negative") {
+          state.falseNegatives.push(entry);
+          return;
+        }
+        var key = entry.card_key || entry.item_title || JSON.stringify(entry.source_message_refs || []);
+        if (key) {
+          state.feedbackByCard[key] = entry;
+        }
+      });
+      return state;
+    }
+
+    function exportEntries(state) {
+      return Object.keys(state.feedbackByCard).map(function (key) {
+        return state.feedbackByCard[key];
+      }).concat(state.falseNegatives);
+    }
+
+    function saveState(state, message) {
+      var entries = exportEntries(state);
+      if (writeState(state)) {
+        setStatus(message || entries.length + " feedback decisions saved locally.");
       } else {
         setStatus("Feedback could not be saved in this browser.");
       }
@@ -203,8 +249,20 @@
         source_message_refs: payload.source_message_refs || [],
         feedback: feedback,
         note: note || "",
-        item_title: card ? card.getAttribute("data-item-title") || "" : "Manual false negative"
+        item_title: card ? card.getAttribute("data-item-title") || "" : "Manual false negative",
+        card_key: card ? cardKey(card) : ""
       };
+    }
+
+    function syncCardButtons() {
+      var state = readState();
+      document.querySelectorAll("[data-feedback-card]").forEach(function (card) {
+        var selected = state.feedbackByCard[cardKey(card)];
+        card.querySelectorAll("[data-feedback-value]").forEach(function (button) {
+          button.classList.toggle("selected", Boolean(selected && selected.feedback === button.getAttribute("data-feedback-value")));
+        });
+      });
+      setStatus(exportEntries(state).length + " feedback decisions saved locally.");
     }
 
     document.querySelectorAll("[data-feedback-value]").forEach(function (button) {
@@ -213,10 +271,23 @@
         if (!card) {
           return;
         }
-        appendEntry(makeEntry(button.getAttribute("data-feedback-value"), card, ""));
-        card.querySelectorAll("[data-feedback-value]").forEach(function (peer) {
-          peer.classList.toggle("selected", peer === button);
-        });
+        var state = readState();
+        state.feedbackByCard[cardKey(card)] = makeEntry(button.getAttribute("data-feedback-value"), card, "");
+        saveState(state);
+        syncCardButtons();
+      });
+    });
+
+    document.querySelectorAll("[data-feedback-undo]").forEach(function (button) {
+      button.addEventListener("click", function () {
+        var card = button.closest("[data-feedback-card]");
+        if (!card) {
+          return;
+        }
+        var state = readState();
+        delete state.feedbackByCard[cardKey(card)];
+        saveState(state, exportEntries(state).length + " feedback decisions saved locally.");
+        syncCardButtons();
       });
     });
 
@@ -225,17 +296,27 @@
       falseNegative.addEventListener("click", function () {
         var note = document.querySelector("[data-feedback-note]");
         var text = note ? note.value.trim() : "";
-        appendEntry(makeEntry("false_negative", null, text));
+        var state = readState();
+        state.falseNegatives.push(makeEntry("false_negative", null, text));
+        saveState(state);
         if (note) {
           note.value = "";
         }
       });
     }
 
+    var clearButton = document.querySelector("[data-feedback-clear]");
+    if (clearButton) {
+      clearButton.addEventListener("click", function () {
+        saveState(emptyState(), "Report feedback cleared.");
+        syncCardButtons();
+      });
+    }
+
     var exportButton = document.querySelector("[data-feedback-export]");
     if (exportButton) {
       exportButton.addEventListener("click", function () {
-        var entries = readEntries();
+        var entries = exportEntries(readState());
         var jsonl = entries.map(function (entry) {
           return JSON.stringify(entry);
         }).join("\n");
@@ -252,9 +333,10 @@
           URL.revokeObjectURL(link.href);
           link.remove();
         }, 0);
-        setStatus(entries.length + " feedback rows exported.");
+        setStatus(entries.length + " feedback decisions exported.");
       });
     }
+    syncCardButtons();
   }
 
   applyTheme(storedTheme() || systemTheme());

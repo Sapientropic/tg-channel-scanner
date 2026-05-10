@@ -38,7 +38,7 @@ export function InboxView({
     return (
       <InboxEmptyState
         title="Inbox clear"
-        detail={setupStatus?.next_step ? `Next: ${setupStatus.next_step}` : "SQLite connected. Pending review cards are currently zero."}
+        detail={setupStatus?.next_step ? `Next: ${appFirstNextStep(setupStatus.next_step)}` : "SQLite connected. Pending review cards are currently zero."}
         setupStatus={setupStatus}
       />
     );
@@ -142,7 +142,7 @@ function SetupChecklistBanner({ setupStatus }: { setupStatus?: DashboardState["s
       <div className="setup-banner-copy">
         <span className="panel-kicker">Setup path</span>
         <strong>{setupStatus?.stage === "ready" ? "Ready to review" : "Complete first useful report"}</strong>
-        {setupStatus?.next_step && <small>Next: {setupStatus.next_step}</small>}
+        {setupStatus?.next_step && <small>Next: {appFirstNextStep(setupStatus.next_step)}</small>}
       </div>
       <SetupChecklist setupStatus={setupStatus} compact />
     </section>
@@ -375,15 +375,39 @@ function SetupChecklist({ setupStatus, compact = false }: { setupStatus?: Dashbo
             </div>
             {check.detail && <p>{check.detail}</p>}
             {check.command && (
-              <div className="setup-command">
+              <details className="setup-command">
+                <summary>Troubleshooting command</summary>
                 <CopyableCommand command={check.command} label={check.label} />
-              </div>
+              </details>
             )}
           </div>
         </div>
       ))}
     </div>
   );
+}
+
+function appFirstNextStep(nextStep: string) {
+  const text = nextStep.trim();
+  if (!text) {
+    return "";
+  }
+  if (text.includes("sources import")) {
+    return "Open Settings, update Sources, then run another scan.";
+  }
+  if (text.includes("monitor run")) {
+    return "Open Start and run the first dry-run scan.";
+  }
+  if (text.includes("delivery test")) {
+    return "Open Settings and add a notification target, or keep manual review.";
+  }
+  if (text.includes("init-config")) {
+    return "Open Start and create the local workspace.";
+  }
+  if (text.includes("profiles.toml")) {
+    return "Open Profiles and resume an existing profile.";
+  }
+  return text;
 }
 
 function setupCheckIcon(status: string) {

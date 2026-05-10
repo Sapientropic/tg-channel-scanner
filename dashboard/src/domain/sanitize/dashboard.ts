@@ -95,11 +95,19 @@ export function sanitizeFeedbackExportResult(value: unknown): FeedbackExportResu
   if (typeof feedbackCount !== "number" || !Number.isInteger(feedbackCount) || feedbackCount < 0) {
     return null;
   }
-  return {
+  const result: FeedbackExportResult = {
     schema_version: "feedback_export_result_v1",
     feedback_count: feedbackCount,
     output_path: outputPath,
   };
+  if (typeof value.changed_since_last_export === "boolean") {
+    result.changed_since_last_export = value.changed_since_last_export;
+  }
+  const exportedAt = optionalString(value.exported_at);
+  if (exportedAt) {
+    result.exported_at = exportedAt;
+  }
+  return result;
 }
 
 export function sanitizeDeskActions(value: unknown): DeskAction[] {
@@ -470,10 +478,11 @@ function sanitizeFeedbackSummary(value: unknown): DashboardState["feedback_summa
     return undefined;
   }
   const summary: NonNullable<DashboardState["feedback_summary"]> = {};
-  if (value.schema_version === "dashboard_feedback_summary_v1") {
+  if (value.schema_version === "dashboard_feedback_summary_v1" || value.schema_version === "dashboard_feedback_summary_v2") {
     summary.schema_version = value.schema_version;
   }
   assignOptionalNumbers(summary, value, [
+    "current_decision_count",
     "exportable_count",
     "non_exportable_follow_up_count",
     "profile_diff_count",
@@ -481,7 +490,10 @@ function sanitizeFeedbackSummary(value: unknown): DashboardState["feedback_summa
     "applied_profile_diff_count",
     "reverted_profile_diff_count",
   ]);
-  assignOptionalStrings(summary, value, ["export_scope_note"]);
+  if (typeof value.changed_since_last_export === "boolean") {
+    summary.changed_since_last_export = value.changed_since_last_export;
+  }
+  assignOptionalStrings(summary, value, ["export_scope_note", "last_export_path"]);
   const nextAction = sanitizeDashboardNextAction(value.next_action);
   if (nextAction) {
     summary.next_action = nextAction;
@@ -860,7 +872,7 @@ function sanitizeDashboardNextAction(value: unknown): DashboardNextAction | unde
     return undefined;
   }
   const action: DashboardNextAction = {};
-  assignOptionalStrings(action, value, ["label", "detail", "command", "target"]);
+  assignOptionalStrings(action, value, ["label", "detail", "command", "target", "target_tab", "action_id", "artifact_path"]);
   return Object.keys(action).length ? action : undefined;
 }
 
@@ -869,6 +881,7 @@ function sanitizeFeedbackImpacts(value: unknown): FeedbackImpact[] {
     const impact: FeedbackImpact = {};
     assignOptionalStrings(impact, record, [
       "created_at",
+      "card_id",
       "profile_id",
       "action",
       "item_title",

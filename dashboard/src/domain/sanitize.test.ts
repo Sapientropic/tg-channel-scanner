@@ -441,10 +441,19 @@ describe("dashboard state sanitizers", () => {
       pull_allowed: false,
       checked_at: "",
     });
-    expect(sanitizeFeedbackExportResult({ feedback_count: 2, output_path: " output/feedback/review-feedback.jsonl " })).toEqual({
+    expect(
+      sanitizeFeedbackExportResult({
+        feedback_count: 2,
+        output_path: " output/feedback/review-feedback.jsonl ",
+        changed_since_last_export: true,
+        exported_at: " 2026-05-10T00:00:00Z ",
+      }),
+    ).toEqual({
       schema_version: "feedback_export_result_v1",
       feedback_count: 2,
       output_path: "output/feedback/review-feedback.jsonl",
+      changed_since_last_export: true,
+      exported_at: "2026-05-10T00:00:00Z",
     });
     expect(sanitizeFeedbackExportResult({ feedback_count: 0, output_path: "out.jsonl" })).toEqual({
       schema_version: "feedback_export_result_v1",

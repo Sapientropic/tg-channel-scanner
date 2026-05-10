@@ -70,12 +70,12 @@ export function buildBoardMeta(activeTab: Tab, state: DashboardState, actionCoun
       tone: "teal",
     },
     settings: {
-      title: "Operations",
+      title: "Settings",
       value: `${settingsActionCount(state)}`,
-      detail: `${state.delivery_targets.filter((target) => target.enabled).length} active targets. ${
-        state.feedback_summary?.exportable_count ?? 0
-      } feedback ready. ${state.source_insights.length} source decisions pending.`,
-      tone: "rust",
+      detail: `Saved sources, notification delivery, and learning controls. ${
+        state.source_insights.length
+      } source decisions pending.`,
+      tone: "blue",
     },
   };
   return metas[activeTab];

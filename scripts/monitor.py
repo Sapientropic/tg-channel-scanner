@@ -1479,17 +1479,25 @@ def export_feedback(args: argparse.Namespace) -> int:
     conn = monitor_state.connect(db_path)
     try:
         entries = monitor_state.export_feedback_entries(conn)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        lines = [json.dumps(entry, ensure_ascii=False) for entry in entries]
+        output_path.write_text(("\n".join(lines) + "\n") if lines else "", encoding="utf-8")
+        exported_at = monitor_state.utc_now()
+        monitor_state.record_feedback_export(
+            conn,
+            output_path=relative_to_root(output_path),
+            feedback_count=len(entries),
+            exported_at=exported_at,
+        )
     finally:
         conn.close()
-
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    lines = [json.dumps(entry, ensure_ascii=False) for entry in entries]
-    output_path.write_text(("\n".join(lines) + "\n") if lines else "", encoding="utf-8")
 
     data = {
         "schema_version": "feedback_export_result_v1",
         "feedback_count": len(entries),
         "output_path": relative_to_root(output_path),
+        "changed_since_last_export": False,
+        "exported_at": exported_at,
     }
     if agent_cli.is_json_format(args):
         agent_cli.print_json(agent_cli.envelope_success(data))

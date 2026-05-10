@@ -142,9 +142,13 @@ export type DashboardNextAction = {
   detail?: string;
   command?: string;
   target?: string;
+  target_tab?: string;
+  action_id?: string;
+  artifact_path?: string;
 };
 
 export type FeedbackImpact = {
+  card_id?: string;
   created_at?: string;
   profile_id?: string;
   action?: string;
@@ -257,8 +261,11 @@ export type DashboardState = {
   source_stats: SourceStat[];
   source_insights: SourceInsight[];
   feedback_summary?: {
-    schema_version?: "dashboard_feedback_summary_v1";
+    schema_version?: "dashboard_feedback_summary_v1" | "dashboard_feedback_summary_v2";
+    current_decision_count?: number;
     exportable_count?: number;
+    changed_since_last_export?: boolean;
+    last_export_path?: string;
     non_exportable_follow_up_count?: number;
     profile_diff_count?: number;
     pending_profile_diff_count?: number;
@@ -432,4 +439,6 @@ export type FeedbackExportResult = {
   schema_version: "feedback_export_result_v1";
   feedback_count: number;
   output_path: string;
+  changed_since_last_export?: boolean;
+  exported_at?: string;
 };

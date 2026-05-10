@@ -16,6 +16,7 @@
 }
 
 .settings-grid {
+  display: grid;
   grid-template-columns: minmax(320px, 0.76fr) minmax(0, 1.24fr);
   grid-template-areas:
     "delivery source-import"

@@ -113,6 +113,7 @@
 
 .feedback-impact {
   display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: 3px;
   min-width: 0;
   padding: 8px;
@@ -137,8 +138,28 @@
 .feedback-impact span,
 .feedback-impact strong,
 .feedback-impact small {
+  grid-column: 1;
   min-width: 0;
   overflow-wrap: anywhere;
+}
+
+.feedback-impact .icon-button {
+  grid-column: 2;
+  grid-row: 1 / span 3;
+  align-self: center;
+  display: inline-grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--wash-paper-18);
+  background: var(--wash-paper-8);
+  color: var(--paper);
+  cursor: pointer;
+}
+
+.feedback-impact .icon-button:disabled {
+  cursor: wait;
+  opacity: 0.58;
 }
 
 .feedback-impact span {
@@ -193,5 +214,26 @@
   font-size: 12px;
   font-weight: var(--badge-weight);
   text-transform: uppercase;
+}
+
+.feedback-export-row.compact {
+  display: flex;
+  flex-wrap: wrap;
+}
+
+.feedback-export-result {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.feedback-export-result small,
+.feedback-export-result .artifact-chip {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.feedback-troubleshooting {
+  margin-top: 0;
 }
 

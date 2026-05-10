@@ -1493,7 +1493,7 @@ class MonitorStateTests(unittest.TestCase):
         self.assertEqual(summary["action_count"], 3)
         self.assertEqual(summary["by_action"], {"false_positive": 1, "follow_up": 1, "keep": 1})
         self.assertEqual(summary["triage_rate"], 1.0)
-        self.assertEqual(summary["next_action"]["label"], "Review profile diffs")
+        self.assertEqual(summary["next_action"]["label"], "Review preference drafts")
         self.assertNotIn("private note", summary_text)
         self.assertNotIn("private follow-up note", summary_text)
 
@@ -1555,6 +1555,172 @@ class MonitorStateTests(unittest.TestCase):
         self.assertEqual(entries[0]["item_title"], "TypeScript role")
         self.assertEqual(entries[0]["note"], "")
         self.assertNotIn("private note", json.dumps(entries, ensure_ascii=False))
+
+    def test_feedback_action_is_idempotent_per_card(self):
+        conn = sqlite3.connect(":memory:")
+        conn.row_factory = sqlite3.Row
+        monitor_state.init_db(conn)
+        cards = monitor_state.upsert_review_cards(
+            conn,
+            profile_id="jobs-fast",
+            run_id="run-1",
+            items=[
+                {
+                    "topic": "TypeScript role",
+                    "rating": "high",
+                    "decision_state": {"status": "new", "semantic_cluster": "feedback-1"},
+                    "source_message_refs": [{"channel": "jobs", "id": 1}],
+                }
+            ],
+        )
+
+        monitor_state.set_card_action(conn, card_id=cards[0]["card_id"], action="keep")
+        monitor_state.set_card_action(conn, card_id=cards[0]["card_id"], action="keep")
+
+        entries = monitor_state.export_feedback_entries(conn)
+        summary = monitor_state.feedback_summary(conn)
+
+        self.assertEqual(len(entries), 1)
+        self.assertEqual(entries[0]["feedback"], "keep")
+        self.assertEqual(summary["current_decision_count"], 1)
+        self.assertEqual(summary["exportable_count"], 1)
+        self.assertEqual(summary["by_action"], {"keep": 1})
+
+    def test_feedback_action_change_replaces_previous_card_decision(self):
+        conn = sqlite3.connect(":memory:")
+        conn.row_factory = sqlite3.Row
+        monitor_state.init_db(conn)
+        cards = monitor_state.upsert_review_cards(
+            conn,
+            profile_id="jobs-fast",
+            run_id="run-1",
+            items=[{"topic": "TypeScript role", "rating": "high", "source_message_refs": [{"channel": "jobs", "id": 1}]}],
+        )
+
+        monitor_state.set_card_action(conn, card_id=cards[0]["card_id"], action="keep")
+        updated = monitor_state.set_card_action(conn, card_id=cards[0]["card_id"], action="false_positive")
+
+        entries = monitor_state.export_feedback_entries(conn)
+        summary = monitor_state.feedback_summary(conn)
+
+        self.assertEqual(updated["status"], "false_positive")
+        self.assertEqual(len(entries), 1)
+        self.assertEqual(entries[0]["feedback"], "false_positive")
+        self.assertEqual(summary["by_action"], {"false_positive": 1})
+
+    def test_feedback_summary_tracks_changes_since_last_export(self):
+        conn = sqlite3.connect(":memory:")
+        conn.row_factory = sqlite3.Row
+        monitor_state.init_db(conn)
+        cards = monitor_state.upsert_review_cards(
+            conn,
+            profile_id="jobs-fast",
+            run_id="run-1",
+            items=[{"topic": "TypeScript role", "rating": "high", "source_message_refs": [{"channel": "jobs", "id": 1}]}],
+        )
+        monitor_state.set_card_action(conn, card_id=cards[0]["card_id"], action="keep")
+        conn.execute("UPDATE feedback_events SET created_at = ?", ("2026-05-10T00:00:00Z",))
+
+        monitor_state.record_feedback_export(
+            conn,
+            output_path="output/feedback/review-feedback.jsonl",
+            feedback_count=1,
+            exported_at="2026-05-10T00:00:01Z",
+        )
+        exported_summary = monitor_state.feedback_summary(conn)
+        conn.execute("UPDATE feedback_events SET created_at = ?", ("2026-05-10T00:00:02Z",))
+        changed_summary = monitor_state.feedback_summary(conn)
+
+        self.assertFalse(exported_summary["changed_since_last_export"])
+        self.assertEqual(exported_summary["last_export_path"], "output/feedback/review-feedback.jsonl")
+        self.assertTrue(changed_summary["changed_since_last_export"])
+
+    def test_undo_card_feedback_restores_pending_review_state(self):
+        conn = sqlite3.connect(":memory:")
+        conn.row_factory = sqlite3.Row
+        monitor_state.init_db(conn)
+        cards = monitor_state.upsert_review_cards(
+            conn,
+            profile_id="jobs-fast",
+            run_id="run-1",
+            items=[{"topic": "TypeScript role", "rating": "high", "source_message_refs": [{"channel": "jobs", "id": 1}]}],
+        )
+        monitor_state.set_card_action(conn, card_id=cards[0]["card_id"], action="keep")
+
+        restored = monitor_state.undo_card_action(conn, card_id=cards[0]["card_id"])
+
+        self.assertEqual(restored["status"], monitor_state.PENDING_STATUS)
+        self.assertEqual(monitor_state.export_feedback_entries(conn), [])
+        self.assertEqual(monitor_state.feedback_summary(conn)["current_decision_count"], 0)
+
+    def test_clear_feedback_decisions_restores_cards_without_removing_runs(self):
+        conn = sqlite3.connect(":memory:")
+        conn.row_factory = sqlite3.Row
+        monitor_state.init_db(conn)
+        monitor_state.record_run(
+            conn,
+            {
+                "run_id": "run-1",
+                "profile_id": "jobs-fast",
+                "status": "complete",
+                "started_at": "2026-05-10T00:00:00Z",
+                "completed_at": "2026-05-10T00:01:00Z",
+            },
+        )
+        cards = monitor_state.upsert_review_cards(
+            conn,
+            profile_id="jobs-fast",
+            run_id="run-1",
+            items=[
+                {"topic": "Kept role", "rating": "high", "source_message_refs": [{"channel": "jobs", "id": 1}]},
+                {"topic": "Skipped role", "rating": "low", "source_message_refs": [{"channel": "jobs", "id": 2}]},
+            ],
+        )
+        monitor_state.set_card_action(conn, card_id=cards[0]["card_id"], action="keep")
+        monitor_state.set_card_action(conn, card_id=cards[1]["card_id"], action="skip")
+
+        result = monitor_state.clear_feedback_decisions(conn)
+
+        statuses = [
+            row["status"]
+            for row in conn.execute("SELECT status FROM review_cards ORDER BY title").fetchall()
+        ]
+        run_count = conn.execute("SELECT COUNT(*) FROM runs").fetchone()[0]
+        self.assertEqual(result["cleared_count"], 2)
+        self.assertEqual(statuses, [monitor_state.PENDING_STATUS, monitor_state.PENDING_STATUS])
+        self.assertEqual(run_count, 1)
+        self.assertEqual(monitor_state.export_feedback_entries(conn), [])
+
+    def test_clear_feedback_decisions_keeps_preference_draft_history(self):
+        conn = sqlite3.connect(":memory:")
+        conn.row_factory = sqlite3.Row
+        monitor_state.init_db(conn)
+        with tempfile.TemporaryDirectory() as tmp:
+            profile_path = Path(tmp) / "profile.md"
+            profile_path.write_text("# Profile\n", encoding="utf-8")
+            monitor_state.upsert_profile(
+                conn,
+                {"id": "jobs-fast", "path": str(profile_path), "enabled": True},
+            )
+            cards = monitor_state.upsert_review_cards(
+                conn,
+                profile_id="jobs-fast",
+                run_id="run-1",
+                items=[{"topic": "Draft role", "rating": "medium", "source_message_refs": [{"channel": "jobs", "id": 1}]}],
+            )
+            monitor_state.set_card_action(
+                conn,
+                card_id=cards[0]["card_id"],
+                action="follow_up",
+                note="prefer remote TypeScript contracts",
+                profile_path=profile_path,
+            )
+
+            result = monitor_state.clear_feedback_decisions(conn)
+
+        patch_count = conn.execute("SELECT COUNT(*) FROM profile_patch_suggestions").fetchone()[0]
+        self.assertEqual(result["cleared_count"], 1)
+        self.assertEqual(patch_count, 1)
 
     def test_feedback_export_recovers_legacy_placeholder_titles(self):
         conn = sqlite3.connect(":memory:")
@@ -1634,18 +1800,18 @@ class MonitorStateTests(unittest.TestCase):
         self.assertEqual(snapshot["feedback_summary"]["pending_profile_diff_count"], 1)
         self.assertEqual(snapshot["feedback_summary"]["applied_profile_diff_count"], 0)
         self.assertEqual(snapshot["feedback_summary"]["reverted_profile_diff_count"], 0)
-        self.assertIn("follow_up becomes profile diffs", snapshot["feedback_summary"]["export_scope_note"])
+        self.assertIn("follow_up becomes preference drafts", snapshot["feedback_summary"]["export_scope_note"])
         self.assertEqual(snapshot["feedback_summary"]["by_action"], {"false_positive": 1, "keep": 1, "skip": 1})
         self.assertEqual(snapshot["feedback_summary"]["by_rating"], {"high": 1, "low": 1, "medium": 1})
         self.assertEqual(snapshot["feedback_summary"]["by_decision_status"], {"unknown": 3})
-        self.assertEqual(snapshot["feedback_summary"]["next_action"]["label"], "Review profile diffs")
+        self.assertEqual(snapshot["feedback_summary"]["next_action"]["label"], "Review preference drafts")
         impacts = {item["item_title"]: item for item in snapshot["feedback_summary"]["recent_impacts"]}
         self.assertEqual(impacts["Kept role"]["impact_type"], "decision_memory_export")
         self.assertEqual(impacts["Kept role"]["impact_status"], "ready")
         self.assertEqual(impacts["Kept role"]["impact_label"], "Ready for export")
         self.assertEqual(impacts["Follow up role"]["impact_type"], "profile_diff")
         self.assertEqual(impacts["Follow up role"]["impact_status"], "pending")
-        self.assertEqual(impacts["Follow up role"]["impact_label"], "Profile diff pending")
+        self.assertEqual(impacts["Follow up role"]["impact_label"], "Preference draft pending")
         self.assertNotIn("profile tweak", json.dumps(snapshot["feedback_summary"], ensure_ascii=False))
 
     def test_dashboard_feedback_export_copy_is_user_facing(self):
@@ -1678,7 +1844,7 @@ class MonitorStateTests(unittest.TestCase):
         snapshot = monitor_state.dashboard_snapshot(conn)
 
         feedback_json = json.dumps(snapshot["feedback_summary"], ensure_ascii=False)
-        self.assertEqual(snapshot["feedback_summary"]["next_action"]["label"], "Export feedback file")
+        self.assertEqual(snapshot["feedback_summary"]["next_action"]["label"], "Apply feedback to future reports")
         self.assertNotIn("decision-memory import", feedback_json)
         self.assertNotIn("note-free", feedback_json)
         self.assertIn("future reports learn", snapshot["feedback_summary"]["next_action"]["detail"])

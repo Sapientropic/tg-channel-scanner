@@ -1,5 +1,18 @@
 import { useEffect, useState } from "react";
-import { Bell, BellOff, Check, FileDiff, Pause, Play, RefreshCw, Save, SlidersHorizontal, Sun, UserRoundCog, X } from "lucide-react";
+import {
+  Bell,
+  BellOff,
+  Check,
+  CirclePause,
+  CirclePlay,
+  FileDiff,
+  RefreshCw,
+  Save,
+  SlidersHorizontal,
+  Sun,
+  UserRoundCog,
+  X,
+} from "lucide-react";
 
 import { InlineEmpty, PanelHeader } from "./common";
 import { alertMode, diffStats, toneClass } from "../domain/display";
@@ -69,7 +82,7 @@ export function ProfilesView({
         )}
       </div>
       <div className="plain-panel">
-        <PanelHeader icon={<FileDiff size={18} />} title="Profile Diffs" count={patches.length} />
+        <PanelHeader icon={<FileDiff size={18} />} title="Preference Drafts" count={patches.length} />
         {patches.length ? (
           <div className="patch-list">
             {patches.map((patch) => {
@@ -101,7 +114,7 @@ export function ProfilesView({
                     <details className="patch-diff-details">
                       <summary>
                         <FileDiff size={14} />
-                        <span>View patch</span>
+                        <span>View draft diff</span>
                       </summary>
                       <pre>{patch.diff_text || "No diff body recorded."}</pre>
                     </details>
@@ -136,7 +149,7 @@ export function ProfilesView({
             })}
           </div>
         ) : (
-          <InlineEmpty title="No pending profile diffs" />
+          <InlineEmpty title="No pending preference drafts" />
         )}
       </div>
     </section>
@@ -261,7 +274,7 @@ function ProfileEnabledControl({
       onClick={() => setProfileEnabled(profile.profile_id, nextEnabled)}
       type="button"
     >
-      {profile.enabled ? <Pause size={15} /> : <Play size={15} />}
+      {profile.enabled ? <CirclePause size={15} /> : <CirclePlay size={15} />}
       <span>{profile.enabled ? "Pause" : "Resume"}</span>
     </button>
   );

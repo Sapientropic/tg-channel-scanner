@@ -181,13 +181,13 @@ DESK_ACTIONS: tuple[dict, ...] = (
     {
         "action_id": "feedback_export",
         "group": "Feedback",
-        "title": "Export feedback",
-        "detail": "Write note-free keep / skip / false-positive feedback JSONL.",
+        "title": "Apply feedback to future reports",
+        "detail": "Save current keep / skip / false-positive decisions so future reports can learn from them.",
         "run_mode": "execute",
         "display_command": "tgcs feedback export",
         "argv": ["feedback", "export", "--format", "json"],
         "artifact_keys": ["output_path"],
-        "next_action": "Reuse the exported file in a later decision-memory run.",
+        "next_action": "Run another dry-run report with local learning applied.",
     },
     {
         "action_id": "schedule_preview",
@@ -555,10 +555,20 @@ def write_feedback_export(conn, *, output_path: Path | None = None) -> dict:
     target.parent.mkdir(parents=True, exist_ok=True)
     lines = [json.dumps(entry, ensure_ascii=False) for entry in entries]
     target.write_text(("\n".join(lines) + "\n") if lines else "", encoding="utf-8")
+    exported_at = monitor_state.utc_now()
+    relative_path = dashboard_relative_path(target)
+    monitor_state.record_feedback_export(
+        conn,
+        output_path=relative_path,
+        feedback_count=len(entries),
+        exported_at=exported_at,
+    )
     return {
         "schema_version": "feedback_export_result_v1",
         "feedback_count": len(entries),
-        "output_path": dashboard_relative_path(target),
+        "output_path": relative_path,
+        "changed_since_last_export": False,
+        "exported_at": exported_at,
     }
 
 
@@ -1917,6 +1927,17 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 with close_after_use(self._connect()) as conn:
                     result = write_feedback_export(conn)
                 self._json(HTTPStatus.OK, {"ok": True, "export": result})
+                return
+            if parsed.path == "/api/feedback/clear":
+                with close_after_use(self._connect()) as conn:
+                    result = monitor_state.clear_feedback_decisions(conn)
+                self._json(HTTPStatus.OK, {"ok": True, "feedback": result})
+                return
+            if parsed.path.startswith("/api/review-cards/") and parsed.path.endswith("/undo"):
+                card_id = unquote(parsed.path.split("/")[3])
+                with close_after_use(self._connect()) as conn:
+                    card = monitor_state.undo_card_action(conn, card_id=card_id)
+                self._json(HTTPStatus.OK, {"ok": True, "card": card})
                 return
             if parsed.path.startswith("/api/review-cards/") and parsed.path.endswith("/action"):
                 card_id = unquote(parsed.path.split("/")[3])

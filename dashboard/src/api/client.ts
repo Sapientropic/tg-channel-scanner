@@ -41,6 +41,15 @@ export async function postReviewCardAction(cardId: string, action: string, note 
   await assertOk(response);
 }
 
+export async function undoReviewCardAction(cardId: string) {
+  const response = await fetch(`/api/review-cards/${encodeURIComponent(cardId)}/undo`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({}),
+  });
+  await assertOk(response);
+}
+
 export async function applyProfilePatch(patchId: string) {
   const response = await fetch(`/api/profile-patches/${encodeURIComponent(patchId)}/apply`, {
     method: "POST",
@@ -114,6 +123,15 @@ export async function exportFeedback(): Promise<FeedbackExportResult> {
     throw new Error("Invalid feedback export response");
   }
   return result;
+}
+
+export async function clearFeedbackDecisions(): Promise<number> {
+  const payload = await postJson("/api/feedback/clear", {});
+  const feedback = payload.feedback as Record<string, unknown> | undefined;
+  if (!feedback || typeof feedback !== "object" || typeof feedback.cleared_count !== "number") {
+    throw new Error("Invalid feedback clear response");
+  }
+  return feedback.cleared_count;
 }
 
 export async function loadDeskActions(signal?: AbortSignal): Promise<DeskAction[]> {

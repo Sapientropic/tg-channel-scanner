@@ -99,6 +99,11 @@
     grid-template-columns: 1fr;
   }
 
+  .workbench {
+    animation: none;
+    transform: none;
+  }
+
   .settings-grid {
     grid-template-areas:
       "delivery"
@@ -125,9 +130,18 @@
     border-bottom: 1px solid var(--line);
   }
 
+  .app-shell {
+    padding-bottom: 64px;
+  }
+
   .nav-rail {
-    order: 2;
-    position: static;
+    order: 0;
+    position: sticky;
+    z-index: 30;
+    top: 8px;
+    padding: 8px;
+    background: color-mix(in oklch, var(--ink) 96%, transparent);
+    box-shadow: var(--panel-shadow);
   }
 
   .main-board {
@@ -145,10 +159,12 @@
 
   .tabs {
     grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 6px;
   }
 
   .tab {
     grid-template-columns: 24px minmax(0, 1fr);
+    min-height: 50px;
   }
 
   .tab-count {
@@ -202,15 +218,16 @@
   }
 
   .start-summary {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(auto-fit, minmax(135px, 1fr));
   }
 
   .start-summary div {
-    border-right: 0;
+    border-right: 1px solid var(--line);
     border-bottom: 1px solid var(--line);
   }
 
   .start-summary div:last-child {
+    border-right: 0;
     border-bottom: 0;
   }
 
@@ -359,7 +376,7 @@
   .tab {
     grid-template-columns: 1fr;
     justify-items: center;
-    min-height: 48px;
+    min-height: 54px;
     padding: 0 6px;
   }
 
@@ -373,6 +390,32 @@
 
   .action-cluster {
     grid-template-columns: 1fr;
+  }
+
+  .filter-chip,
+  .source-chip.source-link,
+  .action-cluster button,
+  .journey-button,
+  .start-summary-action,
+  .settings-workbench .text-button,
+  .source-library-topics button,
+  .git-actions button,
+  .source-import-actions .text-button,
+  .delivery-actions .text-button,
+  .source-library-side .text-button,
+  .repository-toolbar .text-button {
+    min-height: 44px;
+  }
+
+  .source-library-topics button {
+    min-width: 44px;
+  }
+
+  .source-import-topic input,
+  .source-library-search input,
+  .delivery-field input,
+  .notification-token-panel input {
+    min-height: 44px;
   }
 
   .review-card:not([data-actions-expanded="true"]) .action-cluster {

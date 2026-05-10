@@ -190,6 +190,13 @@ def init_db(conn: sqlite3.Connection) -> None:
             FOREIGN KEY(card_id) REFERENCES review_cards(card_id) ON DELETE SET NULL
         );
 
+        CREATE TABLE IF NOT EXISTS feedback_exports (
+            export_id TEXT PRIMARY KEY,
+            output_path TEXT NOT NULL,
+            feedback_count INTEGER NOT NULL,
+            exported_at TEXT NOT NULL
+        );
+
         CREATE TABLE IF NOT EXISTS profile_patch_suggestions (
             patch_id TEXT PRIMARY KEY,
             profile_id TEXT NOT NULL,
@@ -779,6 +786,14 @@ def set_card_action(
         "UPDATE review_cards SET status = ?, handled_at = ?, updated_at = ? WHERE card_id = ?",
         (status, now, now, card_id),
     )
+    # Feedback is a current decision per review card, not an append-only click
+    # log. Replacing the old row here keeps repeated clicks idempotent and
+    # prevents stale choices from leaking into future report learning.
+    conn.execute("DELETE FROM feedback_events WHERE card_id = ?", (card_id,))
+    conn.execute(
+        "DELETE FROM profile_patch_suggestions WHERE card_id = ? AND status = 'pending'",
+        (card_id,),
+    )
     conn.execute(
         """
         INSERT INTO feedback_events(event_id, card_id, profile_id, action, note, created_at)
@@ -800,6 +815,41 @@ def set_card_action(
     if patch:
         updated["profile_patch_suggestion"] = patch
     return updated
+
+
+def undo_card_action(conn: sqlite3.Connection, *, card_id: str) -> dict[str, Any]:
+    get_review_card(conn, card_id)
+    now = utc_now()
+    conn.execute("DELETE FROM feedback_events WHERE card_id = ?", (card_id,))
+    conn.execute(
+        "DELETE FROM profile_patch_suggestions WHERE card_id = ? AND status = 'pending'",
+        (card_id,),
+    )
+    conn.execute(
+        "UPDATE review_cards SET status = ?, handled_at = NULL, updated_at = ? WHERE card_id = ?",
+        (PENDING_STATUS, now, card_id),
+    )
+    conn.commit()
+    return get_review_card(conn, card_id)
+
+
+def clear_feedback_decisions(conn: sqlite3.Connection) -> dict[str, Any]:
+    rows = conn.execute("SELECT DISTINCT card_id FROM feedback_events WHERE card_id IS NOT NULL").fetchall()
+    card_ids = [str(row["card_id"]) for row in rows if row["card_id"]]
+    cleared_count = len(card_ids)
+    now = utc_now()
+    conn.execute("DELETE FROM feedback_events")
+    if card_ids:
+        placeholders = ",".join("?" for _ in card_ids)
+        conn.execute(
+            f"UPDATE review_cards SET status = ?, handled_at = NULL, updated_at = ? WHERE card_id IN ({placeholders})",
+            [PENDING_STATUS, now, *card_ids],
+        )
+    conn.commit()
+    return {
+        "schema_version": "feedback_clear_result_v1",
+        "cleared_count": cleared_count,
+    }
 
 
 def export_feedback_entries(conn: sqlite3.Connection) -> list[dict[str, Any]]:
@@ -837,31 +887,80 @@ def export_feedback_entries(conn: sqlite3.Connection) -> list[dict[str, Any]]:
     return entries
 
 
+def record_feedback_export(
+    conn: sqlite3.Connection,
+    *,
+    output_path: str,
+    feedback_count: int,
+    exported_at: str | None = None,
+) -> dict[str, Any]:
+    exported_at = exported_at or utc_now()
+    row = {
+        "schema_version": "feedback_export_record_v1",
+        "export_id": "feedback_export_" + uuid.uuid4().hex,
+        "output_path": output_path,
+        "feedback_count": int(feedback_count),
+        "exported_at": exported_at,
+    }
+    conn.execute(
+        """
+        INSERT INTO feedback_exports(export_id, output_path, feedback_count, exported_at)
+        VALUES (?, ?, ?, ?)
+        """,
+        (row["export_id"], output_path, int(feedback_count), exported_at),
+    )
+    conn.commit()
+    return row
+
+
+def latest_feedback_export(conn: sqlite3.Connection) -> dict[str, Any] | None:
+    row = conn.execute(
+        """
+        SELECT output_path, feedback_count, exported_at
+        FROM feedback_exports
+        ORDER BY exported_at DESC, export_id DESC
+        LIMIT 1
+        """
+    ).fetchone()
+    if not row:
+        return None
+    return {
+        "output_path": row["output_path"] or "",
+        "feedback_count": int(row["feedback_count"] or 0),
+        "exported_at": row["exported_at"] or "",
+    }
+
+
 def feedback_next_action(exportable_count: int, follow_up_count: int, patch_counts: dict[str, int]) -> dict[str, str]:
     pending_diffs = patch_counts.get("pending", 0)
     applied_diffs = patch_counts.get("applied", 0)
     if pending_diffs:
         return {
-            "label": "Review profile diffs",
-            "detail": "Pending follow-up diffs are waiting in Profiles before the next tuning pass.",
-            "target": "profiles",
+            "label": "Review preference drafts",
+            "detail": "Pending follow-up drafts are waiting in Learning before the next tuning pass.",
+            "target_tab": "settings",
+            "action_id": "review_preference_drafts",
         }
     if exportable_count:
         return {
-            "label": "Export feedback file",
-            "detail": "Export these choices so future reports learn.",
-            "command": "tgcs feedback export",
+            "label": "Apply feedback to future reports",
+            "detail": "Save these choices so future reports learn from them.",
+            "target_tab": "settings",
+            "action_id": "feedback_export",
+            "artifact_path": "output/feedback/review-feedback.jsonl",
         }
     if follow_up_count and applied_diffs:
         return {
-            "label": "Run with tuned profile",
-            "detail": "Applied profile diffs are in place; run the profile again and watch false positives.",
-            "command": "tgcs monitor run --profile-id jobs-fast --delivery-mode dry-run",
+            "label": "Run with tuned preferences",
+            "detail": "Applied preference drafts are in place; run the profile again and watch false positives.",
+            "target_tab": "actions",
+            "action_id": "monitor_jobs_dry_run",
         }
     return {
         "label": "Collect feedback",
-        "detail": "Mark keep, skip, false positive, or draft a profile diff after reviewing cards.",
-        "target": "inbox",
+        "detail": "Mark keep, skip, false positive, or draft a preference change after reviewing cards.",
+        "target_tab": "inbox",
+        "action_id": "review_cards",
     }
 
 
@@ -870,6 +969,7 @@ def recent_feedback_impacts(conn: sqlite3.Connection, *, limit: int = 6) -> list
         """
         SELECT
             f.event_id,
+            f.card_id,
             f.created_at,
             f.profile_id,
             f.action,
@@ -895,6 +995,7 @@ def recent_feedback_impacts(conn: sqlite3.Connection, *, limit: int = 6) -> list
         action = str(row["action"] or "unknown")
         impact = {
             "created_at": row["created_at"],
+            "card_id": row["card_id"] or "",
             "profile_id": row["profile_id"],
             "action": action,
             "item_title": title,
@@ -917,15 +1018,15 @@ def recent_feedback_impacts(conn: sqlite3.Connection, *, limit: int = 6) -> list
                     "impact_type": "profile_diff",
                     "impact_status": patch_status,
                     "impact_label": {
-                        "pending": "Profile diff pending",
-                        "applied": "Profile diff applied",
-                        "reverted": "Profile diff reverted",
-                    }.get(patch_status, "Profile diff missing"),
+                        "pending": "Preference draft pending",
+                        "applied": "Preference draft applied",
+                        "reverted": "Preference draft reverted",
+                    }.get(patch_status, "Preference draft missing"),
                     "impact_detail": {
-                        "pending": "Review and apply or leave the generated profile diff in Profiles.",
+                        "pending": "Review and apply or leave the generated preference draft in Learning.",
                         "applied": "This feedback has already changed the local profile.",
                         "reverted": "This feedback changed the profile and was later reverted.",
-                    }.get(patch_status, "Regenerate the follow-up diff if this feedback still matters."),
+                    }.get(patch_status, "Regenerate the follow-up draft if this feedback still matters."),
                     "patch_id": row["patch_id"] or "",
                 }
             )
@@ -976,9 +1077,29 @@ def feedback_summary(conn: sqlite3.Connection) -> dict[str, Any]:
         by_rating[rating] = by_rating.get(rating, 0) + 1
         by_decision_status[decision_status] = by_decision_status.get(decision_status, 0) + 1
     exportable_count = sum(by_action.values())
+    latest_export = latest_feedback_export(conn)
+    last_export_path = latest_export["output_path"] if latest_export else "output/feedback/review-feedback.jsonl"
+    if latest_export and latest_export.get("exported_at"):
+        changed_since_last_export = bool(
+            conn.execute(
+                """
+                SELECT 1
+                FROM feedback_events
+                WHERE action IN ('keep', 'skip', 'false_positive')
+                  AND created_at > ?
+                LIMIT 1
+                """,
+                (latest_export["exported_at"],),
+            ).fetchone()
+        )
+    else:
+        changed_since_last_export = exportable_count > 0
     return {
-        "schema_version": "dashboard_feedback_summary_v1",
+        "schema_version": "dashboard_feedback_summary_v2",
+        "current_decision_count": exportable_count + follow_up_count,
         "exportable_count": exportable_count,
+        "changed_since_last_export": changed_since_last_export,
+        "last_export_path": last_export_path,
         "non_exportable_follow_up_count": follow_up_count,
         "profile_diff_count": sum(patch_counts.values()),
         "pending_profile_diff_count": patch_counts.get("pending", 0),
@@ -988,7 +1109,7 @@ def feedback_summary(conn: sqlite3.Connection) -> dict[str, Any]:
         "recent_impacts": recent_feedback_impacts(conn),
         "export_scope_note": (
             "keep/skip/false_positive export to decision memory; "
-            "follow_up becomes profile diffs for review."
+            "follow_up becomes preference drafts for review."
         ),
         "by_action": by_action,
         "by_rating": by_rating,
@@ -1042,8 +1163,8 @@ def validation_summary(
         }
     elif by_action.get("follow_up", 0) > 0:
         next_action = {
-            "label": "Review profile diffs",
-            "detail": "Follow-up feedback exists; review pending or applied profile diffs before the next run.",
+            "label": "Review preference drafts",
+            "detail": "Follow-up feedback exists; review pending or applied preference drafts before the next run.",
             "command": "",
         }
     elif by_action.get("false_positive", 0) > 0:

@@ -24,9 +24,9 @@ export function ConsoleHeader({ busy, onRefresh }: { busy: boolean; onRefresh: (
           <p className="eyebrow">TG Channel Scanner</p>
           <h1>Signal Desk</h1>
           <div className="header-readout" aria-label="Local dashboard boundary">
-            <span>SQLite local</span>
-            <span>127.0.0.1</span>
-            <span>raw text redacted</span>
+            <span>Local app</span>
+            <span>Data stays local</span>
+            <span>Raw text hidden</span>
           </div>
         </div>
       </div>
@@ -58,7 +58,7 @@ export function NavigationRail({
       </nav>
       <div className="rail-note">
         <ShieldCheck size={16} />
-        <span>Tokens stay outside SQLite</span>
+        <span>Secrets stay local</span>
       </div>
     </aside>
   );

@@ -1,21 +1,31 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
-import { Activity, Bell, CircleDashed, Database, Download, Eye, KeyRound, Pause, Play, Save, ShieldCheck, Trash2, Upload } from "lucide-react";
+import {
+  Activity,
+  Bell,
+  CircleDashed,
+  CirclePause,
+  CirclePlay,
+  Database,
+  Eye,
+  KeyRound,
+  Save,
+  ShieldCheck,
+  Trash2,
+  Upload,
+} from "lucide-react";
 
 import { InlineEmpty, PanelHeader } from "./common";
 import {
   deliveryTargetDetail,
   deliveryTargetName,
-  feedbackImpactKey,
-  formatActionLabel,
   metricShortLabel,
   percentWidth,
   sourceHeatClass,
   sourceSignalScore,
-  toneClass,
 } from "../domain/display";
 import { channelDisplayName, formatPercent } from "../domain/format";
+import { LearningPanel } from "./settings/learning-panel";
 import type {
-  DashboardNextAction,
   DashboardState,
   DeskNotificationTokenStatus,
   DeskSource,
@@ -23,7 +33,6 @@ import type {
   DeliveryTestResult,
   DeliveryTarget,
   FeedbackExportResult,
-  FeedbackImpact,
   SourceImportResult,
   SourceInsight,
   SourceStat,
@@ -32,8 +41,7 @@ import type {
 const SOURCE_CARD_LIMIT = 3;
 const SOURCE_HEAT_LIMIT = 72;
 const SOURCE_ACTION_LIMIT = 6;
-export const SOURCE_LIBRARY_PAGE_SIZE = 24;
-const FEEDBACK_IMPACT_LIMIT = 4;
+export const SOURCE_LIBRARY_PAGE_SIZE = 8;
 
 export function SettingsView({
   targets,
@@ -42,6 +50,9 @@ export function SettingsView({
   feedbackSummary,
   feedbackExport,
   exportFeedback,
+  clearFeedback,
+  undoFeedbackDecision,
+  runAgainWithLearning,
   deliveryTest,
   notificationTokenStatus,
   notificationTokenError,
@@ -66,6 +77,9 @@ export function SettingsView({
   feedbackSummary?: DashboardState["feedback_summary"];
   feedbackExport: FeedbackExportResult | null;
   exportFeedback: () => void;
+  clearFeedback: () => void;
+  undoFeedbackDecision: (cardId: string) => void;
+  runAgainWithLearning: () => void;
   deliveryTest: DeliveryTestResult | null;
   notificationTokenStatus: DeskNotificationTokenStatus | null;
   notificationTokenError: string | null;
@@ -84,7 +98,6 @@ export function SettingsView({
   focusTarget?: "notifications" | null;
   onFocusHandled?: () => void;
 }) {
-  const exportableCount = feedbackSummary?.exportable_count ?? feedbackExport?.feedback_count ?? 0;
   const notificationsPanelRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -104,35 +117,6 @@ export function SettingsView({
 
   return (
     <section className="settings-workbench" aria-label="Settings workspace">
-      <section className="settings-section settings-section-notifications" aria-label="Notifications settings">
-        <div className="table-section delivery-targets-panel" ref={notificationsPanelRef} tabIndex={-1} aria-label="Notifications">
-          <PanelHeader icon={<Bell size={18} />} title="Notifications" count={targets.length} />
-          <NotificationTokenPanel
-            busy={busy}
-            clearNotificationToken={clearNotificationToken}
-            error={notificationTokenError}
-            saveNotificationToken={saveNotificationToken}
-            status={notificationTokenStatus}
-          />
-          {targets.length ? (
-            <div className="delivery-target-list">
-              {targets.map((target) => (
-                <DeliveryTargetEditor
-                  busy={busy}
-                  key={target.target_id}
-                  saveDeliveryTarget={saveDeliveryTarget}
-                  target={target}
-                  testDeliveryTarget={testDeliveryTarget}
-                  testResult={deliveryTest?.target_id === target.target_id ? deliveryTest : null}
-                />
-              ))}
-            </div>
-          ) : (
-            <InlineEmpty title="No notification channels set up" />
-          )}
-        </div>
-      </section>
-
       <section className="settings-section settings-section-sources" aria-label="Sources settings">
         <div className="settings-grid sources-settings-grid">
           <SourceImportPanel
@@ -167,23 +151,45 @@ export function SettingsView({
         </details>
       </section>
 
-      <section className="settings-section settings-section-feedback" aria-label="Feedback settings">
-        <div className="table-section feedback-export-panel">
-          <PanelHeader icon={<Download size={18} />} title="Feedback Export" count={exportableCount} />
-          <FeedbackBreakdown summary={feedbackSummary} exportableCount={exportableCount} />
-          {feedbackSummary?.next_action && <FeedbackNextAction action={feedbackSummary.next_action} />}
-          <FeedbackFlow summary={feedbackSummary} />
-          <FeedbackImpactList impacts={feedbackSummary?.recent_impacts ?? []} />
-          <div className="feedback-export-row">
-            <button className="text-button" type="button" onClick={exportFeedback} disabled={busy}>
-              <Download size={15} />
-              <span>{busy ? "Exporting" : "Export feedback file"}</span>
-            </button>
-            <span className="artifact-chip" title="Saved under Feedback exports">
-              Feedback export file
-            </span>
-          </div>
+      <section className="settings-section settings-section-notifications" aria-label="Notifications settings">
+        <div className="table-section delivery-targets-panel" ref={notificationsPanelRef} tabIndex={-1} aria-label="Notifications">
+          <PanelHeader icon={<Bell size={18} />} title="Notifications" count={targets.length} />
+          <NotificationTokenPanel
+            busy={busy}
+            clearNotificationToken={clearNotificationToken}
+            error={notificationTokenError}
+            saveNotificationToken={saveNotificationToken}
+            status={notificationTokenStatus}
+          />
+          {targets.length ? (
+            <div className="delivery-target-list">
+              {targets.map((target) => (
+                <DeliveryTargetEditor
+                  busy={busy}
+                  key={target.target_id}
+                  saveDeliveryTarget={saveDeliveryTarget}
+                  target={target}
+                  testDeliveryTarget={testDeliveryTarget}
+                  testResult={deliveryTest?.target_id === target.target_id ? deliveryTest : null}
+                />
+              ))}
+            </div>
+          ) : (
+            <InlineEmpty title="No notification channels set up" />
+          )}
         </div>
+      </section>
+
+      <section className="settings-section settings-section-feedback" aria-label="Feedback settings">
+        <LearningPanel
+          busy={busy}
+          clearFeedback={clearFeedback}
+          exportFeedback={exportFeedback}
+          exportResult={feedbackExport}
+          runAgainWithLearning={runAgainWithLearning}
+          summary={feedbackSummary}
+          undoFeedbackDecision={undoFeedbackDecision}
+        />
       </section>
     </section>
   );
@@ -294,12 +300,16 @@ function SourceLibraryPanel({
   const isLoading = !library && !error;
   const [query, setQuery] = useState("");
   const [selectedTopic, setSelectedTopic] = useState("");
+  const [showAllTopics, setShowAllTopics] = useState(false);
   const [visibleCount, setVisibleCount] = useState(SOURCE_LIBRARY_PAGE_SIZE);
   const filteredSources = filterDeskSourcesByQuery(sources, query, selectedTopic);
   const visibleSources = paginatedDeskSources(filteredSources, visibleCount);
   const hiddenSourceCount = Math.max(0, filteredSources.length - visibleSources.length);
-  const topicPreview = library?.topics.slice(0, 12) ?? [];
-  const hiddenTopicCount = Math.max(0, (library?.topics.length ?? 0) - topicPreview.length);
+  const topics = library?.topics ?? [];
+  const topicPreview = showAllTopics ? topics : topics.slice(0, 12);
+  const hiddenTopicCount = Math.max(0, topics.length - topicPreview.length);
+  const hasFilters = Boolean(query.trim() || selectedTopic);
+  const countLabel = sourceLibraryCountLabel(visibleSources.length, filteredSources.length, hasFilters);
   useEffect(() => {
     if (selectedTopic && !sources.some((source) => source.topics.includes(selectedTopic))) {
       setSelectedTopic("");
@@ -340,7 +350,16 @@ function SourceLibraryPanel({
                     {topic}
                   </button>
                 ))}
-                {hiddenTopicCount > 0 && <small>+{hiddenTopicCount}</small>}
+                {(hiddenTopicCount > 0 || showAllTopics) && (
+                  <button
+                    aria-expanded={showAllTopics}
+                    className="topic-overflow-toggle"
+                    onClick={() => setShowAllTopics((current) => !current)}
+                    type="button"
+                  >
+                    {showAllTopics ? "Show fewer" : `+${hiddenTopicCount}`}
+                  </button>
+                )}
               </>
             ) : (
               <small>No topics yet</small>
@@ -349,18 +368,31 @@ function SourceLibraryPanel({
         </div>
       )}
       {sources.length > 0 && (
-        <label className="source-library-search">
-          <span>Find source</span>
+        <div className="source-library-search">
+          <label htmlFor="source-library-query">Find source</label>
           <input
+            id="source-library-query"
             onChange={(event) => setQuery(event.target.value)}
             placeholder="@remote_jobs or jobs"
             type="search"
             value={query}
           />
           <small aria-live="polite">
-            {visibleSources.length} of {filteredSources.length} shown
+            {countLabel}
           </small>
-        </label>
+          {hasFilters && (
+            <button
+              className="text-button secondary source-library-clear"
+              onClick={() => {
+                setQuery("");
+                setSelectedTopic("");
+              }}
+              type="button"
+            >
+              Clear filters
+            </button>
+          )}
+        </div>
       )}
       {isLoading ? (
         <InlineEmpty title="Loading saved sources" />
@@ -382,7 +414,7 @@ function SourceLibraryPanel({
               onClick={() => setVisibleCount((count) => count + SOURCE_LIBRARY_PAGE_SIZE)}
               type="button"
             >
-              <span>Load 24 more</span>
+              <span>Load 8 more</span>
               <small>{hiddenSourceCount} remaining</small>
             </button>
           )}
@@ -421,6 +453,21 @@ export function paginatedDeskSources(sources: DeskSource[], visibleCount = SOURC
   return sources.slice(0, Math.max(0, visibleCount));
 }
 
+export function sourceLibraryCountLabel(visibleCount: number, filteredCount: number, hasFilters: boolean) {
+  const visible = Math.max(0, visibleCount);
+  const filtered = Math.max(0, filteredCount);
+  if (hasFilters) {
+    if (!filtered) {
+      return "No matching sources";
+    }
+    return visible >= filtered ? `${filtered} matching shown` : `${visible} of ${filtered} matching shown`;
+  }
+  if (!filtered) {
+    return "No saved sources";
+  }
+  return visible >= filtered ? `Showing all ${filtered}` : `Showing first ${visible} of ${filtered}`;
+}
+
 function SourceLibraryRow({
   source,
   busy,
@@ -456,75 +503,15 @@ function SourceLibraryRow({
       <div className="source-library-main">
         <strong title={source.label}>{source.label}</strong>
         <small title={`@${source.channel}`}>@{source.channel}</small>
-        <div className="source-library-tags" aria-label={`${source.label} topics`}>
-          {source.topics.map((topic) => (
-            <span key={topic} title={`Topic: ${topic}`}>
-              {topic}
-            </span>
-          ))}
-          <span title="Recent messages scanned for this source">{source.scan_window_hours}h window</span>
-          <span title="Source priority">{source.priority}</span>
-        </div>
-        {editingTopics && (
-          <form
-            id={editorId}
-            className="source-topic-editor"
-            onKeyDown={(event) => {
-              if (event.key === "Escape") {
-                event.preventDefault();
-                setTopicText(source.topics.join(", "));
-                setSaveError("");
-                setEditingTopics(false);
-              }
-            }}
-            onSubmit={(event) => {
-              event.preventDefault();
-              if (!topicState.canSave) {
-                return;
-              }
-              setSaveError("");
-              void setSourceTopics(source.source_id, topicState.topics)
-                .then(() => setEditingTopics(false))
-                .catch((error: unknown) => {
-                  setSaveError(error instanceof Error ? error.message : "Could not save topics.");
-                });
-            }}
-          >
-            <label>
-              <span>Topics</span>
-              <input
-                maxLength={200}
-                onChange={(event) => {
-                  setTopicText(event.target.value);
-                  setSaveError("");
-                }}
-                placeholder="jobs, remote-work"
-                ref={topicInputRef}
-                type="text"
-                value={topicText}
-              />
-            </label>
-            <small aria-live="polite">{saveError || topicState.message}</small>
-            <div className="source-topic-actions">
-              <button className="text-button" disabled={busy || !topicState.canSave} type="submit">
-                <Save size={15} />
-                <span>Save topics</span>
-              </button>
-              <button
-                className="text-button secondary"
-                disabled={busy}
-                onClick={() => {
-                  setTopicText(source.topics.join(", "));
-                  setSaveError("");
-                  setEditingTopics(false);
-                }}
-                type="button"
-              >
-                Cancel
-              </button>
-            </div>
-          </form>
-        )}
+      </div>
+      <div className="source-library-tags" aria-label={`${source.label} topics`}>
+        {source.topics.map((topic) => (
+          <span key={topic} title={`Topic: ${topic}`}>
+            {topic}
+          </span>
+        ))}
+        <span title="Recent messages scanned for this source">{source.scan_window_hours}h window</span>
+        <span title="Source priority">{source.priority}</span>
       </div>
       <div className="source-library-side">
         <span className={source.enabled ? "status enabled" : "status disabled"}>
@@ -537,7 +524,7 @@ function SourceLibraryRow({
           onClick={() => void setSourceEnabled(source.source_id, !source.enabled)}
           type="button"
         >
-          {source.enabled ? <Pause size={15} /> : <Play size={15} />}
+          {source.enabled ? <CirclePause size={15} /> : <CirclePlay size={15} />}
           <span>{source.enabled ? "Pause" : "Use"}</span>
         </button>
         <button
@@ -555,6 +542,66 @@ function SourceLibraryRow({
           <span>{editingTopics ? "Hide editor" : "Edit topics"}</span>
         </button>
       </div>
+      {editingTopics && (
+        <form
+          id={editorId}
+          className="source-topic-editor"
+          onKeyDown={(event) => {
+            if (event.key === "Escape") {
+              event.preventDefault();
+              setTopicText(source.topics.join(", "));
+              setSaveError("");
+              setEditingTopics(false);
+            }
+          }}
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (!topicState.canSave) {
+              return;
+            }
+            setSaveError("");
+            void setSourceTopics(source.source_id, topicState.topics)
+              .then(() => setEditingTopics(false))
+              .catch((error: unknown) => {
+                setSaveError(error instanceof Error ? error.message : "Could not save topics.");
+              });
+          }}
+        >
+          <label>
+            <span>Topics</span>
+            <input
+              maxLength={200}
+              onChange={(event) => {
+                setTopicText(event.target.value);
+                setSaveError("");
+              }}
+              placeholder="jobs, remote-work"
+              ref={topicInputRef}
+              type="text"
+              value={topicText}
+            />
+          </label>
+          <small aria-live="polite">{saveError || topicState.message}</small>
+          <div className="source-topic-actions">
+            <button className="text-button" disabled={busy || !topicState.canSave} type="submit">
+              <Save size={15} />
+              <span>Save topics</span>
+            </button>
+            <button
+              className="text-button secondary"
+              disabled={busy}
+              onClick={() => {
+                setTopicText(source.topics.join(", "));
+                setSaveError("");
+                setEditingTopics(false);
+              }}
+              type="button"
+            >
+              Cancel
+            </button>
+          </div>
+        </form>
+      )}
     </article>
   );
 }
@@ -836,58 +883,6 @@ function MetricBar({ label, value, detail }: { label: string; value: number; det
   );
 }
 
-function FeedbackFlow({ summary }: { summary?: DashboardState["feedback_summary"] }) {
-  return (
-    <div className="feedback-flow" aria-label="Feedback learning flow">
-      <span title="Ready for note-free feedback export">
-        <strong>{summary?.exportable_count ?? 0}</strong>
-        export
-      </span>
-      <span title="Profile changes waiting for review">
-        <strong>{summary?.pending_profile_diff_count ?? 0}</strong>
-        pending
-      </span>
-      <span title="Applied profile changes">
-        <strong>{summary?.applied_profile_diff_count ?? 0}</strong>
-        applied
-      </span>
-    </div>
-  );
-}
-
-function FeedbackBreakdown({
-  summary,
-  exportableCount,
-}: {
-  summary?: DashboardState["feedback_summary"];
-  exportableCount: number;
-}) {
-  const items = [
-    { label: "Keep", value: summary?.by_action?.keep ?? 0 },
-    { label: "Skip", value: summary?.by_action?.skip ?? 0 },
-    { label: "False", value: summary?.by_action?.false_positive ?? 0 },
-    { label: "Diff", value: summary?.non_exportable_follow_up_count ?? 0 },
-    { label: "High", value: summary?.by_rating?.high ?? 0 },
-    { label: "Changed", value: summary?.by_decision_status?.changed ?? 0 },
-  ].filter((item) => item.value > 0);
-  if (!items.length) {
-    return (
-      <InlineEmpty
-        title={exportableCount > 0 ? "Feedback rows need action labels" : "No feedback actions yet"}
-      />
-    );
-  }
-  return (
-    <div className="feedback-breakdown" aria-label="Feedback action counts">
-      {items.map((item) => (
-        <span className={item.value > 0 ? "" : "muted"} key={item.label}>
-          {item.label} {item.value}
-        </span>
-      ))}
-    </div>
-  );
-}
-
 function SourceActionGrid({ insights }: { insights: SourceInsight[] }) {
   const visible = insights.slice(0, SOURCE_ACTION_LIMIT);
   const hiddenCount = Math.max(0, insights.length - visible.length);
@@ -932,39 +927,6 @@ function SourceActionGrid({ insights }: { insights: SourceInsight[] }) {
         </article>
       ))}
       {hiddenCount > 0 && <div className="list-overflow-note">+{hiddenCount} more source actions queued</div>}
-    </div>
-  );
-}
-
-function FeedbackNextAction({ action }: { action: DashboardNextAction }) {
-  return (
-    <div className="feedback-next-action" aria-label="Feedback next action">
-      <span className="panel-kicker">Learning loop</span>
-      <strong>{action.label || "Collect feedback"}</strong>
-      {action.detail && <small>{action.detail}</small>}
-    </div>
-  );
-}
-
-function FeedbackImpactList({ impacts }: { impacts: FeedbackImpact[] }) {
-  const visible = impacts.slice(0, FEEDBACK_IMPACT_LIMIT);
-  const hiddenCount = Math.max(0, impacts.length - visible.length);
-  if (!visible.length) {
-    return <InlineEmpty title="No feedback impact yet" />;
-  }
-  return (
-    <div className="feedback-impact-list" aria-label="Recent feedback impact">
-      {visible.map((impact, index) => (
-        <article className={`feedback-impact ${toneClass(impact.impact_status || "unknown")}`} key={feedbackImpactKey(impact, index)}>
-          <span>{impact.impact_label || "Feedback recorded"}</span>
-          <strong>{impact.item_title || "Review card"}</strong>
-          <small>
-            {formatActionLabel(impact.action || "feedback")} / {impact.rating || "unknown"} /{" "}
-            {impact.decision_status || "unknown"}
-          </small>
-        </article>
-      ))}
-      {hiddenCount > 0 && <div className="list-overflow-note">+{hiddenCount} more feedback impacts saved</div>}
     </div>
   );
 }
