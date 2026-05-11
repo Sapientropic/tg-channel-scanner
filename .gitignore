@@ -24,6 +24,18 @@ dashboard/dist/
 output/
 .tgcs/
 
+# Local generated review workspaces and media
+docs/demo/
+docs/demo.mp4
+docs/report-design-context.md
+docs/v0.5-alpha-alert-review-inbox.md
+docs/quality-iteration.md
+docs/quality-task-state.md
+docs/archive/quality-iteration-*.md
+docs/pixel-ui-library-evaluation-report.md
+docs/signal-desk-ux-redesign.md
+docs/research/
+
 # OS
 .DS_Store
 Thumbs.db

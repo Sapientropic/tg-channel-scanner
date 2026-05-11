@@ -1,4 +1,4 @@
-# TG Channel Scanner Roadmap
+# T-Sense Roadmap
 
 Last researched: 2026-05-09
 
@@ -10,7 +10,7 @@ legal positioning.
 
 ## Product Direction
 
-TG Channel Scanner should become a local-first Telegram intelligence loop:
+T-Sense should become a local-first Telegram intelligence loop:
 
 1. Read channels the user already subscribes to.
 2. Apply a plain Markdown profile that describes what counts as signal.
@@ -86,7 +86,7 @@ gates.
 
 2. A chronological feed is still too much work.
    Aggregators solve "one place," but the user still has to decide what matters.
-   TG Channel Scanner should rank by a profile and explain why a post is
+   T-Sense should rank by a profile and explain why a post is
    apply-worthy, investigate-worthy, duplicate, or rejected.
 
 3. Private and member-only sources matter.
@@ -103,7 +103,7 @@ gates.
 
 5. Privacy and cost need explicit controls.
    Telebrief's Ollama/local path and self-hosting language show that privacy and
-   vendor lock-in matter in this category. TG Channel Scanner should keep OCR,
+   vendor lock-in matter in this category. T-Sense should keep OCR,
    STT, full-video upload, and cloud LLM use opt-in and visible.
 
 6. Automation tools leave too much glue work.
@@ -164,13 +164,12 @@ Non-goals for now:
    turning local automation into an enterprise approval workflow. Prompt/profile
    changes should be visible, reversible, and easy to apply.
 
-## Current Design Entry
+## Current Product Entry
 
-The detailed planning authority for the next delivery iteration is
-[`docs/v0.5-alpha-alert-review-inbox.md`](docs/v0.5-alpha-alert-review-inbox.md).
-Keep implementation-specific details there until the feature ships. This
-roadmap should retain phase intent and exit criteria, not duplicate the full
-dashboard, alert, or profile-editing contract.
+Signal Desk is now the primary human surface for setup, source import, review,
+runs, profile tuning, notifications, learning suggestions, and repository
+checks. Keep the public story in `README.md`; keep deep design-review notes,
+visual contracts, and temporary quality logs out of public docs.
 
 ## Roadmap
 
@@ -213,8 +212,7 @@ Already in scope or recently addressed:
   placeholder market-news examples.
 - Signal Desk is now the primary human surface for setup, source import,
   review, runs, profile tuning, notifications, learning export, and repository
-  checks. Detailed Dashboard / Review / Settings / Runs interaction rules live
-  in [`docs/v0.5-alpha-alert-review-inbox.md`](docs/v0.5-alpha-alert-review-inbox.md).
+  checks.
 - Dashboard state is projected down to human labels, counts, health summaries,
   and report-only artifacts by default; raw scan artifacts, full profile config,
   registry paths, hashes, and error files stay in local manifests for debugging.
@@ -312,9 +310,8 @@ review dashboard.
 Alpha implementation is in active hardening. The shipped surface includes the
 monitor runner, run manifests, SQLite-backed review state, alert candidates,
 profile patch suggestions, dry-run delivery controls, and the local Signal Desk
-dashboard. Detailed alpha interaction rules and shipped hardening notes live in
-[`docs/v0.5-alpha-alert-review-inbox.md`](docs/v0.5-alpha-alert-review-inbox.md);
-this roadmap keeps only phase direction and exit criteria.
+dashboard. This roadmap keeps phase direction and exit criteria; detailed
+design-review notes stay local.
 
 The existing v0.4 scan/report JSON contracts remain the agent-facing base.
 Dashboard state is local `.tgcs/tgcs.db` state, not a raw Telegram archive.

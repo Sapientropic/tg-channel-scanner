@@ -1,6 +1,6 @@
 # Agent CLI Contract
 
-This document is the stable agent-facing contract for TG Channel Scanner v0.4
+This document is the stable agent-facing contract for T-Sense v0.4
 and the v0.5-alpha monitor/dashboard layer.
 Human output remains best-effort prose; agents should use `--format json`.
 The short `tgcs` facade is for humans and keeps defaults convenient; it does not
@@ -165,8 +165,8 @@ action API for human-friendly wrappers around fixed local commands:
   configured/source/update metadata, and `POST /api/desk/notification-token`
   accepts only `{ "token": "..." }` or `{ "clear": true }`. Mutation requires
   loopback access. Windows alpha stores the token in Windows Credential Manager;
-  non-Windows keychain support is `[⚠️ 需确认]` and remains an expert/env
-  boundary.
+  non-Windows keychain support still needs confirmation and remains an
+  expert/env boundary.
 - Dedicated notification target endpoints handle the default Telegram Bot target
   without accepting command strings or tokens:
   `/api/desk/delivery-targets/telegram-bot-default` saves `chat_id/enabled`,
@@ -534,8 +534,8 @@ for alerting when it still passes freshness and handled-card gates.
 For future provider-specific LLM optimization, keep semantic extraction prompts
 cache-friendly: stable profile/schema/instructions first, incremental scan
 messages last, and a stable cache key per monitor lane when the selected
-provider supports one. [⚠️ 需确认] Cache retention and pricing are
-provider/model-specific.
+provider supports one. Cache retention and pricing still need provider-specific
+confirmation.
 
 `report.py` must not pass the full scan metadata sidecar into the extraction
 prompt. The LLM prompt uses a small allowlisted scan summary only: scan date,

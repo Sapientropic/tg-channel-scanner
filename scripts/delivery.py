@@ -128,7 +128,7 @@ def build_telegram_alert_text(
     card_id = _clean_text((card or {}).get("card_id") or "", max_len=80)
 
     lines = [
-        f"TGCS alert: {_item_title(item)}",
+        f"T-Sense alert: {_item_title(item)}",
         f"Rating: {rating} / State: {status}",
     ]
     if why:

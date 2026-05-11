@@ -1,574 +1,211 @@
 <div align="center">
 
 <p>
-  <img src="docs/brand/wordmark.png" alt="TG Channel Scanner" width="900">
+  <img src="docs/brand/wordmark.png" alt="T-Sense pixel wordmark" width="860">
 </p>
 
-<h3>Turn Telegram channel noise into a ranked daily signal report.</h3>
-
-<p>
-  <a href="https://www.python.org/downloads/"><img alt="Python 3.12+" src="https://img.shields.io/badge/python-3.12%2B-3776AB?logo=python&logoColor=white"></a>
-  <a href="LICENSE"><img alt="License: AGPL-3.0 + Commercial" src="https://img.shields.io/badge/license-AGPL--3.0%20%2B%20Commercial-blue.svg"></a>
-  <a href="https://core.telegram.org/mtproto"><img alt="Telegram MTProto" src="https://img.shields.io/badge/Telegram-MTProto-26A5E4?logo=telegram&logoColor=white"></a>
-  <a href="https://github.com/Sapientropic/tg-channel-scanner"><img alt="LLM Powered" src="https://img.shields.io/badge/powered%20by-LLM-22C55E?logo=openai&logoColor=white"></a>
-  <img alt="Output: HTML + Markdown" src="https://img.shields.io/badge/output-HTML%20%2B%20Markdown-F59E0B">
-</p>
-
-<p><strong>Read subscribed channels -> apply a Markdown profile -> ship a self-contained HTML report.</strong></p>
-
-<p>Built for job leads, airdrop watchlists, market/news tracking, and any Telegram workflow where the problem is too many channels and too little signal.</p>
+<h3>Your next signal is already in the noise. T-Sense brings it to the surface.</h3>
 
 <p>
   <a href="README.zh-CN.md"><strong>中文文档</strong></a>
   ·
-  <a href="#demo"><strong>Demo</strong></a>
+  <a href="#signal-desk"><strong>Signal Desk</strong></a>
   ·
   <a href="#quick-start"><strong>Quick Start</strong></a>
   ·
-  <a href="#report-output"><strong>Report Output</strong></a>
+  <a href="#cli-for-agents"><strong>CLI for Agents</strong></a>
+  ·
+  <a href="#privacy-and-safety"><strong>Privacy</strong></a>
   ·
   <a href="ROADMAP.md"><strong>Roadmap</strong></a>
-  ·
-  <a href="#safety--telegram-tos"><strong>Safety</strong></a>
 </p>
 
 </div>
 
+T-Sense reads Telegram channels you already have access to, scores the messages
+against a Markdown profile, and gives you a local workflow for reviewing what
+matters. The current product center is **Signal Desk**: a browser dashboard for
+setup, scanning, review, profile tuning, run health, and settings.
+
+The first supported lane is developer opportunities: remote jobs, contracts,
+paid engineering requests, and other time-sensitive posts that get buried in
+Telegram channels.
+
+## Signal Desk
+
+Signal Desk runs on `127.0.0.1`. It keeps setup and review in the app so a
+normal user does not have to edit TOML, copy JSON, or remember CLI commands.
+
+<p align="center">
+  <img src="docs/screenshots/signal-desk-start.png" alt="Signal Desk Start tab" width="860">
+</p>
+
 <table>
   <tr>
-    <td align="center"><strong>Profile-driven</strong><br>Plain Markdown profiles define what counts as a match, reject, or follow-up.</td>
-    <td align="center"><strong>Cutoff-aware</strong><br>Telethon reads through MTProto and stops as soon as messages fall outside your time window.</td>
-    <td align="center"><strong>Report-ready</strong><br>Generate a single HTML file with semantic labels, source links, raw context, and stats.</td>
+    <td width="50%">
+      <img src="docs/screenshots/signal-desk-review.png" alt="Signal Desk Review tab">
+    </td>
+    <td width="50%">
+      <img src="docs/screenshots/signal-desk-profiles.png" alt="Signal Desk Profiles tab">
+    </td>
   </tr>
 </table>
 
-## Demo
+### What you can do in the dashboard
 
-<div align="center">
+| Tab | Purpose |
+| --- | --- |
+| `Start` | Connect Telegram, repair setup, run demo scans, and manage auto-scan controls. |
+| `Review` | Triage the newest/highest-priority cards first, then teach future matching with Keep / Skip / Wrong match / Tune profile. |
+| `Profiles` | Create profiles from plain language or files, edit matching rules, tune scan window and post limits. |
+| `Runs` | See whether recent scans are healthy and open generated report artifacts. |
+| `Settings` | Add sources, set AI/OCR keys, configure notifications, manage learning data, and check repository state. |
 
-https://github.com/user-attachments/assets/d3a6fd44-7140-4843-86af-b32325abae33
-
-</div>
-
-<p align="center"><em>49s walkthrough preview. Source MP4: <a href="docs/demo.mp4">docs/demo.mp4</a>.</em></p>
-
----
+Signal Desk is still local-first. It does not store raw Telegram messages,
+sessions, API keys, or bot tokens in dashboard state.
 
 ## Quick Start
 
-### Prerequisites
+### Windows
 
-- Python 3.12+
-- Telegram account (phone number)
-- Telegram API credentials (`api_id` + `api_hash` from [my.telegram.org/apps](https://my.telegram.org/apps))
+1. Install Python 3.12+.
+2. Clone or download this repository.
+3. Double-click `Signal Desk.bat`.
+4. Keep the launcher window open while using the browser dashboard.
 
-### Install And Open Signal Desk
+The launcher prepares the local Python environment, builds dashboard assets when
+Node/npm is available, and opens Signal Desk on `127.0.0.1`. If port `8765` is
+busy, it tries `8766-8799`.
 
-On Windows, open the app-style local dashboard first:
-
-1. Download or clone this repository.
-2. Double-click `Signal Desk.bat`.
-3. Keep the launcher window open while you use Signal Desk in the browser.
-
-The first launch creates the local Python environment, initializes the jobs
-starter workspace, builds dashboard assets when Node/npm is available, and opens
-Signal Desk on `127.0.0.1`. If 8765 is already a compatible Signal Desk, the
-launcher opens it; if another app is using 8765, Signal Desk tries 8766-8799.
-After that, use the `Start` tab for setup, Telegram login, demo runs, source
-checks, first dry-run scans, feedback export, and schedule previews.
-
-If you prefer the terminal install path:
+### macOS / Linux
 
 ```bash
-git clone https://github.com/Sapientropic/tg-channel-scanner.git
-cd tg-channel-scanner
-chmod +x setup.sh tgcs scripts/scan.sh
+git clone https://github.com/Sapientropic/T-Sense.git
+cd T-Sense
+chmod +x setup.sh tgcs
 ./setup.sh
+./tgcs dashboard --open
 ```
 
-### Configure & Run
+### First useful run
 
-Use Signal Desk's `Start` tab for the normal human flow:
+1. Open `Start` and create the offline demo report. This does not need Telegram
+   login or an LLM key.
+2. Connect Telegram using your `api_id` and `api_hash` from
+   [my.telegram.org/apps](https://my.telegram.org/apps).
+3. Add channel links or handles in `Settings -> Sources`.
+4. Run a dry scan from `Start`.
+5. Review cards in `Review`, then tune the profile when the results are too
+   broad or too narrow.
+6. Open `Runs` when something fails; it shows the next repair step before asking
+   you to trust automation.
 
-- Try the offline demo without Telegram or LLM credentials.
-- Save your Telegram app ID/hash locally.
-- Connect Telegram with phone, code, and 2FA prompts in the browser.
-- Initialize or repair the jobs workspace.
-- Paste Telegram channels in `Settings` -> `Add Sources`, preview duplicates,
-  and import them into the local source registry.
-- Review saved channels in `Settings` -> `Saved Sources`, and pause or resume a
-  source, filter by topic, or edit its topic tags without opening
-  `.tgcs/sources.json`.
-- Run the first `jobs-fast` dry-run scan.
-- Use `Start` -> `Notifications` or open `Settings` directly to set the
-  Telegram notification chat ID, save it muted or live, and run a dry-run
-  notification test without sending a message. `Start` shows whether
-  notifications are `Enabled`, `Muted`, or still missing a chat ID; missing or
-  muted states include an app button that opens the notification settings.
-- Export feedback, preview the dry-run cadence, and turn Windows dry-run
-  automation on or off without typing a command.
+## Profiles
 
-Commands remain available for experts and agents:
+Profiles are Markdown files that describe what counts as signal. They can
+include target roles, keywords, rejection rules, languages, source priorities,
+and reporting preferences.
 
-<details>
-<summary>Expert CLI fallback</summary>
+You can create and adjust profiles from Signal Desk:
+
+- write a plain-language goal;
+- import a Markdown, text, or PDF profile note;
+- edit matching rules directly;
+- apply profile suggestions generated from confirmed review feedback.
+
+The built-in starter focuses on developer opportunities. Additional templates
+cover market/news tracking, airdrops, research leads, and competitor monitoring.
+
+## Reports
+
+Every scan can produce a standalone HTML report with cards, source links,
+decision labels, diagnostics, and run metadata.
+
+<table>
+  <tr>
+    <td width="50%">
+      <img src="docs/screenshots/report-header.png" alt="Generated report header">
+    </td>
+    <td width="50%">
+      <img src="docs/screenshots/report-cards.png" alt="Generated report cards">
+    </td>
+  </tr>
+</table>
+
+Reports are written under `output/`; monitor runs use
+`output/runs/<run_id>/`. Output files are local artifacts and are ignored by
+Git.
+
+## CLI for Agents
+
+The short `tgcs` command remains the compatible CLI for humans and smoke tests:
 
 ```bash
-# 0. Try the offline demo first (no Telegram login or LLM key required)
 ./tgcs demo
-#    Writes output/demo-report.html
-
-# 1. Edit config with your Telegram API credentials
-#    (setup.sh created it at ~/.config/tgcli/config.toml)
-nano ~/.config/tgcli/config.toml
-
-# 2. Check first-run prerequisites for the developer-opportunity starter
-#    setup.sh already initialized local .tgcs defaults with --starter jobs
-./tgcs quickstart jobs
 ./tgcs doctor --profile jobs
-
-# 3. Complete Telegram login once
 ./tgcs login
-
-# 4. Run the jobs-fast monitor once without sending alerts
 ./tgcs monitor run --profile-id jobs-fast --delivery-mode dry-run
+./tgcs dashboard --open
 ```
 
-</details>
+Agents and automation should use the JSON-oriented scripts and the contract in
+[docs/agent-cli-contract.md](docs/agent-cli-contract.md). Keep raw Telegram
+content in local artifacts, not in prompts, logs, or public docs.
 
-On Windows, use `tgcs.bat` instead of `./tgcs` when using the expert CLI. The
-human facade defaults to
-the local `.tgcs/config.toml` profile, `.tgcs/sources.json`, `output/`, HTML
-output, and v0.4 local decision memory at `.tgcs/state`. `setup.*` initializes
-the jobs starter by default; use `tgcs run --no-state` when you need a stateless
-daily-report run.
-
-### v0.5-alpha Monitor & Review
-
-The v0.5-alpha monitor keeps the CLI-compatible engine and adds repeated runs,
-alert candidates, and a local review inbox. Signal Desk is the primary human
-surface; the detailed v0.5 product and dashboard contract lives in
-[docs/v0.5-alpha-alert-review-inbox.md](docs/v0.5-alpha-alert-review-inbox.md).
-
-Use Signal Desk for the normal app flow:
-
-- `Start`: guided setup, Telegram login, offline demo, doctor checks, dry-run
-  monitor runs, feedback export, and dry-run schedule preview.
-- `Review`: process high-priority new or changed cards first.
-- `Profiles`: pause or tune scan windows and per-run item limits.
-- `Runs`: open local report artifacts and inspect run health.
-- `Settings`: add sources, manage notification settings, export learning
-  decisions, and check repository updates.
-
-Monitor runs write artifacts under `output/runs/<run_id>/`, update a
-`run_manifest_v1`, and store dashboard state in `.tgcs/tgcs.db`. Telegram Bot
-delivery reads `TGCS_TELEGRAM_BOT_TOKEN` first, then a Windows Credential
-Manager token saved from Signal Desk Settings. Tokens, sessions, and raw
-Telegram messages are not echoed into the UI and are not stored in SQLite,
-manifests, reports, or docs.
-
-<details>
-<summary>Expert / agent monitor commands</summary>
+Common lower-level commands:
 
 ```bash
-./tgcs monitor init-config
-./tgcs init --starter jobs
-./tgcs quickstart jobs
-./tgcs monitor run --profile-id market-news --delivery-mode dry-run
-./tgcs sources import channel_lists/jobs.txt --topic jobs
-./tgcs schedule print --profile-id jobs-fast --interval-minutes 15 --delivery-mode dry-run
-./tgcs dashboard
-./tgcs feedback export
-```
-
-Live delivery and live schedules remain intentional human-owned boundaries in
-this alpha. Keep first-use validation on dry-run delivery.
-
-</details>
-
-For the interrupt lane, `jobs-fast` caps semantic extraction at 20 matched
-messages and 2000 output tokens. Keep the daily audit/backfill lane for
-exhaustive review over larger windows.
-`./tgcs schedule print` only prints a Windows Task Scheduler or cron command for
-review; it does not create a system task by itself.
-
-When `OPENAI_API_KEY` is not configured and `DEEPSEEK_API_KEY` is present,
-semantic extraction defaults to `deepseek-v4-flash` with thinking disabled and
-JSON output requested, even if MiniMax is also configured. MiniMax M2.7 is also
-supported through the official OpenAI-compatible endpoint: set
-`MINIMAX_TOKEN_PLAN_KEY` for a Token Plan key or `MINIMAX_API_KEY` for a
-standard platform key. Token Plan keys default to the China-region endpoint
-`https://api.minimaxi.com/v1`; standard platform keys default to
-`https://api.minimax.io/v1`. Set `MINIMAX_BASE_URL` when your account needs an
-explicit endpoint override. Use the local eval to compare provider latency,
-JSON reliability, and aggregate token
-usage on your history without copying raw Telegram text into the result
-artifact. Workspace-local input paths are stored as relative paths; external
-input paths are reduced to file names and disambiguated with a short hash only
-when duplicate basenames would collide:
-
-```bash
-python scripts/eval_deepseek_cache.py --sample-size 20 --repeat 3 --format json
-python scripts/eval_deepseek_cache.py --sample-sizes 10,20,30 \
-  --models deepseek-v4-flash,MiniMax-M2.7 --repeat 1 --max-tokens 1000 --format json
-```
-
-### Agent-Native Mode
-
-The repository also ships a root [SKILL.md](SKILL.md) and a structured
-[agent CLI contract](docs/agent-cli-contract.md). The short `tgcs` command is
-for humans. Agents should prefer the explicit JSON contract and the private
-source registry at `.tgcs/sources.json`:
-
-```bash
-python scripts/source_registry.py import-list channel_lists/example.txt \
-  --source-registry .tgcs/sources.json --format json
-
 python scripts/source_registry.py import-list channel_lists/jobs.txt \
   --source-registry .tgcs/sources.json --topic jobs --format json
 
-python scripts/doctor.py --source-registry .tgcs/sources.json \
-  --profile profiles/templates/market-news.md --output-dir output --format json
-
-python scripts/scan.py --source-registry .tgcs/sources.json --hours 24 \
-  --output output/scan.jsonl --format json
-
-python scripts/report.py --input output/scan.jsonl \
-  --profile profiles/templates/market-news.md \
-  --output output/report.md --html-output output/report.html \
-  --source-registry .tgcs/sources.json --format json
-
-# Optional v0.4 decision memory and feedback import
-python scripts/report.py --input output/scan.jsonl \
-  --profile profiles/templates/market-news.md \
-  --items-json output/extracted-items.json \
-  --output output/report.md --html-output output/report.html \
-  --source-registry .tgcs/sources.json \
-  --state-dir .tgcs/state \
-  --feedback-jsonl output/report-feedback.jsonl \
-  --format json
-
-# Optional v0.5-alpha monitor state, manifest, inbox, and alert events
-python scripts/monitor.py run --profile-id market-news \
+python scripts/monitor.py run --profile-id jobs-fast \
   --delivery-mode dry-run --format json
 
 python scripts/monitor.py feedback-export \
   --db .tgcs/tgcs.db --output output/feedback/review-feedback.jsonl --format json
 ```
 
-If no LLM provider key exists, `report.py --extractor auto` returns
-`agent_extraction_required`; the agent can read the local extraction request,
-write `semantic_items_v1`, then rerun `report.py` with `--items-json`.
+## Privacy and Safety
 
-Passing `--state-dir .tgcs/state` turns on local decision intelligence:
-items are marked as new, seen, changed, recurring, or expired across runs.
-The state file stores only item keys, source refs, counters, fingerprints,
-rating history, and feedback counts. It does not store raw Telegram message
-text or feedback note bodies.
+- Telegram access uses MTProto through Telethon and only reads sources you can
+  already access.
+- Secrets stay local. `.tgcs/`, `output/`, sessions, logs, env files, and
+  dashboard builds are ignored by Git.
+- Signal Desk stores notification bot tokens in Windows Credential Manager when
+  available, or uses environment variables for expert setups.
+- Live delivery and live schedules remain explicit choices. The default path is
+  dry-run first.
+- The project is a local personal workflow tool. Use it in a way that respects
+  Telegram's terms and the rules of the channels you read.
 
-### Scan Options
+## Repository Map
 
-```bash
-# Past 24 hours (default)
-./scripts/scan.sh channel_lists/example.txt
+| Path | Purpose |
+| --- | --- |
+| `Signal Desk.bat` | Windows app-style launcher. |
+| `dashboard/` | React dashboard source for Signal Desk. |
+| `scripts/` | Scanner, report, monitor, source registry, delivery, and dashboard server code. |
+| `profiles/` | Markdown profile templates and starter profile config. |
+| `channel_lists/` | Example channel-list inputs. |
+| `templates/` | Report templates and demo fixtures used by `tgcs demo`. |
+| `docs/agent-cli-contract.md` | Stable JSON/CLI contract for agents. |
+| `docs/getting-api-credentials.md` | Telegram API credential guide. |
+| `docs/tos-risk-analysis.md` | Terms-of-service and operational risk notes. |
 
-# Past 7 days
-./scripts/scan.sh channel_lists/example.txt 168
-
-# From a precise ISO-8601 cutoff
-./scripts/scan.sh channel_lists/example.txt --since 2026-05-06T07:30:00Z
-```
-
-The scanner uses Telethon (MTProto) with `iter_messages` and early termination — it stops as soon as it hits a message older than your cutoff. No over-fetching.
-
-<details>
-<summary>Environment variables</summary>
-
-```bash
-SCAN_INITIAL_LIMIT=200   # initial read limit per channel
-SCAN_MAX_LIMIT=5000      # hard cap before reporting incomplete
-SCAN_DELAY=1             # seconds between channels
-SCAN_MAX_FLOOD_WAIT_SECONDS=300
-TG_SCANNER_CONFIG_DIR=~/.config/tgcli
-```
-
-</details>
-
-### Export Channels from Telegram
+## Development
 
 ```bash
-python scripts/export_folder.py --list
-python scripts/export_folder.py --folder "Jobs" --output channel_lists/jobs.txt
+python -m pytest -q
+cd dashboard
+npm test -- --run
+npm run build
 ```
 
-### Generate Reports
-
-```bash
-# Human default: market-news + HTML + .tgcs/state
-./tgcs run
-
-# Human alternate profile
-./tgcs run --profile jobs --hours 72
-
-# Markdown + HTML report
-python scripts/daily_report.py channel_lists/example.txt \
-  --profile profiles/example.md --html
-
-# Custom LLM endpoint (DeepSeek, Ollama, etc.)
-# If only DEEPSEEK_API_KEY is set, these DeepSeek defaults are selected automatically.
-python scripts/report.py --input output/scan_XXXX.jsonl \
-  --profile profiles/example.md \
-  --base-url https://api.deepseek.com/v1 --model deepseek-chat
-
-# Redact contact info before sending to LLM
-python scripts/report.py --input output/scan_XXXX.jsonl \
-  --profile profiles/example.md --redact-contact-info
-
-# Preview prompt without calling LLM
-python scripts/report.py --input output/scan_XXXX.jsonl \
-  --profile profiles/example.md --dry-run-prompt output/prompt-preview.md
-```
-
-## Report Output
-
-The generated report is designed to be read as a decision surface: what matters, why it matched, where it came from, and whether it deserves action.
-
-<table>
-  <tr>
-    <td align="center" width="50%">
-      <img src="docs/screenshots/report-header.png" alt="Retro-pixel report masthead with dashboard counters" width="100%"><br>
-      <sub>Retro-pixel masthead, scan metadata, and dashboard counters.</sub>
-    </td>
-    <td align="center" width="50%">
-      <img src="docs/screenshots/report-cards.png" alt="Ranked retro-pixel report cards with source chips" width="100%"><br>
-      <sub>Ranked cards with action labels, rationale, source chips, and raw message access.</sub>
-    </td>
-  </tr>
-</table>
-
-The HTML report is a single portable file with inline CSS, JS, and icon assets: premium retro-pixel styling, light/dark themes, dashboard counters, scroll-parallax cards, expandable raw messages, and Telegram deep links. Web fonts are an optional enhancement; system fallbacks keep the report readable offline.
-
-<details>
-<summary>Scheduling examples</summary>
-
-```bash
-# cron: every day at 09:00
-0 9 * * * cd /path/to/tg-channel-scanner && .venv/bin/python scripts/daily_report.py channel_lists/example.txt --profile profiles/example.md
-```
-
-```bat
-REM Windows Task Scheduler
-cmd /c "cd /d C:\path\to\tg-channel-scanner && .venv\Scripts\python.exe scripts\daily_report.py channel_lists\example.txt --profile profiles\example.md"
-```
-
-</details>
-
-<details>
-<summary>Free-form AI summary & Media OCR</summary>
-
-**Free-form summary** (no fixed layout, just a digest):
-
-```bash
-python scripts/summarize.py --input output/scan_XXXX.jsonl --profile profiles/example.md
-```
-
-**Media OCR/STT** (off by default):
-
-```bash
-# xAI vision
-export XAI_API_KEY=your-key
-./scripts/scan.sh channel_lists/example.txt --ocr --ocr-provider xai
-
-# OpenAI vision
-export OPENAI_API_KEY=sk-your-key
-./scripts/scan.sh channel_lists/example.txt --ocr --ocr-provider openai
-
-# Custom endpoint
-./scripts/scan.sh channel_lists/example.txt --ocr --ocr-provider custom \
-  --ocr-base-url http://localhost:11434/v1 --ocr-model your-vision-model
-```
-
-Video OCR is thumbnail-first by default, including standalone reprocessing with
-`python scripts/ocr_media.py`. Use `--ocr-full-video` during scans, or
-`--full-video` with `ocr_media.py`, only when you explicitly want full-video
-processing. Full-video mode requires `ffmpeg` and can send extracted frames,
-audio, or transcripts to the selected OCR/STT provider, so review privacy and
-cost before enabling it.
-
-</details>
-
----
-
-## How It Works
-
-```mermaid
-graph LR
-    A["📱 Telegram<br>Channels"] -->|MTProto| B["🔍 Scanner<br>scan.py"]
-    B -->|"JSONL + meta"| C["🤖 LLM or Agent<br>Semantic Extraction"]
-    C -->|"Structured JSON"| D["📊 Report<br>report.py"]
-    D --> E["📝 Markdown"]
-    D --> F["🎨 HTML Report"]
-
-    style A fill:#26A5E4,color:#fff
-    style B fill:#3776AB,color:#fff
-    style C fill:#14B8A6,color:#fff
-    style D fill:#22C55E,color:#fff
-    style E fill:#64748B,color:#fff
-    style F fill:#F59E0B,color:#fff
-```
-
-1. **Read** — Telethon reads messages from your subscribed channels
-2. **Filter** — Precise timestamp cutoff with early termination
-3. **Save** — JSONL + `.meta.json` sidecar
-4. **Report** — LLM or agent semantic extraction -> Python renders stats + Markdown/HTML
-
-Data contract: each scanned message carries a stable `message_ref` (`channel` + `id`).
-Reports ask the LLM for `source_message_refs` and use that channel-scoped key for raw
-message lookup; `source_message_ids` is kept only for older JSONL/report compatibility.
-The daily pipeline passes an explicit scan `--output` path into `report.py`, so a report
-cannot silently reuse an older `scan_*.jsonl` from the output directory.
-If no LLM key is configured, the same report flow can hand semantic extraction to the
-calling agent through the local `agent_extraction_request_v1` / `semantic_items_v1`
-contract documented in [docs/agent-cli-contract.md](docs/agent-cli-contract.md).
-
-## Profiles & Channel Lists
-
-### Profile
-
-Start from a built-in template, or copy `profiles/example.md` for the legacy job-focused sample:
-
-```bash
-cp profiles/templates/jobs.md profiles/my-profile.md
-cp profiles/templates/airdrops.md profiles/my-airdrops.md
-cp profiles/templates/market-news.md profiles/my-market-news.md
-```
-
-Available templates: jobs, airdrops, market/news, research leads, and competitor monitoring.
-
-Edit the copied profile:
-
-```markdown
-## Candidate
-- Role: Frontend Developer
-- Stack: React, TypeScript, Next.js
-- Level: Middle/Senior
-- Location: Remote preferred
-
-## Filter Rules
-- Only include jobs from last 24 hours
-- Remove duplicates (same company + title)
-- Exclude: Backend-only, Mobile, DevOps...
-```
-
-Custom modes (airdrops, news, events) add `## Extraction Schema`, `## Extraction Prompt`, and `## Report Labels` sections. See `profiles/example-airdrop.md`.
-
-### Channel List
-
-Create a `.txt` in `channel_lists/` with **Telegram usernames** (not display names), one per line:
-
-```
-remote_italic
-dev_jobs_remote
-react_jobs
-```
-
-> Find a channel's username: open in Telegram → tap name → look for @username.
-
-Or export directly from Telegram: `python scripts/export_folder.py --folder "Jobs" --output channel_lists/jobs.txt`
-
-### Source Registry
-
-For human source setup, prefer Signal Desk `Settings`: paste channels in `Add
-Sources`, then use `Saved Sources` to filter by topic, pause, resume, or retag
-individual channels. For agent-maintained source operations, prefer a private
-source registry over editing channel lists in place. `.tgcs/` is gitignored by default, so real
-source notes and priorities stay local:
-
-```bash
-python scripts/source_registry.py import-list channel_lists/example.txt \
-  --source-registry .tgcs/sources.json --format json --dry-run
-
-python scripts/source_registry.py import-list channel_lists/example.txt \
-  --source-registry .tgcs/sources.json --format json
-
-python scripts/source_registry.py list \
-  --source-registry .tgcs/sources.json --format json
-```
-
-Legacy `channel_lists/*.txt` commands remain supported. See
-[docs/source-registry.example.json](docs/source-registry.example.json) for the
-schema shape.
-
-## Directory Structure
-
-```
-tg-channel-scanner/
-├── SKILL.md                 # Agent-facing operating guide
-├── agents/openai.yaml       # Skill metadata for agent installers
-├── tgcs / tgcs.bat          # Human-friendly command facade
-├── config.example.toml      # Template (actual config at ~/.config/tgcli/)
-├── requirements.txt         # telethon
-├── requirements-llm.txt     # optional summarizer deps
-├── setup.sh / setup.bat     # One-command installer
-├── dashboard/               # Optional Vite React localhost dashboard
-├── profiles/                # Filter profiles
-│   └── templates/            # Built-in starter profiles
-├── channel_lists/           # Channel name lists
-├── scripts/
-│   ├── agent_cli.py         # JSON envelope and exit-code helpers
-│   ├── tgcs.py              # Human-friendly command facade implementation
-│   ├── scan.py              # Scanner core (Telethon)
-│   ├── source_registry.py   # Source registry import/list/export/validate
-│   ├── export_folder.py     # Export from Telegram folders
-│   ├── report.py            # Report generator (Markdown + HTML)
-│   ├── report_diagnostics.py # Empty-result and scan-health diagnostics
-│   ├── doctor.py            # First-run environment checks
-│   ├── daily_report.py      # Scan + report pipeline
-│   ├── monitor.py           # v0.5-alpha profile monitor runner
-│   ├── monitor_state.py     # SQLite state for inbox/alerts/profile diffs
-│   ├── delivery.py          # Delivery adapters
-│   ├── dashboard_server.py  # Localhost dashboard API/static server
-│   └── summarize.py         # Free-form LLM summary
-├── templates/
-│   ├── report-job.html      # Job report HTML shell
-│   ├── report-generic.html  # Custom mode HTML shell
-│   ├── report-shared.css    # Shared inline report styling
-│   └── report-theme.js      # Shared inline theme/motion behavior
-├── output/                  # gitignored
-└── docs/
-    ├── agent-cli-contract.md # Agent JSON contract and fallback schemas
-    ├── demo.mp4             # Full product demo video, kept under 10 MB for GitHub uploads
-    ├── demo/                # HyperFrames demo source and maintenance notes
-    ├── licensing.md         # AGPL + commercial licensing policy
-    ├── report-design-context.md  # Report UI design constraints
-    └── screenshots/         # Report screenshots
-```
-
-## Safety & Telegram ToS
-
-- Reads only from channels you've subscribed to
-- Respects `FloodWaitError` — no API abuse
-- Use your real account, not a new/virtual number
-- Do not use Telegram data for AI training, resale, or bulk harvesting
-
-See [docs/tos-risk-analysis.md](docs/tos-risk-analysis.md) for details.
-
-## Troubleshooting
-
-| Problem | Fix |
-|---------|-----|
-| `ModuleNotFoundError: telethon` | `source .venv/bin/activate` |
-| `.sh` scripts `Permission denied` | `chmod +x setup.sh scripts/scan.sh` |
-| my.telegram.org shows ERROR | [docs/getting-api-credentials.md](docs/getting-api-credentials.md) |
-| 0 messages collected | Check `output/*.errors.log` |
-| Session expired | Open Signal Desk `Start` and reconnect Telegram; expert fallback: run `./tgcs login` again, or delete `~/.config/tgcli/session` and rerun |
+Use `python tools/quality_visual_audit.py <output-dir>` when changing dashboard
+layout. It captures Start, Review, Profiles, Runs, and Settings across desktop
+and mobile viewports and checks for horizontal overflow and small click targets.
 
 ## License
 
-TG Channel Scanner is dual-licensed:
-
-- Community License: `AGPL-3.0-only`
-- Commercial License: available separately from Sapientropic
-
-See [docs/licensing.md](docs/licensing.md) for community, commercial, hosted
-service, and contribution rules.
+This project is licensed under AGPL-3.0 with a commercial licensing option. See
+[LICENSE](LICENSE) and [docs/licensing.md](docs/licensing.md).

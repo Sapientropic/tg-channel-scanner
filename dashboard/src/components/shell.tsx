@@ -4,7 +4,7 @@ import { RefreshCw, ShieldCheck } from "lucide-react";
 import signalIcon from "../assets/tgcs-signal-icon.png";
 import type { Tab } from "../domain/types";
 
-const projectRepoUrl = "https://github.com/Sapientropic/tg-channel-scanner";
+const projectRepoUrl = "https://github.com/Sapientropic/T-Sense";
 
 export function ConsoleHeader({ busy, onRefresh }: { busy: boolean; onRefresh: () => void }) {
   return (
@@ -15,13 +15,13 @@ export function ConsoleHeader({ busy, onRefresh }: { busy: boolean; onRefresh: (
           href={projectRepoUrl}
           target="_blank"
           rel="noreferrer"
-          aria-label="Open TGCS Git repository"
+          aria-label="Open T-Sense Git repository"
           title="Open Git repository"
         >
           <img src={signalIcon} alt="" />
         </a>
         <div className="brand-copy">
-          <p className="eyebrow">TG Channel Scanner</p>
+          <p className="eyebrow">T-Sense</p>
           <h1>Signal Desk</h1>
           <div className="header-readout" aria-label="Local dashboard boundary">
             <span>Local app</span>

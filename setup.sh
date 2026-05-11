@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Install tg-channel-scanner dependencies
+# Install T-Sense dependencies
 # Requires: Python 3.12+ (system, or via uv/pipx)
 #
 # If your system Python is older than 3.12, install uv first:
@@ -11,7 +11,7 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$SCRIPT_DIR"
 
-echo "=== TG Channel Scanner Setup ==="
+echo "=== T-Sense Setup ==="
 
 # --- Find a suitable Python 3.12+ ---
 # Skip Windows Store stubs (python3.exe that exits non-zero without printing a version).

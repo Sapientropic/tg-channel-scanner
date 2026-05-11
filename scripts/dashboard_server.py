@@ -1029,7 +1029,7 @@ def desk_notification_token_status() -> dict:
     elif local_supported:
         detail = "Telegram bot token is not configured."
     else:
-        detail = "[⚠️ 需确认] Local secure token storage currently supports Windows Credential Manager only."
+        detail = "⚠️ Needs confirmation: local secure token storage currently supports Windows Credential Manager only."
     return {
         "schema_version": "desk_notification_token_status_v1",
         "configured": configured,
@@ -1063,7 +1063,7 @@ def update_desk_notification_token(body: dict) -> dict:
     if unexpected:
         raise ValueError(f"Unsupported notification token field: {', '.join(unexpected)}")
     if not local_credentials.is_supported():
-        raise ValueError("[⚠️ 需确认] Saving bot tokens in Signal Desk currently requires Windows Credential Manager.")
+        raise ValueError("⚠️ Needs confirmation: saving bot tokens in Signal Desk currently requires Windows Credential Manager.")
     clear = body.get("clear")
     raw_token = body.get("token")
     if clear is not None and not isinstance(clear, bool):
@@ -1164,7 +1164,7 @@ def update_desk_ai_settings(body: dict) -> dict:
     if unexpected:
         raise ValueError(f"Unsupported AI settings field: {', '.join(sorted(unexpected))}")
     if not local_credentials.is_supported():
-        raise ValueError("[⚠️ 需确认] Saving AI API keys in Signal Desk currently requires Windows Credential Manager.")
+        raise ValueError("⚠️ Needs confirmation: saving AI API keys in Signal Desk currently requires Windows Credential Manager.")
     provider_id = _clean_ai_provider(body.get("provider"))
     config = DESK_AI_PROVIDER_CONFIGS[provider_id]
     clear = body.get("clear") is True
@@ -1893,7 +1893,7 @@ def run_desk_scheduler_action(action_id: str, *, body: dict | None = None) -> di
             action_id,
             status="blocked",
             title="Launcher file is missing",
-            detail="Signal Desk could not find the local TGCS launcher needed by Task Scheduler.",
+            detail="Signal Desk could not find the local T-Sense launcher needed by Task Scheduler.",
             next_action="Repair the repo-local install, then turn on auto scan again.",
         )
 
@@ -2566,7 +2566,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Serve the local TGCS dashboard.", allow_abbrev=False)
+    parser = argparse.ArgumentParser(description="Serve the local T-Sense dashboard.", allow_abbrev=False)
     parser.add_argument("--db", default=".tgcs/tgcs.db")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8765)
@@ -2627,7 +2627,7 @@ def main(argv: list[str] | None = None) -> int:
         if selection.reused_existing:
             print(f"Signal Desk is already running on {url}")
         else:
-            print(f"TGCS dashboard listening on {url}")
+            print(f"T-Sense dashboard listening on {url}")
         if args.open_browser:
             if webbrowser.open(url, new=2):
                 print("Opened Signal Desk in your browser.")

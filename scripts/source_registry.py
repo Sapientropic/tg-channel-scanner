@@ -1,4 +1,4 @@
-"""Private source registry operations for TG Channel Scanner.
+"""Private source registry operations for T-Sense.
 
 The registry is intentionally a small JSON file. It gives agents a stable
 source-of-truth for local operations without forcing users to migrate away from
@@ -411,7 +411,7 @@ def update_source_topics(registry_path: Path, *, source_id: str, topics: list[st
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Maintain a private TG Channel Scanner source registry.")
+    parser = argparse.ArgumentParser(description="Maintain a private T-Sense source registry.")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     def add_registry_arg(subparser: argparse.ArgumentParser) -> None:

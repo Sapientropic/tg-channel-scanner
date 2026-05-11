@@ -9,7 +9,7 @@ class SkillContractTests(unittest.TestCase):
 
         text = skill_path.read_text(encoding="utf-8")
 
-        self.assertIn("name: tg-channel-scanner", text)
+        self.assertIn("name: t-sense", text)
         self.assertIn("description:", text)
         self.assertIn("doctor.py", text)
         self.assertIn("--format json", text)

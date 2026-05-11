@@ -37,8 +37,8 @@ class DeliveryTests(unittest.TestCase):
             card={"card_id": "card_123"},
         )
 
-        self.assertIn("TGCS alert: AI Engineer", text)
-        self.assertNotIn("TGCS alert: Unknown", text)
+        self.assertIn("T-Sense alert: AI Engineer", text)
+        self.assertNotIn("T-Sense alert: Unknown", text)
 
     def test_dry_run_telegram_delivery_does_not_require_token(self):
         attempt = delivery.send_telegram_bot_message(

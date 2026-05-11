@@ -83,7 +83,7 @@ class TgcsCliTests(unittest.TestCase):
         cmd = [str(part) for part in run_mock.call_args.args[0]]
         self.assertIn("report.py", cmd[1])
         self.assertIn("--html-only", cmd)
-        self.assertIn(str(root / "docs" / "demo" / "fixtures" / "demo-report.md"), cmd)
+        self.assertIn(str(root / "templates" / "demo" / "fixtures" / "demo-report.md"), cmd)
         self.assertIn(str(root / "output" / "demo-report.html"), cmd)
         output = stdout.getvalue()
         self.assertIn("Demo report ready", output)

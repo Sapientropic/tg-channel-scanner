@@ -1,6 +1,6 @@
 # Licensing
 
-TG Channel Scanner uses a dual-license model:
+T-Sense uses a dual-license model:
 
 - Community License: GNU Affero General Public License v3.0 only
   (`AGPL-3.0-only`).
@@ -23,8 +23,8 @@ future contributions accepted under this policy.
 
 Third-party dependencies, generated lockfiles, and externally licensed assets
 keep their own licenses. Their package metadata may still mention MIT, Apache,
-BSD, ISC, LGPL, or other licenses; those notices do not change the license of TG
-Channel Scanner itself.
+BSD, ISC, LGPL, or other licenses; those notices do not change the license of
+T-Sense itself.
 
 ## Community Version
 
@@ -46,7 +46,7 @@ sharing obligations and want to keep improvements available to the community.
 
 ## Commercial License
 
-A commercial license is intended for teams that want to use TG Channel Scanner
+A commercial license is intended for teams that want to use T-Sense
 without AGPL obligations applying to their proprietary product or deployment.
 
 Typical commercial-license cases include:
@@ -90,7 +90,7 @@ By submitting a contribution, you represent that:
   it under this policy.
 - You license the contribution to the project under `AGPL-3.0-only`.
 - You also grant Sapientropic the right to use, sublicense, and relicense the
-  contribution as part of TG Channel Scanner under separate commercial licenses.
+  contribution as part of T-Sense under separate commercial licenses.
 - You will not submit code, prompts, data, generated assets, or documentation
   copied from third-party sources unless their license is compatible with this
   policy.
@@ -99,7 +99,7 @@ For larger contributions, maintainers may ask for an explicit confirmation in
 the pull request, such as:
 
 > I confirm that I have the right to submit this contribution and that I license
-> it to TG Channel Scanner under AGPL-3.0-only and to Sapientropic for separate
+> it to T-Sense under AGPL-3.0-only and to Sapientropic for separate
 > commercial licensing as described in docs/licensing.md.
 
 Contributions that do not support this dual-license model may be declined even

@@ -524,7 +524,7 @@ def run_eval(args: argparse.Namespace) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Evaluate DeepSeek prompt-cache behavior on local TGCS history.")
+    parser = argparse.ArgumentParser(description="Evaluate DeepSeek prompt-cache behavior on local T-Sense history.")
     parser.add_argument("--input", action="append", default=[], help="Scan JSONL path. Repeat to combine history.")
     parser.add_argument("--profile", default="profiles/templates/jobs.md")
     parser.add_argument("--output")

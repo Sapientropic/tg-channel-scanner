@@ -1,10 +1,10 @@
 @echo off
-REM Install tg-channel-scanner dependencies (Windows)
+REM Install T-Sense dependencies (Windows)
 REM Requires: Python 3.12+
 
 cd /d "%~dp0"
 
-echo === TG Channel Scanner Setup ===
+echo === T-Sense Setup ===
 
 REM Check Python version (require 3.12+)
 python --version 2>nul || (

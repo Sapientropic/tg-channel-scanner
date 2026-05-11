@@ -50,7 +50,7 @@ class DashboardServerGitTests(unittest.TestCase):
         outputs = {
             ("rev-parse", "--abbrev-ref", "HEAD"): "main\n",
             ("rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"): "origin/main\n",
-            ("config", "--get", "remote.origin.url"): "git@github.com:Sapientropic/tg-channel-scanner.git\n",
+            ("config", "--get", "remote.origin.url"): "git@github.com:Sapientropic/T-Sense.git\n",
             ("status", "--porcelain"): " M dashboard/src/main.tsx\n",
             ("fetch", "--prune", "origin"): "",
             ("rev-parse", "--short", "HEAD"): "abc123\n",
@@ -68,7 +68,7 @@ class DashboardServerGitTests(unittest.TestCase):
         self.assertTrue(status["dirty"])
         self.assertFalse(status["pull_allowed"])
         self.assertEqual(status["dirty_count"], 1)
-        self.assertEqual(status["repo_url"], "https://github.com/Sapientropic/tg-channel-scanner")
+        self.assertEqual(status["repo_url"], "https://github.com/Sapientropic/T-Sense")
         self.assertIn("Commit or stash", status["message"])
 
     def test_pull_latest_uses_fast_forward_only_after_clean_check(self):

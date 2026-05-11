@@ -1,4 +1,4 @@
-"""Human-oriented TG Channel Scanner CLI facade.
+"""Human-oriented T-Sense CLI facade.
 
 The lower-level scripts keep their explicit agent contract.  This facade is
 for people who run the same local workflow repeatedly: it chooses stable local
@@ -445,11 +445,11 @@ def run_demo(args: argparse.Namespace) -> int:
             _python(),
             _script("report.py"),
             "--input",
-            PROJECT_ROOT / "docs/demo/fixtures/demo-scan.jsonl",
+            PROJECT_ROOT / "templates/demo/fixtures/demo-scan.jsonl",
             "--profile",
-            PROJECT_ROOT / "docs/demo/fixtures/demo-profile.md",
+            PROJECT_ROOT / "templates/demo/fixtures/demo-profile.md",
             "--html-only",
-            PROJECT_ROOT / "docs/demo/fixtures/demo-report.md",
+            PROJECT_ROOT / "templates/demo/fixtures/demo-report.md",
             "--output",
             output,
         ]
@@ -789,7 +789,7 @@ def run_delivery(args: argparse.Namespace) -> int:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="tgcs",
-        description="Human-friendly TG Channel Scanner command facade.",
+        description="Human-friendly T-Sense command facade.",
         allow_abbrev=False,
     )
     subparsers = parser.add_subparsers(dest="command", required=True)

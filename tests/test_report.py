@@ -264,7 +264,7 @@ system_prompt: |
             meta=None,
         )
 
-        self.assertIn("[⚠️ 需确认]", result.markdown)
+        self.assertIn("⚠️ Needs confirmation", result.markdown)
         self.assertIn("## Diagnostics", result.markdown)
         self.assertEqual(result.stats["total_messages_scanned"], 1)
 
@@ -1333,11 +1333,11 @@ fields:
                 exit_code = report.main(
                     [
                         "--input",
-                        "docs/demo/fixtures/demo-scan.jsonl",
+                        "templates/demo/fixtures/demo-scan.jsonl",
                         "--profile",
-                        "docs/demo/fixtures/demo-profile.md",
+                        "templates/demo/fixtures/demo-profile.md",
                         "--html-only",
-                        "docs/demo/fixtures/demo-report.md",
+                        "templates/demo/fixtures/demo-report.md",
                         "--output",
                         str(output_path),
                     ]

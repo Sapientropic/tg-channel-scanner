@@ -1,4 +1,4 @@
-"""First-run environment diagnostics for TG Channel Scanner."""
+"""First-run environment diagnostics for T-Sense."""
 
 from __future__ import annotations
 
@@ -444,7 +444,7 @@ def check_online_telegram(config_path: Path, session_path: Path) -> CheckResult:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Check first-run TG Channel Scanner prerequisites.")
+    parser = argparse.ArgumentParser(description="Check first-run T-Sense prerequisites.")
     parser.add_argument("--channel-list", type=Path)
     parser.add_argument("--source-registry", type=Path)
     parser.add_argument("--profile", required=True, type=Path)
@@ -492,7 +492,7 @@ def payload_for_checks(checks: list[CheckResult]) -> dict:
 
 
 def print_text(payload: dict) -> None:
-    print("TG Channel Scanner doctor")
+    print("T-Sense doctor")
     print(f"Status: {'OK' if payload['ok'] else 'FAILED'}")
     for name, check in payload["checks"].items():
         print(f"- {check['status'].upper()} {name}: {check['message']}")

@@ -795,11 +795,11 @@ def build_report(
     }
     warnings: list[str] = []
     if meta is None:
-        warnings.append("[⚠️ 需确认] scan metadata sidecar was not found; header stats are inferred from JSONL only.")
+        warnings.append("⚠️ Needs confirmation: scan metadata sidecar was not found; header stats are inferred from JSONL only.")
 
     scan_date = meta.get("scan_date") if meta else datetime.now(UTC).date().isoformat()
-    scan_window = meta.get("scan_window") if meta else "[⚠️ 需确认] Unknown scan window"
-    channel_count = meta.get("channel_count") if meta else "[⚠️ 需确认] Unknown"
+    scan_window = meta.get("scan_window") if meta else "Unknown scan window"
+    channel_count = meta.get("channel_count") if meta else "Unknown"
     channels = meta.get("channels", []) if meta else []
     channel_hint = ""
     if channels:

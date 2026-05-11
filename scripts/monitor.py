@@ -1353,7 +1353,7 @@ def test_telegram_bot(args: argparse.Namespace) -> int:
     attempt = delivery.send_telegram_bot_message(
         target_id=args.target_id,
         chat_id=chat_id,
-        text="TGCS delivery test.",
+        text="T-Sense delivery test.",
         mode=args.delivery_mode,
     )
     if agent_cli.is_json_format(args):
@@ -1507,7 +1507,7 @@ def export_feedback(args: argparse.Namespace) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Run v0.5-alpha TGCS profile monitors.", allow_abbrev=False)
+    parser = argparse.ArgumentParser(description="Run T-Sense profile monitors.", allow_abbrev=False)
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     init = subparsers.add_parser("init-config", help="Write a starter .tgcs/profiles.toml.")

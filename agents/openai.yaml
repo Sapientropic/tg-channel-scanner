@@ -1,7 +1,7 @@
-display_name: TG Channel Scanner
+display_name: T-Sense
 short_description: Diagnose, scan, report, and inspect Telegram source health through agent-safe JSON commands.
 default_prompt: >
-  Use TG Channel Scanner in agent mode. Start with doctor.py --format json,
+  Use T-Sense in agent mode. Start with doctor.py --format json,
   validate the source registry, avoid interactive Telegram login, then scan
   and generate Markdown/HTML reports with structured source health. If no LLM
   provider key exists or report.py returns agent_extraction_required, read the

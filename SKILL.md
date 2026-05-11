@@ -1,9 +1,9 @@
 ---
-name: tg-channel-scanner
-description: Use when Codex needs to run TG Channel Scanner workflows: diagnose Telegram/LLM setup, maintain source registry, scan Telegram channels, generate Markdown/HTML reports, inspect source health, or explain report feedback/provenance.
+name: t-sense
+description: Use when Codex needs to run T-Sense workflows: diagnose Telegram/LLM setup, maintain source registry, scan Telegram channels, generate Markdown/HTML reports, inspect source health, or explain report feedback/provenance.
 ---
 
-# TG Channel Scanner Agent Workflow
+# T-Sense Agent Workflow
 
 Use the JSON contract for agent calls. Human progress is not a stable API.
 For a human at a terminal, prefer the short facade commands: `tgcs init`,
