@@ -332,8 +332,88 @@ def dashboard_profile_projection(profile: dict[str, Any], *, report_title: str =
         "scan_window_hours": non_negative_int(config.get("scan_window_hours")),
         "semantic_max_messages": non_negative_int(config.get("semantic_max_messages")),
         "delivery_target_count": len(delivery_targets),
+        "matching_profile": profile_matching_summary(profile_path),
         "updated_at": profile.get("updated_at"),
     }
+
+
+def profile_matching_summary(profile_path: str) -> dict[str, Any]:
+    """Project profile Markdown into app-readable matching rules.
+
+    The dashboard is the human surface, so it should expose the criteria the
+    scanner is actually using without forcing users into raw Markdown or YAML.
+    Keep this parser deliberately conservative: unknown sections remain in the
+    source file, while the UI shows only short bullets from stable profile
+    sections that influence matching.
+    """
+    path = Path(profile_path)
+    if not path.is_absolute():
+        path = PROJECT_ROOT / path
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError:
+        return {"schema_version": "profile_matching_profile_v1", "sections": [], "learned_preferences": []}
+    sections = _markdown_sections(text)
+    basics = _clean_markdown_items(sections.get("Basic Info", []), limit=6)
+    search_rules = _clean_markdown_items(sections.get("Search Rules", []), limit=7)
+    report_preferences = _clean_markdown_items(sections.get("Report Preferences", []), limit=5)
+    learned = _clean_markdown_items(sections.get("Follow-up Preferences", []), limit=12)
+    output_sections: list[dict[str, Any]] = []
+    for key, label, items in [
+        ("basics", "Match profile", basics),
+        ("rules", "How cards are judged", search_rules),
+        ("learned", "Learned preferences", learned),
+        ("report", "Report preferences", report_preferences),
+    ]:
+        if items:
+            output_sections.append({"key": key, "label": label, "items": items})
+    return {
+        "schema_version": "profile_matching_profile_v1",
+        "summary": basics[0] if basics else "",
+        "sections": output_sections,
+        "learned_preferences": learned,
+        "editable_text": "\n".join(f"- {item}" for item in learned),
+    }
+
+
+def _markdown_sections(text: str) -> dict[str, list[str]]:
+    sections: dict[str, list[str]] = {}
+    current = ""
+    for raw in text.splitlines():
+        line = raw.rstrip()
+        if line.startswith("## "):
+            current = line[3:].strip()
+            sections.setdefault(current, [])
+            continue
+        if current:
+            sections.setdefault(current, []).append(line)
+    return sections
+
+
+def _clean_markdown_items(lines: list[str], *, limit: int) -> list[str]:
+    items: list[str] = []
+    seen: set[str] = set()
+    for raw in lines:
+        line = raw.strip()
+        if not line:
+            continue
+        if line.startswith(("mode:", "top_level_key:", "dedup_fields:", "fields:", "system_prompt:", "report_title:", "section_", "stats_label:", "output_filename:", "profile_section_title:", "methodology_label:")):
+            continue
+        line = re.sub(r"^\d+\.\s+", "", line)
+        line = re.sub(r"^[-*]\s+", "", line)
+        line = re.sub(r"^\+\s*", "", line)
+        line = re.sub(r"\*\*([^*]+)\*\*", r"\1", line)
+        line = line.replace("`", "").strip()
+        if not line or line in {"|", "fields:"}:
+            continue
+        normalized = " ".join(line.split())
+        if not normalized or normalized.casefold() in seen:
+            continue
+        seen.add(normalized.casefold())
+        items.append(normalized)
+        if len(items) >= limit:
+            break
+    return items
 
 
 def display_profile_path(profile_path: str) -> str:
@@ -601,7 +681,7 @@ def get_review_card(conn: sqlite3.Connection, card_id: str) -> dict[str, Any]:
     return _card_from_row(row)
 
 
-def _card_from_row(row: sqlite3.Row) -> dict[str, Any]:
+def _card_from_row(row: sqlite3.Row, source_link_lookup: dict[str, dict[str, Any]] | None = None) -> dict[str, Any]:
     item = parse_json(row["item_json"], {})
     title = str(row["title"] or "").strip()
     derived_title = display_item_title(item, fallback=title or "Telegram signal", max_len=160)
@@ -609,6 +689,7 @@ def _card_from_row(row: sqlite3.Row) -> dict[str, Any]:
         title = derived_title
     elif is_placeholder_value(title):
         title = derived_title
+    source_refs = enrich_source_refs(parse_json(row["source_refs_json"], []), source_link_lookup or {})
     return {
         "schema_version": REVIEW_CARD_SCHEMA_VERSION,
         "card_id": row["card_id"],
@@ -617,7 +698,7 @@ def _card_from_row(row: sqlite3.Row) -> dict[str, Any]:
         "title": title,
         "rating": row["rating"],
         "decision_status": row["decision_status"],
-        "source_refs": parse_json(row["source_refs_json"], []),
+        "source_refs": source_refs,
         "item": item,
         "status": row["status"],
         "first_run_id": row["first_run_id"],
@@ -628,6 +709,65 @@ def _card_from_row(row: sqlite3.Row) -> dict[str, Any]:
         "updated_at": row["updated_at"],
         "handled_at": row["handled_at"],
     }
+
+
+def enrich_source_refs(refs: object, source_link_lookup: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
+    if not isinstance(refs, list):
+        return []
+    enriched: list[dict[str, Any]] = []
+    for ref in refs:
+        if not isinstance(ref, dict):
+            continue
+        channel = str(ref.get("channel") or "").strip()
+        msg_id = ref.get("id")
+        if not channel or msg_id is None:
+            continue
+        item: dict[str, Any] = {"channel": channel, "id": msg_id}
+        source_info = source_link_lookup.get(source_lookup_key(channel), {})
+        url = telegram_source_ref_url(channel=channel, message_id=msg_id, source_info=source_info)
+        if url:
+            item["url"] = url
+        enriched.append(item)
+    return enriched
+
+
+def source_lookup_key(value: object) -> str:
+    return str(value or "").strip().casefold()
+
+
+def source_link_lookup_from_runs(runs: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    lookup: dict[str, dict[str, Any]] = {}
+    for run in runs[:8]:
+        payload = scan_meta_payload(run)
+        source_health = payload.get("source_health") if isinstance(payload.get("source_health"), list) else []
+        for row in source_health:
+            if not isinstance(row, dict):
+                continue
+            source_info = {
+                "username": str(row.get("username") or "").strip(),
+                "channel_id": row.get("channel_id"),
+            }
+            for key_value in (row.get("channel"), row.get("username"), row.get("label"), row.get("source_id")):
+                key = source_lookup_key(key_value)
+                if key:
+                    lookup.setdefault(key, source_info)
+    return lookup
+
+
+def telegram_source_ref_url(*, channel: str, message_id: object, source_info: dict[str, Any]) -> str:
+    msg_text = str(message_id or "").strip()
+    if not re.fullmatch(r"\d+", msg_text):
+        return ""
+    username = str(source_info.get("username") or "").strip().removeprefix("@")
+    if re.fullmatch(r"[A-Za-z][A-Za-z0-9_]{3,31}", username):
+        return f"https://t.me/{username}/{msg_text}"
+    channel_name = str(channel or "").strip().removeprefix("@")
+    if re.fullmatch(r"[A-Za-z][A-Za-z0-9_]{3,31}", channel_name):
+        return f"https://t.me/{channel_name}/{msg_text}"
+    channel_id_text = str(source_info.get("channel_id") or "").strip()
+    if re.fullmatch(r"-?\d{5,20}", channel_id_text):
+        return f"https://t.me/c/{channel_id_text.removeprefix('-100').removeprefix('-')}/{msg_text}"
+    return ""
 
 
 def preferred_report_path(report_path: str) -> str:
@@ -887,6 +1027,131 @@ def export_feedback_entries(conn: sqlite3.Connection) -> list[dict[str, Any]]:
     return entries
 
 
+def _feedback_titles_by_action(rows: list[sqlite3.Row], *, limit_per_action: int) -> dict[str, list[str]]:
+    titles: dict[str, list[str]] = {}
+    seen: set[tuple[str, str]] = set()
+    for row in rows:
+        action = str(row["action"] or "")
+        if action not in {"keep", "skip", "false_positive"}:
+            continue
+        if len(titles.get(action, [])) >= limit_per_action:
+            continue
+        item = parse_json(row["item_json"], {})
+        title = display_item_title(item if isinstance(item, dict) else {}, fallback=row["title"] or "Review card", max_len=72)
+        title = " ".join(str(title or "").split())
+        if not title:
+            continue
+        key = (action, title.casefold())
+        if key in seen:
+            continue
+        seen.add(key)
+        titles.setdefault(action, []).append(title)
+    return titles
+
+
+def _feedback_profile_suggestion_note(rows: list[sqlite3.Row]) -> str:
+    titles = _feedback_titles_by_action(rows, limit_per_action=1)
+    if not titles:
+        return ""
+    return "Desk feedback tuning: Analyze the recent Keep/Skip/Wrong Match feedback. Extract the generalized matching patterns, industry preferences, and explicit exclusions. Do not list specific card titles. Write broad, reusable rules."
+
+
+def _existing_profile_patch_for_note(conn: sqlite3.Connection, *, profile_id: str, note: str) -> sqlite3.Row | None:
+    return conn.execute(
+        """
+        SELECT patch_id, status
+        FROM profile_patch_suggestions
+        WHERE profile_id = ?
+          AND note = ?
+          AND status IN ('pending', 'applied')
+        ORDER BY created_at DESC, patch_id DESC
+        LIMIT 1
+        """,
+        (profile_id, note),
+    ).fetchone()
+
+
+def create_feedback_profile_patch_suggestions(
+    conn: sqlite3.Connection,
+    *,
+    limit_per_profile: int = 24,
+) -> dict[str, Any]:
+    rows = conn.execute(
+        """
+        SELECT f.event_id, f.card_id, f.profile_id, f.action, c.title, c.item_json
+        FROM feedback_events f
+        LEFT JOIN review_cards c ON c.card_id = f.card_id
+        WHERE f.action IN ('keep', 'skip', 'false_positive')
+        ORDER BY f.profile_id ASC, f.created_at ASC, f.event_id ASC
+        """
+    ).fetchall()
+    grouped: dict[str, list[sqlite3.Row]] = {}
+    for row in rows:
+        profile_id = str(row["profile_id"] or "")
+        if not profile_id:
+            continue
+        bucket = grouped.setdefault(profile_id, [])
+        if len(bucket) < limit_per_profile:
+            bucket.append(row)
+
+    created: list[dict[str, str]] = []
+    existing: list[dict[str, str]] = []
+    skipped: list[dict[str, str]] = []
+    for profile_id, profile_rows in grouped.items():
+        note = _feedback_profile_suggestion_note(profile_rows)
+        if not note:
+            skipped.append({"profile_id": profile_id, "reason": "no_feedback_titles"})
+            continue
+        existing_row = _existing_profile_patch_for_note(conn, profile_id=profile_id, note=note)
+        if existing_row:
+            existing.append(
+                {
+                    "profile_id": profile_id,
+                    "patch_id": str(existing_row["patch_id"] or ""),
+                    "status": str(existing_row["status"] or ""),
+                }
+            )
+            continue
+        try:
+            patch = create_profile_patch_suggestion(
+                conn,
+                profile_id=profile_id,
+                card_id=str(profile_rows[0]["card_id"] or "") or None,
+                note=note,
+                profile_path=None,
+            )
+        except MonitorStateError as exc:
+            skipped.append({"profile_id": profile_id, "reason": str(exc)})
+            continue
+        created.append({"profile_id": profile_id, "patch_id": str(patch["patch_id"])})
+    conn.commit()
+
+    created_count = len(created)
+    existing_count = len(existing)
+    skipped_count = len(skipped)
+    if created_count:
+        detail = f"Created {created_count} profile draft{'s' if created_count != 1 else ''} from confirmed feedback."
+    elif existing_count:
+        detail = "Profile drafts already exist for the current confirmed feedback."
+    elif skipped_count:
+        detail = "No profile drafts were created; check profile files before applying feedback."
+    else:
+        detail = "No confirmed feedback decisions are ready for profile tuning."
+    return {
+        "schema_version": "feedback_profile_suggestions_result_v1",
+        "created_count": created_count,
+        "existing_count": existing_count,
+        "skipped_count": skipped_count,
+        "patch_ids": [item["patch_id"] for item in [*created, *existing] if item.get("patch_id")],
+        "profile_ids": sorted(grouped),
+        "detail": detail,
+        "created": created,
+        "existing": existing,
+        "skipped": skipped,
+        "generated_at": utc_now(),
+    }
+
+
 def record_feedback_export(
     conn: sqlite3.Connection,
     *,
@@ -936,18 +1201,17 @@ def feedback_next_action(exportable_count: int, follow_up_count: int, patch_coun
     applied_diffs = patch_counts.get("applied", 0)
     if pending_diffs:
         return {
-            "label": "Review preference drafts",
-            "detail": "Pending follow-up drafts are waiting in Learning before the next tuning pass.",
-            "target_tab": "settings",
+            "label": "Apply profile drafts",
+            "detail": "Profile drafts are ready; review or apply them before the next tuning pass.",
+            "target_tab": "profiles",
             "action_id": "review_preference_drafts",
         }
     if exportable_count:
         return {
-            "label": "Apply feedback to future reports",
-            "detail": "Save these choices so future reports learn from them.",
+            "label": "Generate profile suggestions",
+            "detail": "Turn confirmed review decisions into local profile drafts. JSON export is only for CLI fallback.",
             "target_tab": "settings",
-            "action_id": "feedback_export",
-            "artifact_path": "output/feedback/review-feedback.jsonl",
+            "action_id": "feedback_profile_suggestions",
         }
     if follow_up_count and applied_diffs:
         return {
@@ -1005,10 +1269,10 @@ def recent_feedback_impacts(conn: sqlite3.Connection, *, limit: int = 6) -> list
         if action in {"keep", "skip", "false_positive"}:
             impact.update(
                 {
-                    "impact_type": "decision_memory_export",
+                    "impact_type": "profile_tuning_source",
                     "impact_status": "ready",
-                    "impact_label": "Ready for export",
-                    "impact_detail": "After export, future reports learn from this choice.",
+                    "impact_label": "Ready for profile draft",
+                    "impact_detail": "Generate profile suggestions so future reports learn from this choice.",
                 }
             )
         elif action == "follow_up":
@@ -1222,6 +1486,51 @@ def _append_follow_up_rule(profile_text: str, note: str) -> str:
     return "\n".join(output).rstrip() + "\n"
 
 
+def _normalize_preference_lines(text: str) -> list[str]:
+    lines: list[str] = []
+    seen: set[str] = set()
+    for raw in text.splitlines():
+        line = re.sub(r"^\s*[-*]\s+", "", raw).strip()
+        line = re.sub(r"^\d+\.\s+", "", line)
+        line = " ".join(line.split())
+        if not line:
+            continue
+        key = line.casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        lines.append(line)
+    return lines[:24]
+
+
+def _replace_follow_up_preferences(profile_text: str, preferences_text: str) -> str:
+    lines_to_write = [f"- {line}" for line in _normalize_preference_lines(preferences_text)]
+    if not lines_to_write:
+        lines_to_write = ["- No extra learned preferences yet."]
+    heading = "## Follow-up Preferences"
+    replacement = [heading, *lines_to_write]
+    lines = profile_text.splitlines()
+    output: list[str] = []
+    index = 0
+    replaced = False
+    while index < len(lines):
+        raw = lines[index]
+        if raw.strip() == heading:
+            output.extend(replacement)
+            replaced = True
+            index += 1
+            while index < len(lines) and not lines[index].startswith("## "):
+                index += 1
+            continue
+        output.append(raw)
+        index += 1
+    if not replaced:
+        if output and output[-1].strip():
+            output.append("")
+        output.extend(replacement)
+    return "\n".join(output).rstrip() + "\n"
+
+
 def create_profile_patch_suggestion(
     conn: sqlite3.Connection,
     *,
@@ -1275,6 +1584,74 @@ def create_profile_patch_suggestion(
             patch["patch_id"],
             profile_id,
             card_id,
+            note,
+            "pending",
+            diff,
+            proposed,
+            base_profile_hash,
+            now,
+            None,
+        ),
+    )
+    return patch
+
+
+def create_profile_preferences_patch_suggestion(
+    conn: sqlite3.Connection,
+    *,
+    profile_id: str,
+    preferences_text: str,
+) -> dict[str, Any]:
+    clean_lines = _normalize_preference_lines(preferences_text)
+    if not clean_lines:
+        raise MonitorStateError("At least one matching preference is required.")
+    row = conn.execute("SELECT path FROM profiles WHERE profile_id = ?", (profile_id,)).fetchone()
+    if not row:
+        raise MonitorStateError(f"Profile is not registered: {profile_id}")
+    profile_path = Path(row["path"])
+    if not profile_path.is_absolute():
+        profile_path = PROJECT_ROOT / profile_path
+    if not profile_path.exists():
+        raise MonitorStateError(f"Profile file not found: {profile_path}")
+    current = profile_path.read_text(encoding="utf-8")
+    base_profile_hash = sha256_text(current)
+    proposed = _replace_follow_up_preferences(current, "\n".join(clean_lines))
+    diff = "\n".join(
+        difflib.unified_diff(
+            current.splitlines(),
+            proposed.splitlines(),
+            fromfile=str(profile_path),
+            tofile=str(profile_path),
+            lineterm="",
+        )
+    )
+    now = utc_now()
+    note = "User edited matching preferences in Signal Desk."
+    patch = {
+        "schema_version": PROFILE_PATCH_SCHEMA_VERSION,
+        "patch_id": "patch_" + uuid.uuid4().hex,
+        "profile_id": profile_id,
+        "card_id": None,
+        "note": note,
+        "status": "pending",
+        "diff_text": diff,
+        "proposed_profile_text": proposed,
+        "base_profile_hash": base_profile_hash,
+        "created_at": now,
+        "applied_at": None,
+    }
+    conn.execute(
+        """
+        INSERT INTO profile_patch_suggestions(
+            patch_id, profile_id, card_id, note, status, diff_text,
+            proposed_profile_text, base_profile_hash, created_at, applied_at
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            patch["patch_id"],
+            profile_id,
+            None,
             note,
             "pending",
             diff,
@@ -1396,16 +1773,17 @@ def dashboard_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
         )
         for profile in internal_profiles
     ]
+    internal_runs = [
+        run_from_row(row)
+        for row in conn.execute("SELECT * FROM runs ORDER BY started_at DESC LIMIT 100").fetchall()
+    ]
+    source_link_lookup = source_link_lookup_from_runs(internal_runs)
     inbox = [
-        _card_from_row(row)
+        _card_from_row(row, source_link_lookup)
         for row in conn.execute(
             "SELECT * FROM review_cards WHERE status = ? ORDER BY updated_at DESC LIMIT 200",
             (PENDING_STATUS,),
         ).fetchall()
-    ]
-    internal_runs = [
-        run_from_row(row)
-        for row in conn.execute("SELECT * FROM runs ORDER BY started_at DESC LIMIT 100").fetchall()
     ]
     runs = [dashboard_run_projection(run, profile_report_titles=profile_report_titles) for run in internal_runs]
     delivery_targets = [

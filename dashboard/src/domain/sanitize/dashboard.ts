@@ -253,8 +253,32 @@ function sanitizeProfiles(value: unknown): Profile[] {
       profile.source_topics = sourceTopics;
     }
     assignOptionalNumbers(profile, record, ["scan_window_hours", "semantic_max_messages", "delivery_target_count"]);
+    const matchingProfile = sanitizeProfileMatchingProfile(record.matching_profile);
+    if (matchingProfile) {
+      profile.matching_profile = matchingProfile;
+    }
     return [profile];
   });
+}
+
+function sanitizeProfileMatchingProfile(value: unknown): Profile["matching_profile"] | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+  const sections = sanitizeObjectArray(value.sections, "profile matching sections")
+    .map((section) => ({
+      key: stringOrDefault(section.key, ""),
+      label: stringOrDefault(section.label, ""),
+      items: stringArray(section.items).slice(0, 12),
+    }))
+    .filter((section) => section.key && section.label && section.items.length);
+  return {
+    schema_version: value.schema_version === "profile_matching_profile_v1" ? "profile_matching_profile_v1" : undefined,
+    summary: optionalString(value.summary),
+    sections,
+    learned_preferences: stringArray(value.learned_preferences).slice(0, 24),
+    editable_text: optionalString(value.editable_text),
+  };
 }
 
 function sanitizeRuns(value: unknown): Run[] {
@@ -779,6 +803,19 @@ function optionalStringOrNull(value: unknown) {
   return optionalString(value);
 }
 
+function optionalHttpUrl(value: unknown) {
+  const text = optionalString(value);
+  if (!text) {
+    return undefined;
+  }
+  try {
+    const parsed = new URL(text);
+    return parsed.protocol === "https:" || parsed.protocol === "http:" ? parsed.href : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 function numberOrDefault(value: unknown, fallback: number) {
   return typeof value === "number" && Number.isFinite(value) ? value : fallback;
 }
@@ -847,7 +884,12 @@ function sanitizeSourceRefs(value: unknown): SourceRef[] {
     if (!isRecord(ref) || typeof ref.channel !== "string" || (typeof ref.id !== "string" && typeof ref.id !== "number")) {
       return [];
     }
-    return [{ channel: ref.channel, id: ref.id }];
+    const cleanRef: SourceRef = { channel: ref.channel, id: ref.id };
+    const url = optionalHttpUrl(ref.url);
+    if (url) {
+      cleanRef.url = url;
+    }
+    return [cleanRef];
   });
 }
 

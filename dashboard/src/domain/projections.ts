@@ -30,7 +30,7 @@ export function buildMetrics(state: DashboardState): Metric[] {
 }
 
 export function buildTabCounts(state: DashboardState, actionCount = 0): Record<Tab, number> {
-  const feedbackCount = state.feedback_summary?.exportable_count ?? 0;
+  const feedbackCount = (state.feedback_summary?.exportable_count ?? 0) + (state.feedback_summary?.pending_profile_diff_count ?? 0);
   const deliveryBlockers = state.delivery_targets.filter((target) => !target.enabled).length;
   return {
     inbox: state.inbox.length,
@@ -83,7 +83,7 @@ export function buildBoardMeta(activeTab: Tab, state: DashboardState, actionCoun
 
 export function settingsActionCount(state: DashboardState) {
   const deliveryBlockers = state.delivery_targets.filter((target) => !target.enabled).length;
-  return deliveryBlockers + state.source_insights.length + (state.feedback_summary?.exportable_count ?? 0);
+  return deliveryBlockers + state.source_insights.length + (state.feedback_summary?.exportable_count ?? 0) + (state.feedback_summary?.pending_profile_diff_count ?? 0);
 }
 
 export function hasBlockingOpportunitySummary(summary?: OpportunitySummary) {
@@ -168,7 +168,7 @@ export function formatRunDiagnosticAction(quality?: Run["quality"]) {
     return "Next: preview prompt or loosen profile";
   }
   if (code === "ocr_disabled_media_present") {
-    return "Next: enable OCR only if media matters";
+    return "Optional: enable OCR if media matters";
   }
   if (code === "missing_scan_metadata") {
     return "Next: keep scan metadata sidecar";

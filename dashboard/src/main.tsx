@@ -11,11 +11,17 @@ import {
   applyProfilePatch,
   checkGitUpdates as checkGitUpdatesRequest,
   clearFeedbackDecisions as clearFeedbackDecisionsRequest,
+  clearDeskAiApiKey as clearDeskAiApiKeyRequest,
   clearDeskNotificationToken as clearDeskNotificationTokenRequest,
+  createProfileFromBrief as createProfileFromBriefRequest,
+  createProfileDraftNote as createProfileDraftNoteRequest,
+  createProfileMatchingPreferencesDraft as createProfileMatchingPreferencesDraftRequest,
   errorMessage,
   exportFeedback as exportFeedbackRequest,
+  generateFeedbackProfileSuggestions as generateFeedbackProfileSuggestionsRequest,
   importDeskSources,
   loadDeskNotificationTokenStatus,
+  loadDeskAiSettingsStatus,
   loadDeskSources,
   loadDeskSchedulerStatus,
   postReviewCardAction,
@@ -23,6 +29,7 @@ import {
   pullLatestGit,
   revertProfilePatch,
   saveDeskDeliveryTarget,
+  saveDeskAiApiKey as saveDeskAiApiKeyRequest,
   saveDeskNotificationToken as saveDeskNotificationTokenRequest,
   setDeskSourceEnabled as setDeskSourceEnabledRequest,
   setDeskSourceTopics as setDeskSourceTopicsRequest,
@@ -37,7 +44,7 @@ import { CommandStrip, OpportunitySummaryPanel, ValidationSummaryPanel } from ".
 import { InboxView } from "./components/inbox";
 import { ProfilesView } from "./components/profiles";
 import { RunsView } from "./components/runs";
-import { SettingsView } from "./components/settings";
+import { SettingsView, type SettingsTask } from "./components/settings";
 import { ConsoleHeader, NavigationRail, WorkbenchHeader } from "./components/shell";
 import { StatusRail } from "./components/status-rail";
 import { buildProfileReportNames } from "./domain/display";
@@ -54,10 +61,13 @@ import { useDeskTelegram } from "./hooks/use-desk-telegram";
 import type {
   DeliveryTestResult,
   DeskNotificationTokenStatus,
+  DeskAiSettingsStatus,
   DeskSchedulerStatus,
   DeskSourcesResult,
   FeedbackExportResult,
+  FeedbackProfileSuggestionsResult,
   GitUpdateStatus,
+  ProfileCreateResult,
   SourceImportResult,
   Tab,
 } from "./domain/types";
@@ -95,9 +105,13 @@ function App() {
   const [gitBusy, setGitBusy] = useState(false);
   const [gitStatus, setGitStatus] = useState<GitUpdateStatus | null>(null);
   const [feedbackExport, setFeedbackExport] = useState<FeedbackExportResult | null>(null);
+  const [feedbackProfileSuggestions, setFeedbackProfileSuggestions] = useState<FeedbackProfileSuggestionsResult | null>(null);
+  const [profileCreateResult, setProfileCreateResult] = useState<ProfileCreateResult | null>(null);
   const [deliveryTest, setDeliveryTest] = useState<DeliveryTestResult | null>(null);
   const [notificationTokenStatus, setNotificationTokenStatus] = useState<DeskNotificationTokenStatus | null>(null);
   const [notificationTokenError, setNotificationTokenError] = useState<string | null>(null);
+  const [aiSettingsStatus, setAiSettingsStatus] = useState<DeskAiSettingsStatus | null>(null);
+  const [aiSettingsError, setAiSettingsError] = useState<string | null>(null);
   const [sourceImportResult, setSourceImportResult] = useState<SourceImportResult | null>(null);
   const [deskSources, setDeskSources] = useState<DeskSourcesResult | null>(null);
   const [deskSourcesError, setDeskSourcesError] = useState<string | null>(null);
@@ -105,7 +119,7 @@ function App() {
   const [deskSchedulerError, setDeskSchedulerError] = useState<string | null>(null);
   const [pendingDeskAction, setPendingDeskAction] = useState<DeskActionConfirmation | null>(null);
   const pendingDeskActionReturnFocus = useRef<HTMLElement | null>(null);
-  const [settingsFocusTarget, setSettingsFocusTarget] = useState<"notifications" | null>(null);
+  const [settingsFocusTarget, setSettingsFocusTarget] = useState<SettingsTask | null>(null);
   const [notice, setNotice] = useState<{ tone: "success" | "error"; text: string } | null>(null);
 
   const metrics = useMemo(() => buildMetrics(state), [state]);
@@ -171,6 +185,21 @@ function App() {
     return () => controller.abort();
   }, []);
 
+  useEffect(() => {
+    const controller = new AbortController();
+    loadDeskAiSettingsStatus(controller.signal)
+      .then((status) => {
+        setAiSettingsStatus(status);
+        setAiSettingsError(null);
+      })
+      .catch((error) => {
+        if (!controller.signal.aborted) {
+          setAiSettingsError(errorMessage(error));
+        }
+      });
+    return () => controller.abort();
+  }, []);
+
   async function refreshDeskSources() {
     const sources = await loadDeskSources();
     setDeskSources(sources);
@@ -192,12 +221,20 @@ function App() {
     return token;
   }
 
+  async function refreshAiSettingsStatus() {
+    const status = await loadDeskAiSettingsStatus();
+    setAiSettingsStatus(status);
+    setAiSettingsError(null);
+    return status;
+  }
+
   async function refreshNow() {
     setBusy(true);
     try {
       await refresh();
       await refreshDeskSchedulerStatus().catch((error) => setDeskSchedulerError(errorMessage(error)));
       await refreshNotificationTokenStatus().catch((error) => setNotificationTokenError(errorMessage(error)));
+      await refreshAiSettingsStatus().catch((error) => setAiSettingsError(errorMessage(error)));
       setNotice({ tone: "success", text: "State refreshed" });
     } catch (error) {
       setNotice({ tone: "error", text: errorMessage(error) });
@@ -291,10 +328,52 @@ function App() {
     }
   }
 
+  async function generateFeedbackProfileSuggestions() {
+    setBusy(true);
+    setNotice(null);
+    try {
+      const result = await generateFeedbackProfileSuggestionsRequest();
+      setFeedbackProfileSuggestions(result);
+      await refresh();
+      if (result.created_count > 0 || result.existing_count > 0) {
+        setActiveTab("profiles");
+      }
+      setNotice({ tone: "success", text: result.detail || "Profile suggestions updated" });
+    } catch (error) {
+      setNotice({ tone: "error", text: errorMessage(error) });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function applyPendingProfileDrafts() {
+    const pendingPatches = state.profile_patch_suggestions.filter((patch) => patch.status === "pending");
+    if (!pendingPatches.length) {
+      setActiveTab("profiles");
+      return;
+    }
+    setBusy(true);
+    setNotice(null);
+    try {
+      for (const patch of pendingPatches) {
+        await applyProfilePatch(patch.patch_id);
+      }
+      await refresh();
+      setNotice({
+        tone: "success",
+        text: `${pendingPatches.length} profile draft${pendingPatches.length === 1 ? "" : "s"} applied`,
+      });
+    } catch (error) {
+      setNotice({ tone: "error", text: errorMessage(error) });
+    } finally {
+      setBusy(false);
+    }
+  }
+
   function feedbackClearErrorMessage(error: unknown) {
     const message = errorMessage(error);
     if (/404|not found/i.test(message)) {
-      return "Signal Desk server is out of date. Close and reopen Signal Desk, then retry Clear learning decisions.";
+      return "Signal Desk server is out of date. Close and reopen Signal Desk, then retry the learning action.";
     }
     return message;
   }
@@ -363,6 +442,61 @@ function App() {
     }
   }
 
+  async function createProfileDraftNote(profileId: string, note: string) {
+    setBusy(true);
+    setNotice(null);
+    try {
+      await createProfileDraftNoteRequest(profileId, note);
+      await refresh();
+      setActiveTab("profiles");
+      setNotice({ tone: "success", text: "Profile draft created. Review it before applying." });
+    } catch (error) {
+      setNotice({ tone: "error", text: errorMessage(error) });
+      throw error;
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function createProfileMatchingPreferencesDraft(profileId: string, preferences: string) {
+    setBusy(true);
+    setNotice(null);
+    try {
+      await createProfileMatchingPreferencesDraftRequest(profileId, preferences);
+      await refresh();
+      setActiveTab("profiles");
+      setNotice({ tone: "success", text: "Matching change drafted. Preview it before applying." });
+    } catch (error) {
+      setNotice({ tone: "error", text: errorMessage(error) });
+      throw error;
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function createProfileFromBrief(payload: {
+    brief: string;
+    source_filename?: string;
+    source_text?: string;
+    source_base64?: string;
+  }) {
+    setBusy(true);
+    setNotice(null);
+    try {
+      const result = await createProfileFromBriefRequest(payload);
+      setProfileCreateResult(result);
+      await refresh();
+      setActiveTab("profiles");
+      setNotice({ tone: "success", text: result.detail || "Profile created" });
+      return result;
+    } catch (error) {
+      setNotice({ tone: "error", text: errorMessage(error) });
+      throw error;
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function saveDeliveryTarget(targetId: string, chatId: string, enabled: boolean) {
     setBusy(true);
     setNotice(null);
@@ -420,6 +554,42 @@ function App() {
     } catch (error) {
       const message = errorMessage(error);
       setNotificationTokenError(message);
+      setNotice({ tone: "error", text: message });
+      throw error;
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function saveAiApiKey(provider: string, apiKey: string) {
+    setBusy(true);
+    setNotice(null);
+    try {
+      const status = await saveDeskAiApiKeyRequest(provider, apiKey);
+      setAiSettingsStatus(status);
+      setAiSettingsError(null);
+      setNotice({ tone: "success", text: "AI API key saved" });
+    } catch (error) {
+      const message = errorMessage(error);
+      setAiSettingsError(message);
+      setNotice({ tone: "error", text: message });
+      throw error;
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function clearAiApiKey(provider: string) {
+    setBusy(true);
+    setNotice(null);
+    try {
+      const status = await clearDeskAiApiKeyRequest(provider);
+      setAiSettingsStatus(status);
+      setAiSettingsError(null);
+      setNotice({ tone: "success", text: "Saved AI API key cleared" });
+    } catch (error) {
+      const message = errorMessage(error);
+      setAiSettingsError(message);
       setNotice({ tone: "error", text: message });
       throw error;
     } finally {
@@ -546,11 +716,15 @@ function App() {
     }
   }
 
+  function openSettings(task: SettingsTask = "sources") {
+    setActiveTab("settings");
+    setSettingsFocusTarget(task);
+  }
+
   async function runDeskAction(actionId: string) {
     setNotice(null);
     if (actionId === "live_delivery_human") {
-      setActiveTab("settings");
-      setSettingsFocusTarget("notifications");
+      openSettings("notifications");
       setNotice({ tone: "success", text: "Opened notification settings" });
       return;
     }
@@ -582,6 +756,9 @@ function App() {
 
   return (
     <main className="app-shell" data-testid="tgcs-dashboard">
+      <a className="skip-link" href="#active-board">
+        Skip to active board
+      </a>
       <div className="pixel-grid" aria-hidden="true" />
       <ConsoleHeader busy={busy || Boolean(busyActionId) || Boolean(deskTelegram.busy)} onRefresh={refreshNow} />
 
@@ -594,7 +771,7 @@ function App() {
       <section className="workbench">
         <NavigationRail tabs={tabShell} activeTab={activeTab} tabCounts={tabCounts} setActiveTab={setActiveTab} />
 
-        <section className="main-board" aria-label={boardMeta.title}>
+        <section className="main-board" id="active-board" aria-label={boardMeta.title} tabIndex={-1}>
           <WorkbenchHeader meta={boardMeta} />
           {showBoardStatusStack && (
             <div className="board-status-stack" aria-label="Board status summary">
@@ -612,6 +789,7 @@ function App() {
                 profileReportNames={profileReportNames}
                 act={act}
                 busy={busy}
+                onOpenStart={() => setActiveTab("actions")}
               />
             )}
             {activeTab === "actions" && (
@@ -635,6 +813,9 @@ function App() {
                   cancelLogin: deskTelegram.cancelLogin,
                 }}
                 onOpenReview={() => setActiveTab("inbox")}
+                onOpenProfiles={() => setActiveTab("profiles")}
+                onOpenRuns={() => setActiveTab("runs")}
+                onOpenSettings={openSettings}
                 onRun={runDeskAction}
               />
             )}
@@ -647,10 +828,21 @@ function App() {
                 setAlertMode={setAlertMode}
                 setProfileEnabled={setProfileEnabled}
                 setProfileRuntimeSettings={setProfileRuntimeSettings}
+                createProfileDraftNote={createProfileDraftNote}
+                createProfileMatchingPreferencesDraft={createProfileMatchingPreferencesDraft}
+                createProfileFromBrief={createProfileFromBrief}
+                profileCreateResult={profileCreateResult}
                 busy={busy}
+                onOpenStart={() => setActiveTab("actions")}
               />
             )}
-            {activeTab === "runs" && <RunsView runs={state.runs} />}
+            {activeTab === "runs" && (
+              <RunsView
+                runs={state.runs}
+                onOpenReview={() => setActiveTab("inbox")}
+                onRunDeskAction={(actionId) => void runDeskAction(actionId)}
+              />
+            )}
             {activeTab === "settings" && (
               <>
                 <SettingsView
@@ -659,7 +851,13 @@ function App() {
                   sourceInsights={state.source_insights}
                   feedbackSummary={state.feedback_summary}
                   feedbackExport={feedbackExport}
+                  feedbackProfileSuggestions={feedbackProfileSuggestions}
+                  aiSettingsStatus={aiSettingsStatus}
+                  aiSettingsError={aiSettingsError}
                   exportFeedback={exportFeedback}
+                  generateFeedbackProfileSuggestions={generateFeedbackProfileSuggestions}
+                  applyPendingProfileDrafts={applyPendingProfileDrafts}
+                  openProfileDrafts={() => setActiveTab("profiles")}
                   clearFeedback={clearFeedback}
                   undoFeedbackDecision={undoFeedbackDecision}
                   runAgainWithLearning={() => void runDeskAction("monitor_jobs_dry_run")}
@@ -672,6 +870,8 @@ function App() {
                   saveDeliveryTarget={saveDeliveryTarget}
                   saveNotificationToken={saveNotificationToken}
                   clearNotificationToken={clearNotificationToken}
+                  saveAiApiKey={saveAiApiKey}
+                  clearAiApiKey={clearAiApiKey}
                   testDeliveryTarget={testDeliveryTarget}
                   previewSourceImport={previewSourceImport}
                   importSources={importSources}
@@ -709,17 +909,17 @@ function deskActionConfirmation(actionId: string): DeskActionConfirmation | null
   if (actionId === "schedule_install_dry_run") {
     return {
       actionId,
-      title: "Turn on dry-run checks?",
-      detail: "Signal Desk will run local dry-run checks every 15 minutes in the background. No live Telegram alerts will be sent.",
-      confirmLabel: "Turn on dry-run checks",
+      title: "Turn on automatic practice scans?",
+      detail: "Signal Desk will check for new cards every 15 minutes in the background. It stays local and sends no live Telegram alerts.",
+      confirmLabel: "Turn on auto scan",
     };
   }
   if (actionId === "schedule_remove_dry_run") {
     return {
       actionId,
-      title: "Turn off dry-run checks?",
-      detail: "Background dry-run checks will stop. Manual scans in Signal Desk will still work.",
-      confirmLabel: "Turn off dry-run checks",
+      title: "Turn off automatic practice scans?",
+      detail: "Background checks will stop. Manual scans in Signal Desk will still work.",
+      confirmLabel: "Turn off auto scan",
     };
   }
   return null;

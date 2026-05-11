@@ -26,8 +26,27 @@
   min-width: 0;
 }
 
+.inbox-secondary-filter-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  justify-content: flex-end;
+  min-width: 0;
+}
+
 .inbox-filter-toggle {
   display: none;
+}
+
+.inbox-action-guide {
+  margin: -4px 0 0;
+  padding: 8px 10px;
+  border: 1px dashed var(--wash-paper-14);
+  background: color-mix(in oklch, var(--signal-low) 5%, transparent);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: var(--label-weight);
+  line-height: 1.35;
 }
 
 .triage-copy {
@@ -214,10 +233,21 @@
   grid-template-columns: minmax(0, 1fr) auto auto;
   gap: 8px;
   align-items: center;
+  width: 100%;
   min-width: 0;
   padding: 8px;
   border: 1px solid var(--wash-paper-12);
   background: var(--wash-paper-6);
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.review-backlog-row:hover,
+.review-backlog-row:focus-visible {
+  border-color: var(--teal);
+  background: color-mix(in oklch, var(--signal-low) 10%, transparent);
 }
 
 .review-backlog-row strong {
@@ -435,6 +465,20 @@ a.source-chip:focus-visible {
   background: var(--surface-warm-strong);
 }
 
+.action-cluster button[data-review-action="keep"]:hover,
+.action-cluster button[data-review-action="keep"]:focus-visible {
+  border-color: color-mix(in oklch, var(--signal-high) 72%, var(--ink));
+  background: color-mix(in oklch, var(--signal-high) 28%, var(--surface-warm));
+  color: var(--ink);
+}
+
+.action-cluster button[data-review-action="skip"]:hover,
+.action-cluster button[data-review-action="skip"]:focus-visible {
+  border-color: color-mix(in oklch, var(--signal-medium) 78%, var(--ink));
+  background: color-mix(in oklch, var(--signal-medium) 34%, var(--surface-warm));
+  color: var(--ink);
+}
+
 .action-cluster button.secondary-action,
 .mobile-action-strip button.secondary-action {
   border-color: color-mix(in oklch, var(--paper-3) 74%, var(--ink-warm));
@@ -482,8 +526,9 @@ a.source-chip:focus-visible {
   align-items: center;
   justify-content: center;
   gap: 6px;
-  min-height: 28px;
-  padding: 0 8px;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0 10px;
   border: 1px solid var(--field-border);
   border-radius: 0;
   background: transparent;

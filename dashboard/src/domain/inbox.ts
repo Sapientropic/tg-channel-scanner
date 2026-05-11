@@ -13,6 +13,7 @@ export type SetupCheckLike = {
 export type SourceRefLike = {
   channel?: unknown;
   id?: unknown;
+  url?: unknown;
 };
 
 function normalizeInboxToken(value: unknown) {
@@ -101,4 +102,20 @@ export function telegramMessageUrl(ref: SourceRefLike) {
     return "";
   }
   return `https://t.me/${channel}/${id}`;
+}
+
+export function telegramChannelUrl(ref: SourceRefLike) {
+  const channel = String(ref.channel || "").trim().replace(/^@+/, "");
+  if (!/^[A-Za-z][A-Za-z0-9_]{3,31}$/.test(channel)) {
+    return "";
+  }
+  return `https://t.me/${channel}`;
+}
+
+export function sourceRefUrl(ref: SourceRefLike) {
+  const explicit = typeof ref.url === "string" ? ref.url.trim() : "";
+  if (/^https:\/\/t\.me\/[A-Za-z0-9_+/.-]+$/i.test(explicit)) {
+    return explicit;
+  }
+  return telegramMessageUrl(ref) || telegramChannelUrl(ref);
 }

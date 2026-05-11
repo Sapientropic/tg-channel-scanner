@@ -72,8 +72,8 @@
   padding: 0 10px;
 }
 
-.source-import-field textarea:focus,
-.source-import-topic input:focus {
+.source-import-field textarea:focus-visible,
+.source-import-topic input:focus-visible {
   border-color: color-mix(in oklch, var(--signal-high) 54%, var(--line));
   box-shadow: 0 0 0 2px color-mix(in oklch, var(--signal-high) 16%, transparent);
 }
@@ -363,7 +363,7 @@
   outline: none;
 }
 
-.source-library-search input:focus {
+.source-library-search input:focus-visible {
   border-color: color-mix(in oklch, var(--signal-high) 54%, var(--line));
   box-shadow: 0 0 0 2px color-mix(in oklch, var(--signal-high) 16%, transparent);
 }

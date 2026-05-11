@@ -1,7 +1,8 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
-import { InboxView } from "./inbox";
+import { InboxView, nextNonEmptyReviewFilter } from "./inbox";
+import { inboxFilterOptions } from "../domain/inbox";
 import type { ReviewCard } from "../domain/types";
 
 function card(overrides: Partial<ReviewCard> = {}): ReviewCard {
@@ -40,5 +41,53 @@ describe("InboxView", () => {
     expect(html).toContain("Frontend Developer");
     expect(html).toContain("Keep");
     expect(html).toContain("Tune profile");
+  });
+
+  it("moves from an empty latest-action filter to a visible backlog bucket", () => {
+    const filters = inboxFilterOptions(
+      [
+        card({
+          card_id: "old-high",
+          first_run_id: "run-0",
+          last_run_id: "run-0",
+          rating: "high",
+          decision_status: "seen",
+        }),
+        card({
+          card_id: "old-medium",
+          first_run_id: "run-0",
+          last_run_id: "run-0",
+          rating: "medium",
+          decision_status: "seen",
+        }),
+      ],
+      "run-1",
+    );
+
+    expect(filters.find((item) => item.id === "actionable")?.count).toBe(0);
+    expect(nextNonEmptyReviewFilter(filters, "actionable")).toBe("high");
+  });
+
+  it("turns an empty latest-action view into a visible backlog jump", () => {
+    const html = renderToStaticMarkup(
+      <InboxView
+        cards={[
+          card({
+            card_id: "old-high",
+            first_run_id: "run-0",
+            last_run_id: "run-0",
+            rating: "high",
+            decision_status: "seen",
+          }),
+        ]}
+        latestRunId="run-1"
+        profileReportNames={{ "jobs-fast": "Jobs Report" }}
+        act={vi.fn()}
+        busy={false}
+      />,
+    );
+
+    expect(html).toContain("No latest action cards");
+    expect(html).toContain("Show High 1");
   });
 });

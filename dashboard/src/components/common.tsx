@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { AlertTriangle, Check, Copy } from "lucide-react";
+import { AlertTriangle, Check, Copy, Info } from "lucide-react";
 
 /** Shared panel title row; count is optional because some rail panels are status-only. */
 export function PanelHeader({ icon, title, count }: { icon: ReactNode; title: string; count?: number }) {
@@ -14,12 +14,31 @@ export function PanelHeader({ icon, title, count }: { icon: ReactNode; title: st
   );
 }
 
-/** Compact list/table empty state that keeps the warning icon consistent across views. */
-export function InlineEmpty({ title }: { title: string }) {
+/**
+ * Compact list/table empty state. Empty is not automatically an error: most
+ * Desk panels use it for "nothing to do yet", so callers opt into warning
+ * tones only when the state blocks the user's next action.
+ */
+export function InlineEmpty({
+  title,
+  detail,
+  tone = "info",
+  action,
+}: {
+  title: string;
+  detail?: string;
+  tone?: "info" | "warning" | "error";
+  action?: ReactNode;
+}) {
+  const icon = tone === "info" ? <Info size={16} /> : <AlertTriangle size={16} />;
   return (
-    <div className="inline-empty">
-      <AlertTriangle size={16} />
-      <span>{title}</span>
+    <div className={`inline-empty ${tone}`}>
+      {icon}
+      <span className="inline-empty-copy">
+        <strong>{title}</strong>
+        {detail && <small>{detail}</small>}
+      </span>
+      {action && <span className="inline-empty-action">{action}</span>}
     </div>
   );
 }

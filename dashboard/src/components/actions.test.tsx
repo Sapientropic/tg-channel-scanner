@@ -39,8 +39,8 @@ function schedulerStatus(installed: boolean): DeskSchedulerStatus {
     status: installed ? "installed" : "not_installed",
     task_label: "jobs-fast dry-run",
     interval_minutes: 15,
-    detail: installed ? "Automatic jobs dry-runs are on every 15 minutes." : "Automatic jobs dry-runs are off.",
-    next_action: installed ? "You can turn them off." : "Turn on dry-runs.",
+    detail: installed ? "Automatic practice scans are on every 15 minutes." : "Automatic practice scans are off.",
+    next_action: installed ? "You can turn them off." : "Turn on auto scan.",
     checked_at: "2026-05-10T00:00:00Z",
   };
 }
@@ -106,7 +106,7 @@ describe("Signal Desk journey", () => {
     const firstRun = steps.find((step) => step.key === "first-run");
 
     expect(workspace?.state).toBe("active");
-    expect(workspace?.buttons[0]).toMatchObject({ actionId: "init_jobs", label: "Create workspace" });
+    expect(workspace?.buttons[0]).toMatchObject({ actionId: "init_jobs", label: "Prepare files" });
     expect(firstRun?.state).toBe("blocked");
   });
 
@@ -120,6 +120,22 @@ describe("Signal Desk journey", () => {
     });
   });
 
+  it("puts Telegram before source files and avoids export jargon", () => {
+    const steps = buildJourneySteps(actions, {}, { stage: "ready", has_profiles: true, has_runs: true }, telegramReady);
+
+    expect(steps.map((step) => step.key)).toEqual([
+      "demo",
+      "telegram",
+      "workspace",
+      "first-run",
+      "automation",
+      "feedback",
+    ]);
+    expect(steps.find((step) => step.key === "feedback")?.buttons[0]).toMatchObject({
+      label: "Generate profile suggestions",
+    });
+  });
+
   it("keeps commands as advanced fallback data instead of primary controls", () => {
     const steps = buildJourneySteps(actions, {}, { stage: "ready", has_profiles: true, has_runs: true }, telegramReady);
 
@@ -127,7 +143,7 @@ describe("Signal Desk journey", () => {
 
     expect(automation?.buttons.map((button) => button.label)).toEqual([
       "Preview schedule",
-      "Turn on dry-runs",
+      "Turn on auto scan",
       "Notifications",
     ]);
     expect(automation?.buttons.map((button) => button.label)).not.toContain("Turn off");
@@ -148,7 +164,7 @@ describe("Signal Desk journey", () => {
 
     expect(automation?.buttons.map((button) => button.label)).toEqual([
       "Preview schedule",
-      "Turn off dry-runs",
+      "Turn off auto scan",
       "Notifications",
     ]);
   });
@@ -166,12 +182,12 @@ describe("Signal Desk journey", () => {
 
     expect(automation).toMatchObject({
       title: "Automation",
-      stateLabel: "Running dry-runs",
-      detail: expect.stringContaining("Automatic dry-run checks are on"),
+      stateLabel: "Auto scan on",
+      detail: expect.stringContaining("Automatic practice scans are on"),
     });
     expect(automation?.buttons.map((button) => button.label)).toEqual([
       "Preview schedule",
-      "Turn off dry-runs",
+      "Turn off auto scan",
       "Notifications",
     ]);
   });

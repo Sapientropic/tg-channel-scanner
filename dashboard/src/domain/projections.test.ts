@@ -30,13 +30,13 @@ describe("dashboard projections", () => {
       profile_patch_suggestions: [{ patch_id: "p1", profile_id: "jobs-fast", note: "x", status: "pending", diff_text: "+x", created_at: "2026-05-09T00:00:00Z" }],
       source_stats: [{ channel: "jobs", card_count: 4, high_count: 2, medium_count: 1, low_count: 1, pending_count: 1, handled_count: 3, false_positive_count: 0, alert_count: 1, high_rate: 0.5 }],
       source_insights: [{ kind: "promote", channel: "jobs", label: "Promote", reason: "Good", priority: 1, stats: { channel: "jobs", card_count: 4, high_count: 2, medium_count: 1, low_count: 1, pending_count: 1, handled_count: 3, false_positive_count: 0, alert_count: 1, high_rate: 0.5 } }],
-      feedback_summary: { exportable_count: 3 },
+      feedback_summary: { exportable_count: 3, pending_profile_diff_count: 1 },
     });
     expect(buildMetrics(dashboard).map((metric) => metric.label)).toEqual(["Runs", "Alerts", "Profiles", "Sources"]);
-    expect(buildTabCounts(dashboard, 8)).toEqual({ inbox: 0, actions: 8, profiles: 1, runs: 1, settings: 4 });
+    expect(buildTabCounts(dashboard, 8)).toEqual({ inbox: 0, actions: 8, profiles: 1, runs: 1, settings: 5 });
     expect(buildBoardMeta("actions", dashboard, 8).title).toBe("Start");
     expect(buildBoardMeta("settings", dashboard).title).toBe("Settings");
-    expect(settingsActionCount(dashboard)).toBe(4);
+    expect(settingsActionCount(dashboard)).toBe(5);
   });
 
   it("builds a fixed run-day window with empty days preserved", () => {

@@ -124,9 +124,16 @@ textarea {
 }
 
 textarea:focus,
-button:focus-visible {
+button:focus-visible,
+a:focus-visible,
+summary:focus-visible,
+[role="button"]:focus-visible {
   outline: 2px solid var(--teal);
   outline-offset: 3px;
+}
+
+summary:focus-visible {
+  outline-color: var(--amber);
 }
 
 .table-list {
@@ -165,7 +172,7 @@ button:focus-visible {
   display: grid;
   place-items: center;
   min-width: 0;
-  min-height: 32px;
+  min-height: 44px;
   padding: 0;
   border: 1px solid color-mix(in oklch, var(--tone-high-text) 22%, transparent);
   background: color-mix(in oklch, var(--paper-2) 26%, transparent);
@@ -189,7 +196,7 @@ button:focus-visible {
   max-width: 100%;
   align-items: center;
   gap: 7px;
-  min-height: 34px;
+  min-height: 44px;
   padding: 0 10px;
   border: 1px solid color-mix(in oklch, var(--signal-high) 36%, transparent);
   background: color-mix(in oklch, var(--signal-high) 9%, transparent);
@@ -207,7 +214,7 @@ button:focus-visible {
 
 .copy-command-button.icon-only {
   justify-content: center;
-  width: 34px;
+  width: 44px;
   padding: 0;
 }
 
@@ -379,6 +386,49 @@ pre {
   gap: 8px;
   align-self: start;
   max-width: 340px;
+}
+
+.empty-actions {
+  grid-column: 2;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+  max-width: 620px;
+}
+
+.empty-actions button,
+.inline-empty-action button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-width: 0;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--wash-paper-18);
+  background: var(--paper);
+  color: var(--ink);
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+  font-weight: var(--badge-weight);
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.empty-actions button:hover:not(:disabled),
+.empty-actions button:focus-visible,
+.inline-empty-action button:hover:not(:disabled),
+.inline-empty-action button:focus-visible {
+  border-color: var(--amber);
+  background: color-mix(in oklch, var(--paper) 84%, var(--amber));
+}
+
+.empty-actions button:disabled,
+.inline-empty-action button:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
 }
 
 .setup-checklist {
@@ -578,7 +628,8 @@ pre {
 }
 
 .inline-empty {
-  display: inline-flex;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
   gap: 9px;
   min-height: 58px;
@@ -586,5 +637,46 @@ pre {
   border: 1px dashed var(--line);
   color: var(--muted);
   font-size: 13px;
+}
+
+.inline-empty.warning {
+  border-color: color-mix(in oklch, var(--signal-medium) 38%, transparent);
+  color: color-mix(in oklch, var(--signal-medium) 76%, var(--paper));
+  background: color-mix(in oklch, var(--signal-medium) 8%, transparent);
+}
+
+.inline-empty.error {
+  border-color: color-mix(in oklch, var(--signal-danger) 42%, transparent);
+  color: color-mix(in oklch, var(--signal-danger) 76%, var(--paper));
+  background: color-mix(in oklch, var(--signal-danger) 8%, transparent);
+}
+
+.inline-empty-copy {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.inline-empty-copy strong,
+.inline-empty-copy small {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.inline-empty-copy strong {
+  color: currentColor;
+  font-size: 13px;
+  line-height: 1.2;
+}
+
+.inline-empty-copy small {
+  color: color-mix(in oklch, currentColor 76%, transparent);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.inline-empty-action {
+  display: inline-flex;
+  min-width: 0;
 }
 

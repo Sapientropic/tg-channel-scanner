@@ -1,5 +1,6 @@
 import {
   sanitizeDashboardState,
+  sanitizeDeskAiSettingsStatus,
   sanitizeDeskActions,
   sanitizeDeskActionResult,
   sanitizeDeskNotificationTokenStatus,
@@ -8,13 +9,16 @@ import {
   sanitizeDeskTelegramStatus,
   sanitizeDeliveryTestResult,
   sanitizeFeedbackExportResult,
+  sanitizeFeedbackProfileSuggestionsResult,
   sanitizeGitUpdateStatus,
+  sanitizeProfileCreateResult,
   sanitizeSourceImportResult,
 } from "../domain/sanitize";
 import type {
   DashboardState,
   DeskAction,
   DeskActionResult,
+  DeskAiSettingsStatus,
   DeskNotificationTokenStatus,
   DeskSchedulerStatus,
   DeskSourcesResult,
@@ -22,7 +26,9 @@ import type {
   DeliveryTarget,
   DeliveryTestResult,
   FeedbackExportResult,
+  FeedbackProfileSuggestionsResult,
   GitUpdateStatus,
+  ProfileCreateResult,
   SourceImportResult,
 } from "../domain/types";
 
@@ -98,6 +104,38 @@ export async function setProfileRuntimeSettings(
   await assertOk(response);
 }
 
+export async function createProfileDraftNote(profileId: string, note: string) {
+  const response = await fetch(`/api/profiles/${encodeURIComponent(profileId)}/draft-note`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ note }),
+  });
+  await assertOk(response);
+}
+
+export async function createProfileMatchingPreferencesDraft(profileId: string, preferences: string) {
+  const response = await fetch(`/api/profiles/${encodeURIComponent(profileId)}/matching-preferences`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ preferences }),
+  });
+  await assertOk(response);
+}
+
+export async function createProfileFromBrief(payload: {
+  brief: string;
+  source_filename?: string;
+  source_text?: string;
+  source_base64?: string;
+}): Promise<ProfileCreateResult> {
+  const resultPayload = await postJson("/api/profiles/create", payload);
+  const result = sanitizeProfileCreateResult(resultPayload.profile);
+  if (!result) {
+    throw new Error("Invalid profile creation response");
+  }
+  return result;
+}
+
 export async function checkGitUpdates(): Promise<GitUpdateStatus> {
   const payload = await postJson("/api/git/check-updates", {});
   const git = sanitizeGitUpdateStatus(payload.git);
@@ -121,6 +159,15 @@ export async function exportFeedback(): Promise<FeedbackExportResult> {
   const result = sanitizeFeedbackExportResult(payload.export);
   if (!result) {
     throw new Error("Invalid feedback export response");
+  }
+  return result;
+}
+
+export async function generateFeedbackProfileSuggestions(): Promise<FeedbackProfileSuggestionsResult> {
+  const payload = await postJson("/api/feedback/profile-suggestions", {});
+  const result = sanitizeFeedbackProfileSuggestionsResult(payload.suggestions);
+  if (!result) {
+    throw new Error("Invalid feedback profile suggestions response");
   }
   return result;
 }
@@ -156,6 +203,34 @@ export async function loadDeskNotificationTokenStatus(signal?: AbortSignal): Pro
   const result = sanitizeDeskNotificationTokenStatus(payload.token);
   if (!result) {
     throw new Error("Invalid notification token response");
+  }
+  return result;
+}
+
+export async function loadDeskAiSettingsStatus(signal?: AbortSignal): Promise<DeskAiSettingsStatus> {
+  const response = await fetch("/api/desk/ai-settings/status", { signal });
+  const payload = await readJson(response);
+  const result = sanitizeDeskAiSettingsStatus(payload.ai);
+  if (!result) {
+    throw new Error("Invalid AI API settings response");
+  }
+  return result;
+}
+
+export async function saveDeskAiApiKey(provider: string, apiKey: string): Promise<DeskAiSettingsStatus> {
+  const payload = await postJson("/api/desk/ai-settings", { provider, api_key: apiKey });
+  const result = sanitizeDeskAiSettingsStatus(payload.ai);
+  if (!result) {
+    throw new Error("Invalid AI API settings response");
+  }
+  return result;
+}
+
+export async function clearDeskAiApiKey(provider: string): Promise<DeskAiSettingsStatus> {
+  const payload = await postJson("/api/desk/ai-settings", { provider, clear: true });
+  const result = sanitizeDeskAiSettingsStatus(payload.ai);
+  if (!result) {
+    throw new Error("Invalid AI API settings response");
   }
   return result;
 }

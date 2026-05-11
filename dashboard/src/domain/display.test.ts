@@ -119,7 +119,7 @@ describe("dashboard display helpers", () => {
     expect(opportunityHeadline({ diagnostics: { failure_count: 1, top_code: "scan_failed" } })).toBe("Source check needed");
     expect(opportunityDetail({ diagnostics: { failure_count: 1, top_code: "scan_failed" } })).toBe("Scan failed");
     expect(opportunityHeadline({ high_actionable_count: 2 })).toBe("2 action signals");
-    expect(opportunityHeadline({ all_clear: true })).toBe("All Clear");
+    expect(opportunityHeadline({ all_clear: true })).toBe("No priority cards");
     expect(opportunityDetail({ matched_count: 3, scanned_count: 9 })).toBe("3/9 matched");
     expect(diagnosticTone({ diagnostic_failure_count: 1 })).toBe("diagnostic-pill danger");
     expect(diagnosticTone({ diagnostic_warning_count: 1 })).toBe("diagnostic-pill warn");

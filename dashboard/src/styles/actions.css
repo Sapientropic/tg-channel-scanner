@@ -197,6 +197,111 @@
   background: color-mix(in oklch, var(--paper) 88%, var(--teal));
 }
 
+.start-management-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(112px, 1fr));
+  gap: 8px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--wash-paper-16);
+  background: var(--wash-paper-5);
+  box-shadow: var(--panel-shadow);
+}
+
+.start-management-strip button {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 2px 7px;
+  align-items: center;
+  justify-items: start;
+  min-width: 0;
+  min-height: 46px;
+  padding: 7px 8px;
+  border: 1px solid var(--wash-paper-16);
+  background: var(--wash-paper-7);
+  color: var(--paper);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.start-management-strip button:hover:not(:disabled),
+.start-management-strip button:focus-visible {
+  border-color: var(--teal);
+  background: color-mix(in oklch, var(--signal-low) 10%, transparent);
+}
+
+.start-management-strip button[data-control-key="automation"] {
+  border-color: color-mix(in oklch, var(--amber) 62%, var(--wash-paper-16));
+  background: color-mix(in oklch, var(--signal-medium) 15%, transparent);
+}
+
+.start-management-strip button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.start-management-strip svg {
+  grid-row: span 2;
+  color: var(--amber);
+}
+
+.start-management-strip span,
+.start-management-strip small {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.start-management-strip span {
+  font-size: 11px;
+  font-weight: var(--badge-weight);
+  line-height: 1.1;
+  text-transform: uppercase;
+}
+
+.start-management-strip small {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: var(--label-weight);
+  line-height: 1.15;
+}
+
+.start-setup-drawer {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid color-mix(in oklch, var(--signal-medium) 32%, var(--line));
+  background: var(--wash-paper-6);
+  box-shadow: var(--panel-shadow);
+}
+
+.start-setup-drawer-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+}
+
+.start-setup-drawer-head > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.start-setup-drawer-head strong {
+  color: var(--paper);
+  font-size: 13px;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.start-setup-drawer-head .journey-button {
+  width: auto;
+  min-width: 88px;
+}
+
 .journey-list {
   display: grid;
   gap: 10px;
@@ -382,6 +487,52 @@
 .journey-button.secondary {
   background: transparent;
   color: var(--ink-warm);
+}
+
+.start-setup-drawer .journey-step {
+  border-color: var(--wash-paper-18);
+  background:
+    linear-gradient(90deg, color-mix(in oklch, var(--signal-low) 4%, transparent) 1px, transparent 1px),
+    color-mix(in oklch, var(--ink-2) 92%, transparent);
+  background-size: 14px 100%;
+  color: var(--paper);
+}
+
+.start-setup-drawer .journey-step.is-active {
+  border-color: color-mix(in oklch, var(--teal) 58%, var(--wash-paper-18));
+  background:
+    linear-gradient(90deg, color-mix(in oklch, var(--signal-low) 4%, transparent) 1px, transparent 1px),
+    color-mix(in oklch, var(--signal-low) 12%, var(--ink-2));
+  background-size: 14px 100%;
+}
+
+.start-setup-drawer .journey-step.is-blocked {
+  background:
+    linear-gradient(90deg, color-mix(in oklch, var(--muted) 4%, transparent) 1px, transparent 1px),
+    color-mix(in oklch, var(--ink) 86%, transparent);
+  background-size: 14px 100%;
+}
+
+.start-setup-drawer .journey-marker,
+.start-setup-drawer .journey-controls {
+  border-color: var(--wash-paper-18);
+  background: var(--wash-paper-7);
+  color: var(--paper);
+}
+
+.start-setup-drawer .journey-title-row h3,
+.start-setup-drawer .journey-main p {
+  color: var(--paper);
+}
+
+.start-setup-drawer .journey-main p {
+  color: color-mix(in oklch, var(--paper) 76%, var(--muted));
+}
+
+.start-setup-drawer .journey-button.secondary {
+  border-color: var(--wash-paper-18);
+  background: transparent;
+  color: var(--paper);
 }
 
 .desk-confirm-backdrop {

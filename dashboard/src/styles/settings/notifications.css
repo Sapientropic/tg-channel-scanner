@@ -129,7 +129,8 @@
   text-transform: uppercase;
 }
 
-.delivery-field input {
+.delivery-field input,
+.delivery-field select {
   width: 100%;
   min-width: 0;
   min-height: 44px;
@@ -143,7 +144,8 @@
   outline: none;
 }
 
-.delivery-field input:focus {
+.delivery-field input:focus-visible,
+.delivery-field select:focus-visible {
   border-color: color-mix(in oklch, var(--signal-high) 54%, var(--line));
   box-shadow: 0 0 0 2px color-mix(in oklch, var(--signal-high) 16%, transparent);
 }

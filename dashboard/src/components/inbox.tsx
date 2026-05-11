@@ -8,10 +8,12 @@ import {
   filterInboxCards,
   inboxFilterOptions,
   countInboxCardsByRating,
+  isActionableInboxCard,
   isMalformedInboxCard,
   setupCheckLabel,
   setupCheckTone,
   setupNeedsAttention,
+  sourceRefUrl,
   telegramMessageUrl,
   type InboxFilter,
 } from "../domain/inbox";
@@ -24,6 +26,7 @@ export function InboxView({
   profileReportNames,
   act,
   busy,
+  onOpenStart,
 }: {
   cards: ReviewCard[];
   latestRunId?: string;
@@ -31,21 +34,51 @@ export function InboxView({
   profileReportNames: Record<string, string>;
   act: (cardId: string, action: string, note?: string) => void;
   busy: boolean;
+  onOpenStart?: () => void;
 }) {
   const [filter, setFilter] = useState<InboxFilter>("actionable");
   const [filtersOpen, setFiltersOpen] = useState(false);
   const filters = inboxFilterOptions(cards, latestRunId);
+  const activeFilterCount = filters.find((item) => item.id === filter)?.count ?? 0;
+  useEffect(() => {
+    if (!cards.length || activeFilterCount > 0) {
+      return;
+    }
+    const nextFilter = nextNonEmptyReviewFilter(filters, filter);
+    if (nextFilter && nextFilter !== filter) {
+      setFilter(nextFilter);
+      setFiltersOpen(false);
+    }
+  }, [activeFilterCount, cards.length, filter, filters]);
   if (!cards.length) {
     return (
       <InboxEmptyState
         title="Inbox clear"
         detail={setupStatus?.next_step ? `Next: ${appFirstNextStep(setupStatus.next_step)}` : "SQLite connected. Pending review cards are currently zero."}
         setupStatus={setupStatus}
+        onOpenStart={onOpenStart}
       />
     );
   }
   const filteredCards = filterInboxCards(cards, filter, latestRunId);
   const activeFilter = filters.find((item) => item.id === filter) ?? filters[0];
+  const primaryFilters = filters.filter((item) => item.id === "actionable" || item.id === "all");
+  const secondaryFilters = filters.filter((item) => item.id !== "actionable" && item.id !== "all");
+  const shouldShowFilter = (item: (typeof filters)[number]) => item.id === "all" || item.id === filter || item.count > 0;
+  const renderFilterButton = (item: (typeof filters)[number]) => (
+    <button
+      className={filter === item.id ? "filter-chip active" : "filter-chip"}
+      key={item.id}
+      onClick={() => {
+        setFilter(item.id);
+        setFiltersOpen(false);
+      }}
+      type="button"
+    >
+      <span>{item.label}</span>
+      <strong>{item.count}</strong>
+    </button>
+  );
   return (
     <section className="list-section" aria-label="Pending review cards">
       <SetupChecklistBanner setupStatus={setupStatus} />
@@ -69,22 +102,15 @@ export function InboxView({
           <strong>{activeFilter.count}</strong>
         </button>
         <div className="inbox-filter-group" data-open={filtersOpen ? "true" : "false"}>
-          {filters.map((item) => (
-            <button
-              className={filter === item.id ? "filter-chip active" : "filter-chip"}
-              key={item.id}
-              onClick={() => {
-                setFilter(item.id);
-                setFiltersOpen(false);
-              }}
-              type="button"
-            >
-              <span>{item.label}</span>
-              <strong>{item.count}</strong>
-            </button>
-          ))}
+          {primaryFilters.filter(shouldShowFilter).map(renderFilterButton)}
+          <div className="inbox-secondary-filter-list" aria-label="Other review buckets">
+            {secondaryFilters.filter(shouldShowFilter).map(renderFilterButton)}
+          </div>
         </div>
       </div>
+      <p className="inbox-action-guide">
+        Keep = teach similar; Skip = lower priority; Avoid = block repeats.
+      </p>
       {filteredCards.length ? (
         <>
           {filteredCards.map((card) => (
@@ -107,9 +133,35 @@ export function InboxView({
           )}
         </>
       ) : (
-        <InlineEmpty title={filter === "actionable" ? "No latest action cards; switch to All for backlog" : "No cards in this filter"} />
+        <ReviewFilterEmptyState activeFilter={filter} filters={filters} onSelectFilter={setFilter} />
       )}
     </section>
+  );
+}
+
+function ReviewFilterEmptyState({
+  activeFilter,
+  filters,
+  onSelectFilter,
+}: {
+  activeFilter: InboxFilter;
+  filters: ReturnType<typeof inboxFilterOptions>;
+  onSelectFilter: Dispatch<SetStateAction<InboxFilter>>;
+}) {
+  const nextFilter = nextNonEmptyReviewFilter(filters, activeFilter);
+  const next = nextFilter ? filters.find((item) => item.id === nextFilter) : null;
+  return (
+    <InlineEmpty
+      title={activeFilter === "actionable" ? "No latest action cards" : "No cards in this view"}
+      detail={next ? `There is still work in ${next.label}.` : "This filter is clear."}
+      action={
+        next ? (
+          <button type="button" onClick={() => onSelectFilter(next.id)}>
+            Show {compactFilterLabel(next.label)} {next.count}
+          </button>
+        ) : undefined
+      }
+    />
   );
 }
 
@@ -118,6 +170,13 @@ function compactFilterLabel(label: string) {
   if (label === "New/Changed") return "New";
   if (label === "Low/Medium") return "Low/Med";
   return label;
+}
+
+export function nextNonEmptyReviewFilter(filters: ReturnType<typeof inboxFilterOptions>, current: InboxFilter): InboxFilter | null {
+  const preferred: InboxFilter[] = current === "actionable"
+    ? ["high", "new_changed", "low_medium", "all"]
+    : ["actionable", "high", "new_changed", "low_medium", "all"];
+  return preferred.find((id) => id !== current && (filters.find((item) => item.id === id)?.count ?? 0) > 0) ?? null;
 }
 
 function ReviewBacklogPanel({
@@ -155,16 +214,40 @@ function ReviewBacklogPanel({
       {previewCards.length > 0 && (
         <div className="review-backlog-preview" aria-label="Next backlog cards">
           {previewCards.map((card) => (
-            <div className="review-backlog-row" key={card.card_id}>
+            <button
+              className="review-backlog-row"
+              key={card.card_id}
+              onClick={() => onSelectFilter(backlogFilterForCard(card, latestRunId))}
+              title={`Show ${card.title}`}
+              type="button"
+            >
               <strong>{card.title}</strong>
               <span className={`rating ${toneClass(card.rating)}`}>{card.rating}</span>
               <small>{decisionStatusLabel(card.decision_status)}</small>
-            </div>
+            </button>
           ))}
         </div>
       )}
     </section>
   );
+}
+
+function backlogFilterForCard(card: ReviewCard, latestRunId?: string): InboxFilter {
+  if (isActionableInboxCard(card, latestRunId)) {
+    return "actionable";
+  }
+  const rating = String(card.rating || "").toLowerCase();
+  const decisionStatus = String(card.decision_status || "").toLowerCase();
+  if (rating === "high") {
+    return "high";
+  }
+  if (["new", "changed"].includes(decisionStatus)) {
+    return "new_changed";
+  }
+  if (["low", "medium"].includes(rating)) {
+    return "low_medium";
+  }
+  return "all";
 }
 
 function ReviewCardArticle({
@@ -235,28 +318,44 @@ function MobileActionStrip({
 }) {
   return (
     <div className="mobile-action-strip" aria-label="Quick review actions">
-      <button aria-label="Keep" title="Keep" type="button" onClick={() => act(card.card_id, "keep")} disabled={busy}>
+      <button
+        aria-label="Keep and prefer similar future matches"
+        title="Keep and prefer similar future matches"
+        type="button"
+        data-review-action="keep"
+        onClick={() => act(card.card_id, "keep")}
+        disabled={busy}
+      >
         <Check size={16} />
-        <span>Keep</span>
-      </button>
-      <button aria-label="Skip" title="Skip" type="button" onClick={() => act(card.card_id, "skip")} disabled={busy}>
-        <X size={16} />
-        <span>Skip</span>
+        <span>Keep similar</span>
       </button>
       <button
-        aria-label="Mark as wrong match"
+        aria-label="Skip and de-prioritize similar future matches"
+        title="Skip and de-prioritize similar future matches"
+        type="button"
+        data-review-action="skip"
+        onClick={() => act(card.card_id, "skip")}
+        disabled={busy}
+      >
+        <X size={16} />
+        <span>Skip similar</span>
+      </button>
+      <button
+        aria-label="Mark as wrong match and avoid similar future matches"
         className="secondary-action"
-        title="Mark as wrong match"
+        data-review-action="avoid"
+        title="Mark as wrong match and avoid similar future matches"
         type="button"
         onClick={() => act(card.card_id, "false_positive")}
         disabled={busy}
       >
         <Ban size={16} />
-        <span>Wrong match</span>
+        <span>Avoid match</span>
       </button>
       <button
         aria-label={showFollowUp ? "Hide profile tuning note" : "Tune profile from this card"}
         className="secondary-action"
+        data-review-action="tune"
         title={showFollowUp ? "Hide profile tuning note" : "Tune profile from this card"}
         type="button"
         onClick={() => setShowFollowUp((value) => !value)}
@@ -395,17 +494,30 @@ function CardActions({
     <div className="card-actions">
       <div className="action-cluster" aria-label="Review actions">
         <span className="action-cluster-label">Review action</span>
-        <button title="Keep" type="button" onClick={() => act(card.card_id, "keep")} disabled={busy}>
+        <button
+          title="Keep and prefer similar future matches"
+          type="button"
+          data-review-action="keep"
+          onClick={() => act(card.card_id, "keep")}
+          disabled={busy}
+        >
           <Check size={16} />
           <span>Keep</span>
         </button>
-        <button title="Skip" type="button" onClick={() => act(card.card_id, "skip")} disabled={busy}>
+        <button
+          title="Skip and de-prioritize similar future matches"
+          type="button"
+          data-review-action="skip"
+          onClick={() => act(card.card_id, "skip")}
+          disabled={busy}
+        >
           <X size={16} />
           <span>Skip</span>
         </button>
         <button
           className="secondary-action"
-          title="Mark as wrong match"
+          data-review-action="avoid"
+          title="Mark as wrong match and avoid similar future matches"
           type="button"
           onClick={() => act(card.card_id, "false_positive")}
           disabled={busy}
@@ -416,6 +528,7 @@ function CardActions({
         {!showFollowUp && (
           <button
             className="secondary-action"
+            data-review-action="tune"
             title="Tune profile from this card"
             type="button"
             onClick={() => setShowFollowUp(true)}
@@ -475,10 +588,12 @@ function InboxEmptyState({
   title,
   detail,
   setupStatus,
+  onOpenStart,
 }: {
   title: string;
   detail?: string;
   setupStatus?: DashboardState["setup_status"];
+  onOpenStart?: () => void;
 }) {
   return (
     <EmptyStateShell
@@ -486,11 +601,19 @@ function InboxEmptyState({
       title={title}
       detail={detail}
       readout={[
-        { label: "DB", value: "online" },
-        { label: "Run", value: setupStatus?.has_runs ? "history" : "needed" },
-        { label: "Next", value: setupStatus?.stage || "local" },
+        { label: "Data", value: "online" },
+        { label: "Scans", value: setupStatus?.has_runs ? "history" : "needed" },
+        { label: "Stage", value: setupStatus?.stage || "local" },
       ]}
     >
+      {onOpenStart && (
+        <div className="empty-actions" aria-label="Inbox next actions">
+          <button type="button" onClick={onOpenStart}>
+            <Play size={15} />
+            <span>{setupStatus?.has_runs ? "Open Start" : "Run first scan"}</span>
+          </button>
+        </div>
+      )}
       <SetupChecklist setupStatus={setupStatus} />
     </EmptyStateShell>
   );
@@ -540,7 +663,7 @@ function appFirstNextStep(nextStep: string) {
     return "Open Settings, update Sources, then run another scan.";
   }
   if (text.includes("monitor run")) {
-    return "Open Start and run the first dry-run scan.";
+    return "Open Start and run the first practice scan.";
   }
   if (text.includes("delivery test")) {
     return "Open Settings and add a notification target, or keep manual review.";
@@ -578,7 +701,7 @@ function SourceRefs({ refs }: { refs: SourceRef[] }) {
   return (
     <div className="source-row" aria-label="Source references">
       {refs.slice(0, 4).map((ref) => {
-        const href = telegramMessageUrl(ref);
+        const href = sourceRefUrl(ref);
         const label = sourceRefLabel(ref);
         const sourceTitle = `@${String(ref.channel || "").replace(/^@+/, "")} #${String(ref.id || "")}`;
         if (!href) {
@@ -595,7 +718,7 @@ function SourceRefs({ refs }: { refs: SourceRef[] }) {
             key={`${ref.channel}-${ref.id}`}
             target="_blank"
             rel="noreferrer"
-            title={`Open Telegram source: ${sourceTitle}`}
+            title={telegramMessageUrl(ref) || ref.url ? `Open Telegram source: ${sourceTitle}` : `Open Telegram channel: ${label}`}
           >
             <span>{label}</span>
             <ExternalLink size={12} aria-hidden="true" />

@@ -4,6 +4,21 @@
   min-width: 0;
 }
 
+.feedback-primary-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.feedback-primary-actions .text-button {
+  width: auto;
+  min-width: 168px;
+  max-width: 100%;
+  justify-content: center;
+  padding-inline: 12px;
+  text-align: center;
+}
+
 .feedback-breakdown {
   display: flex;
   flex-wrap: wrap;
@@ -225,6 +240,11 @@
   display: grid;
   gap: 8px;
   min-width: 0;
+}
+
+.feedback-export-result .text-button {
+  width: fit-content;
+  max-width: 100%;
 }
 
 .feedback-export-result small,

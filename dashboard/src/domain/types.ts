@@ -1,6 +1,7 @@
 export type SourceRef = {
   channel: string;
   id: string | number;
+  url?: string;
 };
 
 export type DecisionState = {
@@ -40,7 +41,22 @@ export type Profile = {
   scan_window_hours?: number;
   semantic_max_messages?: number;
   delivery_target_count?: number;
+  matching_profile?: ProfileMatchingProfile;
   updated_at: string;
+};
+
+export type ProfileMatchingProfile = {
+  schema_version?: "profile_matching_profile_v1";
+  summary?: string;
+  sections: ProfileMatchingSection[];
+  learned_preferences: string[];
+  editable_text?: string;
+};
+
+export type ProfileMatchingSection = {
+  key: string;
+  label: string;
+  items: string[];
 };
 
 export type SourceStat = {
@@ -135,6 +151,30 @@ export type DeskNotificationTokenStatus = {
   can_clear: boolean;
   platform: string;
   detail: string;
+};
+
+export type DeskAiProviderStatus = {
+  provider: string;
+  label: string;
+  env_name: string;
+  configured: boolean;
+  source: string;
+  env_configured: boolean;
+  local_store_configured: boolean;
+  can_save: boolean;
+  can_clear: boolean;
+  updated_at?: string | null;
+  detail: string;
+};
+
+export type DeskAiSettingsStatus = {
+  schema_version?: "desk_ai_settings_status_v1";
+  configured_count: number;
+  local_store_supported: boolean;
+  platform: string;
+  detail: string;
+  providers: DeskAiProviderStatus[];
+  checked_at?: string;
 };
 
 export type DashboardNextAction = {
@@ -441,4 +481,26 @@ export type FeedbackExportResult = {
   output_path: string;
   changed_since_last_export?: boolean;
   exported_at?: string;
+};
+
+export type FeedbackProfileSuggestionsResult = {
+  schema_version: "feedback_profile_suggestions_result_v1";
+  created_count: number;
+  existing_count: number;
+  skipped_count: number;
+  patch_ids: string[];
+  profile_ids: string[];
+  detail?: string;
+  generated_at?: string;
+};
+
+export type ProfileCreateResult = {
+  schema_version?: "desk_profile_create_result_v1";
+  profile_id: string;
+  display_name: string;
+  profile_path: string;
+  created: boolean;
+  detail: string;
+  next_action: string;
+  created_at?: string;
 };

@@ -4,12 +4,14 @@ import {
   emptyDashboardState,
   sanitizeDeskActions,
   sanitizeDeskActionResult,
+  sanitizeDeskAiSettingsStatus,
   sanitizeDeskSchedulerStatus,
   sanitizeDeskSourcesResult,
   sanitizeDeskTelegramStatus,
   sanitizeDeliveryTestResult,
   sanitizeDashboardState,
   sanitizeFeedbackExportResult,
+  sanitizeFeedbackProfileSuggestionsResult,
   sanitizeGitUpdateStatus,
   sanitizeInboxCards,
   sanitizeSourceImportResult,
@@ -72,6 +74,23 @@ describe("dashboard state sanitizers", () => {
     expect(warn).toHaveBeenCalledWith("[tgcs dashboard schema] runs[0].status expected non-empty string", undefined);
   });
 
+  it("keeps safe source ref urls and drops unsafe ones", () => {
+    expect(
+      sanitizeInboxCards([
+        {
+          ...validCard,
+          source_refs: [
+            { channel: "jobs", id: 1, url: "https://t.me/jobs/1" },
+            { channel: "bad", id: 2, url: "javascript:alert(1)" },
+          ],
+        },
+      ])[0].source_refs,
+    ).toEqual([
+      { channel: "jobs", id: 1, url: "https://t.me/jobs/1" },
+      { channel: "bad", id: 2 },
+    ]);
+  });
+
   it("sanitizes nested run quality fields before diagnostic formatting", () => {
     const state = sanitizeDashboardState({
       runs: [
@@ -94,6 +113,58 @@ describe("dashboard state sanitizers", () => {
       ],
     });
     expect(state.runs[0].quality).toEqual({ cache_hit_rate: null, latency_ms: 100, diagnostic_count: 1 });
+  });
+
+  it("sanitizes AI API provider status without exposing secrets", () => {
+    expect(
+      sanitizeDeskAiSettingsStatus({
+        schema_version: "desk_ai_settings_status_v1",
+        configured_count: 1,
+        local_store_supported: true,
+        platform: "win32",
+        detail: "1 AI provider key configured.",
+        checked_at: "2026-05-11T00:00:00Z",
+        providers: [
+          {
+            provider: "deepseek",
+            label: "DeepSeek",
+            env_name: "DEEPSEEK_API_KEY",
+            configured: true,
+            source: "windows_credential_manager",
+            env_configured: false,
+            local_store_configured: true,
+            can_save: true,
+            can_clear: true,
+            updated_at: "2026-05-10T00:00:00Z",
+            detail: "DeepSeek API key is saved.",
+            api_key: "secret",
+          },
+          { provider: "", label: "Bad", env_name: "BAD", source: "missing" },
+        ],
+      }),
+    ).toEqual({
+      schema_version: "desk_ai_settings_status_v1",
+      configured_count: 1,
+      local_store_supported: true,
+      platform: "win32",
+      detail: "1 AI provider key configured.",
+      checked_at: "2026-05-11T00:00:00Z",
+      providers: [
+        {
+          provider: "deepseek",
+          label: "DeepSeek",
+          env_name: "DEEPSEEK_API_KEY",
+          configured: true,
+          source: "windows_credential_manager",
+          env_configured: false,
+          local_store_configured: true,
+          can_save: true,
+          can_clear: true,
+          updated_at: "2026-05-10T00:00:00Z",
+          detail: "DeepSeek API key is saved.",
+        },
+      ],
+    });
   });
 
   it("preserves explicit null run artifacts but omits malformed artifacts", () => {
@@ -465,6 +536,27 @@ describe("dashboard state sanitizers", () => {
     expect(sanitizeFeedbackExportResult({ feedback_count: -1, output_path: "output/feedback/review-feedback.jsonl" })).toBeNull();
     expect(sanitizeFeedbackExportResult({ feedback_count: 1.5, output_path: "output/feedback/review-feedback.jsonl" })).toBeNull();
     expect(sanitizeFeedbackExportResult({ feedback_count: 1, output_path: "   " })).toBeNull();
+    expect(
+      sanitizeFeedbackProfileSuggestionsResult({
+        created_count: 1,
+        existing_count: 2,
+        skipped_count: 0,
+        patch_ids: [" patch-1 ", 42, "patch-2"],
+        profile_ids: [" jobs-fast "],
+        detail: " Profile drafts ready ",
+        generated_at: " 2026-05-10T00:00:00Z ",
+      }),
+    ).toEqual({
+      schema_version: "feedback_profile_suggestions_result_v1",
+      created_count: 1,
+      existing_count: 2,
+      skipped_count: 0,
+      patch_ids: ["patch-1", "patch-2"],
+      profile_ids: ["jobs-fast"],
+      detail: "Profile drafts ready",
+      generated_at: "2026-05-10T00:00:00Z",
+    });
+    expect(sanitizeFeedbackProfileSuggestionsResult({ created_count: -1, existing_count: 0, skipped_count: 0 })).toBeNull();
   });
 
   it("sanitizes Desk action payloads without trusting backend-only fields", () => {
@@ -486,8 +578,8 @@ describe("dashboard state sanitizers", () => {
           schema_version: "desk_action_v1",
           action_id: "schedule_install_dry_run",
           group: "Schedule",
-          title: "Turn on dry-run automation",
-          detail: "Create a local dry-run schedule.",
+          title: "Turn on auto scan",
+          detail: "Create a local practice scan schedule.",
           run_mode: "confirm_execute",
           display_command: "Windows Task Scheduler: jobs-fast dry-run",
           next_action: "Review future cards in Signal Desk.",
@@ -513,8 +605,8 @@ describe("dashboard state sanitizers", () => {
         schema_version: "desk_action_v1",
         action_id: "schedule_install_dry_run",
         group: "Schedule",
-        title: "Turn on dry-run automation",
-        detail: "Create a local dry-run schedule.",
+        title: "Turn on auto scan",
+        detail: "Create a local practice scan schedule.",
         run_mode: "confirm_execute",
         display_command: "Windows Task Scheduler: jobs-fast dry-run",
         next_action: "Review future cards in Signal Desk.",

@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import base64
 import html
+import io
 import ipaddress
 import json
 import mimetypes
@@ -57,16 +59,50 @@ DESK_DELIVERY_TARGET_ID = "telegram-bot-default"
 DESK_DELIVERY_ALLOWED_FIELDS = {"chat_id", "enabled"}
 DESK_DELIVERY_TEST_ALLOWED_FIELDS = {"chat_id"}
 DESK_NOTIFICATION_TOKEN_ALLOWED_FIELDS = {"token", "clear"}
+DESK_AI_SETTINGS_ALLOWED_FIELDS = {"provider", "api_key", "clear"}
 DESK_SOURCE_IMPORT_ALLOWED_FIELDS = {"sources", "topic"}
 DESK_SOURCE_UPDATE_ALLOWED_FIELDS = {"enabled"}
 DESK_SOURCE_TOPIC_ALLOWED_FIELDS = {"topics"}
 PROFILE_ENABLED_ALLOWED_FIELDS = {"enabled"}
 PROFILE_RUNTIME_SETTINGS_ALLOWED_FIELDS = set(monitor_state.PROFILE_RUNTIME_SETTING_LIMITS)
+PROFILE_DRAFT_NOTE_ALLOWED_FIELDS = {"note"}
+PROFILE_DRAFT_NOTE_MAX_LENGTH = 2000
+PROFILE_MATCHING_PREFERENCES_ALLOWED_FIELDS = {"preferences"}
+PROFILE_MATCHING_PREFERENCES_MAX_LENGTH = 4000
+PROFILE_CREATE_ALLOWED_FIELDS = {"brief", "source_filename", "source_text", "source_base64"}
+PROFILE_CREATE_MAX_TEXT_LENGTH = 30000
+PROFILE_CREATE_MAX_BINARY_BYTES = 4 * 1024 * 1024
 DESK_SOURCE_IMPORT_MAX_TEXT_LENGTH = 20000
 DESK_SOURCE_IMPORT_MAX_CHANNELS = 500
 DESK_SCHEDULER_PROFILE_ID = "jobs-fast"
 DESK_SCHEDULER_INTERVAL_MINUTES = 15
 DESK_SCHEDULER_TASK_NAME = "TGCS jobs-fast dry-run"
+DESK_AI_PROVIDER_CONFIGS: dict[str, dict[str, str]] = {
+    "openai": {
+        "label": "OpenAI",
+        "env_name": "OPENAI_API_KEY",
+        "target": "tgcs.signal-desk.openai-api-key",
+        "username": "OpenAI API key",
+    },
+    "deepseek": {
+        "label": "DeepSeek",
+        "env_name": "DEEPSEEK_API_KEY",
+        "target": "tgcs.signal-desk.deepseek-api-key",
+        "username": "DeepSeek API key",
+    },
+    "minimax": {
+        "label": "MiniMax",
+        "env_name": "MINIMAX_TOKEN_PLAN_KEY",
+        "target": "tgcs.signal-desk.minimax-token-plan-key",
+        "username": "MiniMax token plan key",
+    },
+    "xai": {
+        "label": "xAI OCR",
+        "env_name": "XAI_API_KEY",
+        "target": "tgcs.signal-desk.xai-api-key",
+        "username": "xAI API key",
+    },
+}
 _DESK_TELEGRAM_LOGIN: dict[str, str] = {}
 _DESK_TELEGRAM_LOGIN_LOCK = Lock()
 REPORT_HTML_MOBILE_PATCH = """<style data-dashboard-report-mobile-patch>
@@ -109,12 +145,12 @@ DESK_ACTIONS: tuple[dict, ...] = (
     {
         "action_id": "init_jobs",
         "group": "Setup",
-        "title": "Initialize jobs starter",
-        "detail": "Create local .tgcs defaults and merge the jobs starter sources.",
+        "title": "Prepare Signal Desk files",
+        "detail": "Create the private local settings and starter channel list Signal Desk uses for scans.",
         "run_mode": "execute",
         "display_command": "tgcs init --starter jobs",
         "argv": ["init", "--starter", "jobs"],
-        "next_action": "Run the jobs doctor check.",
+        "next_action": "Check setup before scanning.",
     },
     {
         "action_id": "demo_render",
@@ -130,38 +166,38 @@ DESK_ACTIONS: tuple[dict, ...] = (
     {
         "action_id": "doctor_jobs",
         "group": "Setup",
-        "title": "Check jobs prerequisites",
-        "detail": "Run first-use checks for the Developer Opportunity profile.",
+        "title": "Check setup",
+        "detail": "Check Telegram login, profiles, source list, and AI keys before a scan.",
         "run_mode": "execute",
         "display_command": "tgcs doctor --profile jobs",
         "argv": ["doctor", "--profile", "jobs", "--format", "json"],
-        "next_action": "Resolve any blocking checks, then log in if needed.",
+        "next_action": "Fix anything marked blocked, then run a practice scan.",
     },
     {
         "action_id": "sources_validate",
         "group": "Sources",
-        "title": "Validate source registry",
-        "detail": "Check the local source registry shape before scanning.",
+        "title": "Check source list",
+        "detail": "Confirm the saved Telegram channels are readable by Signal Desk.",
         "run_mode": "execute",
         "display_command": "tgcs sources validate",
         "argv": ["sources", "validate", "--format", "json"],
-        "next_action": "Import or fix sources if validation reports a problem.",
+        "next_action": "Use Repair starter sources if any saved channel is missing or unreadable.",
     },
     {
         "action_id": "sources_import_jobs",
         "group": "Sources",
-        "title": "Import jobs sources",
-        "detail": "Merge channel_lists/jobs.txt into the private source registry with the jobs topic.",
+        "title": "Repair starter sources",
+        "detail": "Restore or refresh the starter Telegram channels for the jobs monitor.",
         "run_mode": "execute",
         "display_command": "tgcs sources import channel_lists/jobs.txt --topic jobs",
         "argv": ["sources", "import", "channel_lists/jobs.txt", "--topic", "jobs", "--format", "json"],
-        "next_action": "Run the jobs doctor check again.",
+        "next_action": "Check setup again, then run a practice scan.",
     },
     {
         "action_id": "monitor_jobs_dry_run",
         "group": "Run",
-        "title": "Run jobs monitor dry-run",
-        "detail": "Run jobs-fast without sending alerts; report artifacts stay local.",
+        "title": "Run fresh practice scan",
+        "detail": "Fetch latest source messages and create local Review cards without sending Telegram alerts.",
         "run_mode": "execute",
         "display_command": "tgcs monitor run --profile-id jobs-fast --delivery-mode dry-run",
         "argv": [
@@ -176,24 +212,24 @@ DESK_ACTIONS: tuple[dict, ...] = (
         ],
         "artifact_keys": ["html_path", "report_path", "manifest_path"],
         "timeout": 300,
-        "next_action": "Review the new Inbox cards or open the generated report.",
+        "next_action": "Review the new cards or open the generated report.",
     },
     {
         "action_id": "feedback_export",
         "group": "Feedback",
-        "title": "Apply feedback to future reports",
-        "detail": "Save current keep / skip / false-positive decisions so future reports can learn from them.",
+        "title": "Export feedback JSONL",
+        "detail": "Troubleshooting fallback for agents or CLI imports; Desk can generate profile drafts directly.",
         "run_mode": "execute",
         "display_command": "tgcs feedback export",
         "argv": ["feedback", "export", "--format", "json"],
         "artifact_keys": ["output_path"],
-        "next_action": "Run another dry-run report with local learning applied.",
+        "next_action": "Use Desk Learning to generate profile drafts, or import JSONL through the CLI.",
     },
     {
         "action_id": "schedule_preview",
         "group": "Schedule",
-        "title": "Preview dry-run schedule",
-        "detail": "Preview the automatic dry-run cadence before turning it on.",
+        "title": "Preview auto scan",
+        "detail": "Preview the automatic practice-scan cadence before turning it on.",
         "run_mode": "execute",
         "display_command": "tgcs schedule print --profile-id jobs-fast --interval-minutes 15 --delivery-mode dry-run",
         "argv": [
@@ -206,25 +242,25 @@ DESK_ACTIONS: tuple[dict, ...] = (
             "--delivery-mode",
             "dry-run",
         ],
-        "next_action": "Turn on dry-run automation from Signal Desk when ready.",
+        "next_action": "Turn on automatic practice scans from Signal Desk when ready.",
     },
     {
         "action_id": "schedule_install_dry_run",
         "group": "Schedule",
-        "title": "Turn on dry-run automation",
-        "detail": "Create a Windows Task Scheduler task for the jobs monitor. It runs dry-runs only and sends no live alerts.",
+        "title": "Turn on auto scan",
+        "detail": "Create a Windows Task Scheduler task for local practice scans. It sends no live alerts.",
         "run_mode": "confirm_execute",
         "display_command": "Windows Task Scheduler: jobs-fast dry-run",
-        "next_action": "Signal Desk will run dry-run checks automatically every 15 minutes.",
+        "next_action": "Signal Desk will run local practice scans automatically every 15 minutes.",
     },
     {
         "action_id": "schedule_remove_dry_run",
         "group": "Schedule",
-        "title": "Turn off dry-run automation",
-        "detail": "Remove the Windows Task Scheduler task created by Signal Desk.",
+        "title": "Turn off auto scan",
+        "detail": "Remove the automatic practice scan task created by Signal Desk.",
         "run_mode": "confirm_execute",
         "display_command": "Windows Task Scheduler: remove jobs-fast dry-run",
-        "next_action": "Automatic dry-run checks are removed. Manual scans still work in Signal Desk.",
+        "next_action": "Automatic practice scans are removed. Manual scans still work in Signal Desk.",
     },
     {
         "action_id": "login_human",
@@ -306,6 +342,7 @@ def desk_health(*, host: str, port: int) -> dict:
             "desk_actions_v1",
             "desk_telegram_setup_v1",
             "desk_notification_token_v1",
+            "desk_ai_settings_v1",
             "desk_sources_v1",
             "desk_scheduler_v1",
             "dashboard_state_v1",
@@ -945,9 +982,9 @@ def test_desk_delivery_target(conn, target_id: str, body: dict) -> dict:
         mode="dry-run",
     ).to_dict()
     detail = (
-        "Dry-run passed. Signal Desk can use this chat ID when live notifications are turned on."
+        "Test passed. Signal Desk can use this chat ID when live notifications are turned on."
         if attempt.get("ok")
-        else str(attempt.get("error") or "Dry-run could not validate the notification target.")
+        else str(attempt.get("error") or "The test could not validate the notification target.")
     )
     return {
         "schema_version": "desk_delivery_test_result_v1",
@@ -1043,6 +1080,122 @@ def update_desk_notification_token(body: dict) -> dict:
             username="Telegram bot token",
         )
     return desk_notification_token_status()
+
+
+def _local_ai_secret(provider_id: str) -> local_credentials.StoredSecret | None:
+    config = DESK_AI_PROVIDER_CONFIGS[provider_id]
+    try:
+        return local_credentials.read_secret(config["target"])
+    except local_credentials.CredentialStoreError:
+        return None
+
+
+def desk_ai_settings_status() -> dict:
+    providers = []
+    local_supported = local_credentials.is_supported()
+    for provider_id, config in DESK_AI_PROVIDER_CONFIGS.items():
+        env_name = config["env_name"]
+        env_configured = bool(os.environ.get(env_name, "").strip())
+        stored = _local_ai_secret(provider_id) if local_supported else None
+        local_configured = bool(stored and stored.secret.strip())
+        configured = env_configured or local_configured
+        if env_configured:
+            source = "environment"
+            detail = f"{config['label']} is configured from {env_name}. Environment wins over local storage."
+        elif local_configured:
+            source = "windows_credential_manager"
+            detail = f"{config['label']} API key is saved in Windows Credential Manager."
+        else:
+            source = "missing"
+            detail = f"{config['label']} API key is not configured."
+        providers.append(
+            {
+                "provider": provider_id,
+                "label": config["label"],
+                "env_name": env_name,
+                "configured": configured,
+                "source": source,
+                "env_configured": env_configured,
+                "local_store_configured": local_configured,
+                "can_save": local_supported,
+                "can_clear": local_configured,
+                "updated_at": None if env_configured else stored.updated_at if stored else None,
+                "detail": detail,
+            }
+        )
+    configured_count = sum(1 for provider in providers if provider["configured"])
+    return {
+        "schema_version": "desk_ai_settings_status_v1",
+        "configured_count": configured_count,
+        "local_store_supported": local_supported,
+        "platform": sys.platform,
+        "detail": (
+            f"{configured_count} AI provider key{'s' if configured_count != 1 else ''} configured."
+            if configured_count
+            else "No AI provider keys configured yet."
+        ),
+        "providers": providers,
+        "checked_at": _utc_now(),
+    }
+
+
+def _clean_ai_provider(value: object) -> str:
+    provider = str(value or "").strip().casefold()
+    if provider not in DESK_AI_PROVIDER_CONFIGS:
+        raise ValueError("Choose a supported AI provider.")
+    return provider
+
+
+def _clean_ai_api_key(value: object) -> str:
+    key = str(value or "").strip()
+    if not key:
+        raise ValueError("Enter an API key before saving.")
+    if len(key) < 8:
+        raise ValueError("API key is too short.")
+    if len(key) > 1024:
+        raise ValueError("API key is too long for local secure storage.")
+    if any(ord(char) < 32 for char in key) or any(char.isspace() for char in key):
+        raise ValueError("API key cannot contain spaces or control characters.")
+    return key
+
+
+def update_desk_ai_settings(body: dict) -> dict:
+    unexpected = set(body) - DESK_AI_SETTINGS_ALLOWED_FIELDS
+    if unexpected:
+        raise ValueError(f"Unsupported AI settings field: {', '.join(sorted(unexpected))}")
+    if not local_credentials.is_supported():
+        raise ValueError("[⚠️ 需确认] Saving AI API keys in Signal Desk currently requires Windows Credential Manager.")
+    provider_id = _clean_ai_provider(body.get("provider"))
+    config = DESK_AI_PROVIDER_CONFIGS[provider_id]
+    clear = body.get("clear") is True
+    raw_key = body.get("api_key")
+    if body.get("clear") not in (None, True, False):
+        raise ValueError("AI key clear value must be true or false.")
+    if clear and raw_key:
+        raise ValueError("Save or clear the AI API key, not both.")
+    if clear:
+        local_credentials.delete_secret(config["target"])
+    elif raw_key is not None:
+        local_credentials.write_secret(
+            config["target"],
+            _clean_ai_api_key(raw_key),
+            username=config["username"],
+        )
+    else:
+        raise ValueError("Save or clear an AI API key.")
+    return desk_ai_settings_status()
+
+
+def desk_action_env() -> dict[str, str]:
+    env = os.environ.copy()
+    for provider_id, config in DESK_AI_PROVIDER_CONFIGS.items():
+        env_name = config["env_name"]
+        if env.get(env_name):
+            continue
+        stored = _local_ai_secret(provider_id)
+        if stored and stored.secret.strip():
+            env[env_name] = stored.secret.strip()
+    return env
 
 
 def _reject_unexpected_source_fields(body: dict) -> None:
@@ -1234,6 +1387,283 @@ def import_desk_sources(body: dict) -> dict:
     return _source_import_payload(result, topic=topic, written=True)
 
 
+def create_profile_from_brief(conn, body: dict) -> dict:
+    unexpected = sorted(str(key) for key in body.keys() if key not in PROFILE_CREATE_ALLOWED_FIELDS)
+    if unexpected:
+        raise ValueError(f"Unsupported profile creation field: {', '.join(unexpected)}")
+    brief = _profile_create_input_text(body)
+    title = _profile_title_from_text(brief)
+    profile_id = _unique_profile_id(conn, _slugify_profile_id(title))
+    profile_rel_path = Path("profiles") / "desk" / f"{profile_id}.md"
+    profile_path = PROJECT_ROOT / profile_rel_path
+    profile_path.parent.mkdir(parents=True, exist_ok=True)
+    profile_path.write_text(_profile_markdown_from_brief(title, brief), encoding="utf-8")
+
+    config = {
+        "id": profile_id,
+        "path": profile_rel_path.as_posix(),
+        "enabled": True,
+        "timezone": "Asia/Shanghai",
+        "work_interval_minutes": 30,
+        "off_hours_interval_minutes": 120,
+        "scan_window_hours": 2,
+        "source_registry": ".tgcs/sources.json",
+        "channel_list": "channel_lists/example.txt",
+        "source_topics": ["jobs"],
+        "alert_rule": "high_new_or_changed",
+        "alert_schedule_mode": "work_hours",
+        "delivery_targets": [DESK_DELIVERY_TARGET_ID],
+        "dashboard_visible": True,
+        "prefilter_enabled": True,
+        "semantic_max_messages": 20,
+        "semantic_max_tokens": 2000,
+        "prefilter_keywords": _profile_keywords_from_text(brief),
+    }
+    _append_profile_config(config)
+    monitor_state.upsert_profile(conn, {**config, "path": str(profile_path)})
+    return {
+        "schema_version": "desk_profile_create_result_v1",
+        "profile_id": profile_id,
+        "display_name": title,
+        "profile_path": profile_rel_path.as_posix(),
+        "created": True,
+        "detail": "Profile created from your brief. Review its matching rules, then run a practice scan.",
+        "next_action": "Open the new profile, adjust matching rules if needed, then run a practice scan from Start.",
+        "created_at": _utc_now(),
+    }
+
+
+def _profile_create_input_text(body: dict) -> str:
+    parts: list[str] = []
+    brief = str(body.get("brief") or "").strip()
+    if brief:
+        parts.append(brief)
+    source_text = str(body.get("source_text") or "").strip()
+    if source_text:
+        parts.append(source_text)
+    source_base64 = str(body.get("source_base64") or "").strip()
+    if source_base64:
+        filename = str(body.get("source_filename") or "").strip()
+        parts.append(_profile_text_from_base64_file(source_base64, filename))
+    text = "\n\n".join(part for part in parts if part.strip()).strip()
+    if not text:
+        raise ValueError("Describe the profile or attach a Markdown, text, or PDF file.")
+    if len(text) > PROFILE_CREATE_MAX_TEXT_LENGTH:
+        raise ValueError(f"Profile brief must be {PROFILE_CREATE_MAX_TEXT_LENGTH} characters or fewer after parsing.")
+    return text
+
+
+def _profile_text_from_base64_file(source_base64: str, filename: str) -> str:
+    raw_text = source_base64.split(",", 1)[-1]
+    try:
+        data = base64.b64decode(raw_text, validate=False)
+    except ValueError as exc:
+        raise ValueError("Could not read the attached profile file.") from exc
+    if len(data) > PROFILE_CREATE_MAX_BINARY_BYTES:
+        raise ValueError("Profile file is too large for local parsing.")
+    if Path(filename).suffix.lower() == ".pdf":
+        try:
+            from pypdf import PdfReader
+        except ImportError as exc:
+            raise ValueError("PDF parsing is not installed on this machine; use Markdown or text for now.") from exc
+        text = "\n".join(page.extract_text() or "" for page in PdfReader(io.BytesIO(data)).pages).strip()
+        if not text:
+            raise ValueError("The PDF did not contain readable text. Paste the profile brief instead.")
+        return text
+    try:
+        return data.decode("utf-8")
+    except UnicodeDecodeError:
+        return data.decode("utf-8", errors="ignore")
+
+
+def _profile_title_from_text(text: str) -> str:
+    for raw in text.splitlines():
+        line = re.sub(r"^[#>*\-\s]+", "", raw).strip()
+        line = re.sub(r"\s+", " ", line)
+        if line:
+            return line[:72].strip(" :-") or "Custom Monitor"
+    return "Custom Monitor"
+
+
+def _slugify_profile_id(title: str) -> str:
+    slug = re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-")
+    return slug[:48].strip("-") or "custom-monitor"
+
+
+def _unique_profile_id(conn, base_slug: str) -> str:
+    existing = {str(row["profile_id"]) for row in conn.execute("SELECT profile_id FROM profiles").fetchall()}
+    config_path = PROJECT_ROOT / ".tgcs" / "profiles.toml"
+    if config_path.exists():
+        try:
+            with config_path.open("rb") as handle:
+                payload = tomllib.load(handle)
+            for item in payload.get("profiles") or []:
+                if isinstance(item, dict) and item.get("id"):
+                    existing.add(str(item["id"]))
+        except (OSError, tomllib.TOMLDecodeError):
+            pass
+    candidate = base_slug
+    suffix = 2
+    while candidate in existing or (PROJECT_ROOT / "profiles" / "desk" / f"{candidate}.md").exists():
+        candidate = f"{base_slug[:42].strip('-')}-{suffix}"
+        suffix += 1
+    return candidate
+
+
+def _profile_keywords_from_text(text: str) -> list[str]:
+    seen: set[str] = set()
+    keywords: list[str] = []
+    for word in re.findall(r"[A-Za-z][A-Za-z0-9+#.-]{2,}", text.lower()):
+        cleaned = word.strip(".-")
+        if cleaned in seen or cleaned in {"the", "and", "with", "from", "that", "this", "profile", "monitor"}:
+            continue
+        seen.add(cleaned)
+        keywords.append(cleaned)
+        if len(keywords) >= 18:
+            break
+    return keywords or ["hiring", "opportunity", "role", "project", "apply"]
+
+
+def _profile_markdown_from_brief(title: str, brief: str) -> str:
+    rules = _profile_rule_lines(brief)
+    goal = _profile_sentence(brief)
+    return "\n".join(
+        [
+            f"# Profile: {title}",
+            "",
+            "## Basic Info",
+            f"- **Goal**: {goal}",
+            "- **Work format**: Use the pasted brief as the user's matching preference.",
+            "- **Review style**: Prefer actionable items with clear next steps; reject vague promos.",
+            "",
+            "## Search Rules",
+            *[f"{index + 1}. {rule}" for index, rule in enumerate(rules)],
+            f"{len(rules) + 1}. Rate each item as high, medium, or low based on fit, freshness, and actionability.",
+            f"{len(rules) + 2}. Keep low-priority items only when they explain a useful boundary.",
+            "",
+            "## Extraction Schema",
+            "mode: custom",
+            "top_level_key: items",
+            "dedup_fields: [title, source]",
+            "fields:",
+            "  - name: source_message_refs",
+            "    type: list",
+            "  - name: source_message_ids",
+            "    type: list",
+            "  - name: title",
+            "    required: true",
+            "  - name: source",
+            "  - name: contact",
+            "  - name: link",
+            "  - name: rating",
+            "    values: [high, medium, low]",
+            "  - name: why",
+            "  - name: action",
+            "    values: [Act now, Inspect, Skip unless criteria change]",
+            "",
+            "## Extraction Prompt",
+            "system_prompt: |",
+            "  Extract only Telegram items that match this monitor profile. Keep each item",
+            "  compact and actionable. Do not copy long source text; explain why the item",
+            "  matters in one sentence and preserve source references.",
+            "",
+            "## Report Preferences",
+            "- Put high-priority items first and explain the fastest safe next step.",
+            "- For medium matches, state what must be verified before acting.",
+            "- For low matches, state which criterion would need to change.",
+            "",
+            "## Follow-up Preferences",
+            "- No extra learned preferences yet.",
+            "",
+            "## Report Labels",
+            f'report_title: "{_toml_escape_inline(title)} Signal Report"',
+            'section_high: "Act Now"',
+            'section_medium: "Inspect First"',
+            'section_low: "Boundary Examples"',
+            f'stats_label: "{_toml_escape_inline(title)} matches"',
+            f'output_filename: "{_slugify_profile_id(title)}-signal-report-{{date}}.md"',
+            f'profile_section_title: "{_toml_escape_inline(title)} Profile"',
+            'methodology_label: "Telegram source monitoring"',
+            "",
+        ]
+    )
+
+
+def _profile_rule_lines(text: str) -> list[str]:
+    candidates: list[str] = []
+    for raw in text.splitlines():
+        line = re.sub(r"^[#>*\-\d.\s]+", "", raw).strip()
+        line = re.sub(r"\s+", " ", line)
+        if 12 <= len(line) <= 180:
+            candidates.append(line.rstrip("."))
+        if len(candidates) >= 5:
+            break
+    return candidates or ["Include items that match the user's pasted brief", "Ignore vague, low-confidence, or off-profile items"]
+
+
+def _profile_sentence(text: str) -> str:
+    compact = re.sub(r"\s+", " ", text).strip()
+    return compact[:220].rstrip(" ,.;") or "Monitor a custom set of Telegram signals"
+
+
+def _toml_escape_inline(value: str) -> str:
+    return value.replace("\\", "\\\\").replace('"', '\\"')
+
+
+def _toml_string(value: str) -> str:
+    return json.dumps(value, ensure_ascii=False)
+
+
+def _toml_array(values: list[str]) -> str:
+    return "[" + ", ".join(_toml_string(value) for value in values) + "]"
+
+
+def _append_profile_config(config: dict) -> None:
+    path = PROJECT_ROOT / ".tgcs" / "profiles.toml"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if not path.exists():
+        path.write_text(
+            "\n".join(
+                [
+                    'schema_version = "profile_run_config_v1"',
+                    "",
+                    "[defaults]",
+                    'output_dir = "output"',
+                    'state_dir = ".tgcs/state"',
+                    'database = ".tgcs/tgcs.db"',
+                    'dashboard_url = "http://127.0.0.1:8765"',
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+    block = [
+        "",
+        "[[profiles]]",
+        f'id = {_toml_string(config["id"])}',
+        f'path = {_toml_string(config["path"])}',
+        "enabled = true",
+        f'timezone = {_toml_string(config["timezone"])}',
+        f'work_interval_minutes = {config["work_interval_minutes"]}',
+        f'off_hours_interval_minutes = {config["off_hours_interval_minutes"]}',
+        f'scan_window_hours = {config["scan_window_hours"]}',
+        f'source_registry = {_toml_string(config["source_registry"])}',
+        f'channel_list = {_toml_string(config["channel_list"])}',
+        f'source_topics = {_toml_array(config["source_topics"])}',
+        f'alert_rule = {_toml_string(config["alert_rule"])}',
+        f'alert_schedule_mode = {_toml_string(config["alert_schedule_mode"])}',
+        f'delivery_targets = {_toml_array(config["delivery_targets"])}',
+        "dashboard_visible = true",
+        "prefilter_enabled = true",
+        f'semantic_max_messages = {config["semantic_max_messages"]}',
+        f'semantic_max_tokens = {config["semantic_max_tokens"]}',
+        f'prefilter_keywords = {_toml_array(config["prefilter_keywords"])}',
+        "",
+    ]
+    with path.open("a", encoding="utf-8", newline="\n") as handle:
+        handle.write("\n".join(block))
+
+
 def desk_actions() -> dict:
     return {
         "schema_version": "desk_actions_v1",
@@ -1293,7 +1723,7 @@ def _desk_success_detail(action: dict, payload: dict | None, stdout: str) -> tup
     artifact_path = _desk_artifact_path(action, data)
     if action.get("action_id") == "schedule_preview":
         return (
-            "Automatic jobs dry-runs would run every 15 minutes. Live Telegram delivery stays off.",
+            "Automatic practice scans would run every 15 minutes. Live Telegram delivery stays off.",
             "",
             action["next_action"],
         )
@@ -1301,11 +1731,21 @@ def _desk_success_detail(action: dict, payload: dict | None, stdout: str) -> tup
         detail = next_step.strip()
     elif isinstance(status, str) and status.strip():
         detail = f"{action['title']} finished with status: {status.strip()}."
-    elif stdout.strip():
+    elif stdout.strip() and not stdout.lstrip().startswith("{"):
         detail = stdout.strip().splitlines()[0][:500]
     else:
-        detail = f"{action['title']} finished."
+        detail = _desk_action_success_copy(str(action.get("action_id") or ""), str(action.get("detail") or action["title"]))
     return detail, artifact_path, str(next_step or action["next_action"])
+
+
+def _desk_action_success_copy(action_id: str, fallback: str) -> str:
+    return {
+        "init_jobs": "Signal Desk files are ready. Next, check setup before scanning.",
+        "doctor_jobs": "Setup check finished. If no problem is shown, run a fresh practice scan.",
+        "sources_validate": "Source list check finished. If no problem is shown, run a fresh practice scan.",
+        "sources_import_jobs": "Starter channels were repaired. Next, check setup, then run a fresh practice scan.",
+        "monitor_jobs_dry_run": "Fresh practice scan finished. Open Review for cards or Runs for scan evidence.",
+    }.get(action_id, f"{fallback} finished.")
 
 
 def _desk_failure_detail(payload: dict | None, stdout: str, stderr: str) -> tuple[str, str]:
@@ -1386,7 +1826,7 @@ def desk_scheduler_status() -> dict:
             "available": False,
             "installed": False,
             "status": "unavailable",
-            "detail": "Automatic dry-run checks can be installed from Signal Desk only on Windows.",
+            "detail": "Automatic practice scans can be installed from Signal Desk only on Windows.",
             "next_action": "Use manual scans from Signal Desk on this machine.",
         }
 
@@ -1398,7 +1838,7 @@ def desk_scheduler_status() -> dict:
             "available": True,
             "installed": False,
             "status": "unknown",
-            "detail": "Signal Desk could not confirm the automatic dry-run status before the check timed out.",
+            "detail": "Signal Desk could not confirm the automatic scan status before the check timed out.",
             "next_action": "Retry refresh, or open Windows Task Scheduler if the status stays unknown.",
         }
     except OSError:
@@ -1417,7 +1857,7 @@ def desk_scheduler_status() -> dict:
             "available": True,
             "installed": True,
             "status": "installed",
-            "detail": "Automatic jobs dry-runs are on every 15 minutes.",
+            "detail": "Automatic practice scans are on every 15 minutes.",
             "next_action": "You can turn them off from Signal Desk when you no longer need background checks.",
         }
     return {
@@ -1425,8 +1865,8 @@ def desk_scheduler_status() -> dict:
         "available": True,
         "installed": False,
         "status": "not_installed",
-        "detail": "Automatic jobs dry-runs are off.",
-        "next_action": "Turn on dry-runs from Signal Desk when you want background checks.",
+        "detail": "Automatic practice scans are off.",
+        "next_action": "Turn on auto scan from Signal Desk when you want background checks.",
     }
 
 
@@ -1442,8 +1882,8 @@ def run_desk_scheduler_action(action_id: str, *, body: dict | None = None) -> di
         return _scheduler_result(
             action_id,
             status="blocked",
-            title="Dry-run automation needs Windows",
-            detail="Signal Desk can install this automatic dry-run task only through Windows Task Scheduler.",
+            title="Auto scan needs Windows",
+            detail="Signal Desk can install this automatic practice-scan task only through Windows Task Scheduler.",
             next_action="Use the schedule preview for this machine, or run scans manually from Signal Desk.",
         )
 
@@ -1454,7 +1894,7 @@ def run_desk_scheduler_action(action_id: str, *, body: dict | None = None) -> di
             status="blocked",
             title="Launcher file is missing",
             detail="Signal Desk could not find the local TGCS launcher needed by Task Scheduler.",
-            next_action="Repair the repo-local install, then turn on dry-run automation again.",
+            next_action="Repair the repo-local install, then turn on auto scan again.",
         )
 
     # Keep this as a single fixed /TR argument in a list argv call. Do not
@@ -1475,13 +1915,13 @@ def run_desk_scheduler_action(action_id: str, *, body: dict | None = None) -> di
             task_action,
             "/F",
         ]
-        success_title = "Dry-run automation is on"
-        success_detail = "Windows Task Scheduler will run jobs dry-runs every 15 minutes. Live Telegram delivery is still off."
+        success_title = "Auto scan is on"
+        success_detail = "Windows Task Scheduler will run local practice scans every 15 minutes. Live Telegram delivery is still off."
         success_next = "You can leave Signal Desk and return later to review new Inbox cards."
     elif action_id == "schedule_remove_dry_run":
         args = ["schtasks.exe", "/Delete", "/TN", DESK_SCHEDULER_TASK_NAME, "/F"]
-        success_title = "Dry-run automation is off"
-        success_detail = "Signal Desk removed the Windows Task Scheduler task for jobs dry-runs."
+        success_title = "Auto scan is off"
+        success_detail = "Signal Desk removed the Windows Task Scheduler task for automatic practice scans."
         success_next = "Manual scans still work from Signal Desk."
     else:
         raise DashboardDeskActionError(f"Unknown scheduler action: {action_id}")
@@ -1560,6 +2000,7 @@ def run_desk_action(action_id: str, *, body: dict | None = None) -> dict:
             check=False,
             capture_output=True,
             text=True,
+            env=desk_action_env(),
             timeout=int(action.get("timeout", DESK_ACTION_TIMEOUT_SECONDS)),
         )
     except subprocess.TimeoutExpired:
@@ -1834,6 +2275,10 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 DashboardHandler._require_loopback_access(self, "Notification token status")
                 self._json(HTTPStatus.OK, {"ok": True, "token": desk_notification_token_status()})
                 return
+            if parsed.path == "/api/desk/ai-settings/status":
+                DashboardHandler._require_loopback_access(self, "AI API settings status")
+                self._json(HTTPStatus.OK, {"ok": True, "ai": desk_ai_settings_status()})
+                return
             if parsed.path == "/api/state":
                 with close_after_use(self._connect()) as conn:
                     self._json(HTTPStatus.OK, monitor_state.dashboard_snapshot(conn))
@@ -1882,6 +2327,10 @@ class DashboardHandler(BaseHTTPRequestHandler):
             if parsed.path == "/api/desk/notification-token":
                 DashboardHandler._require_loopback_access(self, "Notification token settings")
                 self._json(HTTPStatus.OK, {"ok": True, "token": update_desk_notification_token(body)})
+                return
+            if parsed.path == "/api/desk/ai-settings":
+                DashboardHandler._require_loopback_access(self, "AI API settings")
+                self._json(HTTPStatus.OK, {"ok": True, "ai": update_desk_ai_settings(body)})
                 return
             if parsed.path.startswith("/api/desk/delivery-targets/"):
                 DashboardHandler._require_loopback_access(self, "Notification settings")
@@ -1932,6 +2381,18 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 with close_after_use(self._connect()) as conn:
                     result = monitor_state.clear_feedback_decisions(conn)
                 self._json(HTTPStatus.OK, {"ok": True, "feedback": result})
+                return
+            if parsed.path == "/api/feedback/profile-suggestions":
+                DashboardHandler._require_loopback_access(self, "Feedback profile suggestions")
+                with close_after_use(self._connect()) as conn:
+                    result = monitor_state.create_feedback_profile_patch_suggestions(conn)
+                self._json(HTTPStatus.OK, {"ok": True, "suggestions": result})
+                return
+            if parsed.path == "/api/profiles/create":
+                DashboardHandler._require_loopback_access(self, "Profile creation")
+                with close_after_use(self._connect()) as conn:
+                    result = create_profile_from_brief(conn, body)
+                self._json(HTTPStatus.OK, {"ok": True, "profile": result})
                 return
             if parsed.path.startswith("/api/review-cards/") and parsed.path.endswith("/undo"):
                 card_id = unquote(parsed.path.split("/")[3])
@@ -1987,6 +2448,48 @@ class DashboardHandler(BaseHTTPRequestHandler):
                         settings=body,
                     )
                 self._json(HTTPStatus.OK, {"ok": True, "profile": profile})
+                return
+            if parsed.path.startswith("/api/profiles/") and parsed.path.endswith("/draft-note"):
+                DashboardHandler._require_loopback_access(self, "Profile draft note")
+                unexpected = sorted(str(key) for key in body.keys() if key not in PROFILE_DRAFT_NOTE_ALLOWED_FIELDS)
+                if unexpected:
+                    raise ValueError(f"Unsupported profile draft field: {', '.join(unexpected)}")
+                note = " ".join(str(body.get("note") or "").split())
+                if not note:
+                    raise ValueError("Profile note is required.")
+                if len(note) > PROFILE_DRAFT_NOTE_MAX_LENGTH:
+                    raise ValueError(f"Profile note must be {PROFILE_DRAFT_NOTE_MAX_LENGTH} characters or fewer.")
+                profile_id = unquote(parsed.path.split("/")[3])
+                with close_after_use(self._connect()) as conn:
+                    patch = monitor_state.create_profile_patch_suggestion(
+                        conn,
+                        profile_id=profile_id,
+                        card_id=None,
+                        note=note,
+                        profile_path=None,
+                    )
+                    conn.commit()
+                self._json(HTTPStatus.OK, {"ok": True, "patch": patch})
+                return
+            if parsed.path.startswith("/api/profiles/") and parsed.path.endswith("/matching-preferences"):
+                DashboardHandler._require_loopback_access(self, "Profile matching preferences")
+                unexpected = sorted(str(key) for key in body.keys() if key not in PROFILE_MATCHING_PREFERENCES_ALLOWED_FIELDS)
+                if unexpected:
+                    raise ValueError(f"Unsupported profile matching field: {', '.join(unexpected)}")
+                preferences = str(body.get("preferences") or "").strip()
+                if not preferences:
+                    raise ValueError("Profile matching preferences are required.")
+                if len(preferences) > PROFILE_MATCHING_PREFERENCES_MAX_LENGTH:
+                    raise ValueError(f"Profile matching preferences must be {PROFILE_MATCHING_PREFERENCES_MAX_LENGTH} characters or fewer.")
+                profile_id = unquote(parsed.path.split("/")[3])
+                with close_after_use(self._connect()) as conn:
+                    patch = monitor_state.create_profile_preferences_patch_suggestion(
+                        conn,
+                        profile_id=profile_id,
+                        preferences_text=preferences,
+                    )
+                    conn.commit()
+                self._json(HTTPStatus.OK, {"ok": True, "patch": patch})
                 return
             if parsed.path.startswith("/api/profile-patches/") and parsed.path.endswith("/apply"):
                 patch_id = unquote(parsed.path.split("/")[3])

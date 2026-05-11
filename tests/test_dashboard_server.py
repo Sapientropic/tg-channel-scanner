@@ -400,7 +400,7 @@ class DashboardServerGitTests(unittest.TestCase):
         self.assertIn("dry-run", cmd)
         self.assertNotIn("live", cmd)
         self.assertEqual(result["status"], "success")
-        self.assertIn("dry-runs would run every 15 minutes", result["detail"])
+        self.assertIn("practice scans would run every 15 minutes", result["detail"])
         self.assertNotIn("schtasks", result["detail"].lower())
         self.assertIn("Signal Desk", result["next_action"])
 
@@ -549,7 +549,7 @@ class DashboardServerGitTests(unittest.TestCase):
         self.assertTrue(status["available"])
         self.assertFalse(status["installed"])
         self.assertEqual(status["status"], "not_installed")
-        self.assertEqual(status["detail"], "Automatic jobs dry-runs are off.")
+        self.assertEqual(status["detail"], "Automatic practice scans are off.")
         self.assertNotIn("ERROR", json.dumps(status))
 
     def test_desk_scheduler_status_handles_timeout(self):
@@ -616,8 +616,8 @@ class DashboardServerGitTests(unittest.TestCase):
                 "status": "not_installed",
                 "task_label": "jobs-fast dry-run",
                 "interval_minutes": 15,
-                "detail": "Automatic jobs dry-runs are off.",
-                "next_action": "Turn on dry-runs.",
+                "detail": "Automatic practice scans are off.",
+                "next_action": "Turn on auto scan.",
                 "checked_at": "2026-05-10T00:00:00Z",
             },
         ) as status_mock:
@@ -997,6 +997,70 @@ class DashboardServerGitTests(unittest.TestCase):
                 with self.subTest(bad_token=bad_token):
                     with self.assertRaises(ValueError):
                         dashboard_server.update_desk_notification_token({"token": bad_token})
+
+    def test_ai_settings_status_prefers_env_without_echoing_key(self):
+        stored = dashboard_server.local_credentials.StoredSecret(
+            secret="local-deepseek-key",
+            updated_at="2026-05-10T00:00:00Z",
+        )
+        with patch.dict("os.environ", {"DEEPSEEK_API_KEY": "env-deepseek-key"}, clear=True):
+            with patch.object(dashboard_server.local_credentials, "is_supported", return_value=True):
+                with patch.object(dashboard_server.local_credentials, "read_secret", return_value=stored):
+                    status = dashboard_server.desk_ai_settings_status()
+
+        deepseek = next(item for item in status["providers"] if item["provider"] == "deepseek")
+        self.assertTrue(deepseek["configured"])
+        self.assertEqual(deepseek["source"], "environment")
+        rendered = json.dumps(status, ensure_ascii=False)
+        self.assertNotIn("env-deepseek-key", rendered)
+        self.assertNotIn("local-deepseek-key", rendered)
+
+    def test_ai_settings_save_and_clear_uses_credential_store_without_echoing_secret(self):
+        store: dict[str, dashboard_server.local_credentials.StoredSecret] = {}
+
+        def fake_write(target_name, secret, *, username="Signal Desk"):
+            store[target_name] = dashboard_server.local_credentials.StoredSecret(
+                secret=secret,
+                updated_at="2026-05-10T00:00:00Z",
+            )
+
+        def fake_delete(target_name):
+            store.pop(target_name, None)
+
+        def fake_read(target_name):
+            return store.get(target_name)
+
+        with patch.dict("os.environ", {}, clear=True):
+            with patch.object(dashboard_server.local_credentials, "is_supported", return_value=True):
+                with patch.object(dashboard_server.local_credentials, "write_secret", side_effect=fake_write):
+                    with patch.object(dashboard_server.local_credentials, "delete_secret", side_effect=fake_delete):
+                        with patch.object(dashboard_server.local_credentials, "read_secret", side_effect=fake_read):
+                            saved = dashboard_server.update_desk_ai_settings({"provider": "deepseek", "api_key": "sk-deepseek123"})
+                            env = dashboard_server.desk_action_env()
+                            cleared = dashboard_server.update_desk_ai_settings({"provider": "deepseek", "clear": True})
+
+        deepseek_saved = next(item for item in saved["providers"] if item["provider"] == "deepseek")
+        deepseek_cleared = next(item for item in cleared["providers"] if item["provider"] == "deepseek")
+        self.assertTrue(deepseek_saved["configured"])
+        self.assertEqual(deepseek_saved["source"], "windows_credential_manager")
+        self.assertEqual(env["DEEPSEEK_API_KEY"], "sk-deepseek123")
+        self.assertFalse(deepseek_cleared["configured"])
+        self.assertNotIn("sk-deepseek123", json.dumps(saved, ensure_ascii=False))
+
+    def test_ai_settings_update_rejects_command_fields_and_bad_keys(self):
+        with patch.object(dashboard_server.local_credentials, "is_supported", return_value=True):
+            with self.assertRaises(ValueError):
+                dashboard_server.update_desk_ai_settings(
+                    {"provider": "deepseek", "api_key": "sk-deepseek123", "command": "tgcs monitor run"}
+                )
+            for payload in (
+                {"provider": "../bad", "api_key": "sk-deepseek123"},
+                {"provider": "deepseek", "api_key": "short"},
+                {"provider": "deepseek", "api_key": "has space key"},
+            ):
+                with self.subTest(payload=payload):
+                    with self.assertRaises(ValueError):
+                        dashboard_server.update_desk_ai_settings(payload)
 
     def test_desk_source_import_preview_does_not_write_default_registry(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -1519,6 +1583,160 @@ class DashboardServerGitTests(unittest.TestCase):
                     self.assertEqual(handler.status, HTTPStatus.BAD_REQUEST)
                     self.assertIn(error_fragment, handler.payload["error"])
 
+    def test_profile_draft_note_http_endpoint_creates_reviewable_patch(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            db_path = root / "tgcs.db"
+            profile_path = root / "profiles" / "jobs.md"
+            profile_path.parent.mkdir(parents=True)
+            profile_path.write_text("# Jobs profile\n", encoding="utf-8")
+            conn = monitor_state.connect(db_path)
+            try:
+                monitor_state.upsert_profile(
+                    conn,
+                    {"id": "jobs-fast", "path": str(profile_path), "enabled": True},
+                )
+            finally:
+                conn.close()
+
+            class FakeHandler:
+                path = "/api/profiles/jobs-fast/draft-note"
+                status = None
+                payload = None
+                client_address = ("127.0.0.1", 51000)
+
+                def _connect(self):
+                    return monitor_state.connect(db_path)
+
+                def _read_json_body(self):
+                    return {"note": "Prefer senior remote AI engineering roles."}
+
+                def _json(self, status, payload):
+                    self.status = status
+                    self.payload = payload
+
+            handler = FakeHandler()
+            dashboard_server.DashboardHandler.do_POST(handler)
+            conn = monitor_state.connect(db_path)
+            try:
+                patches = monitor_state.dashboard_snapshot(conn)["profile_patch_suggestions"]
+            finally:
+                conn.close()
+
+        self.assertEqual(handler.status, HTTPStatus.OK)
+        self.assertEqual(handler.payload["patch"]["status"], "pending")
+        self.assertEqual(len(patches), 1)
+        self.assertIn("Prefer senior remote", patches[0]["note"])
+
+    def test_profile_draft_note_http_endpoint_rejects_invalid_payloads(self):
+        class FakeHandler:
+            status = None
+            payload = None
+            client_address = ("127.0.0.1", 51000)
+
+            def __init__(self, body):
+                self.body = body
+                self.path = "/api/profiles/jobs-fast/draft-note"
+
+            def _read_json_body(self):
+                return self.body
+
+            def _json(self, status, payload):
+                self.status = status
+                self.payload = payload
+
+        for body, error_fragment in [
+            ({}, "Profile note is required"),
+            ({"note": "valid", "command": "tgcs monitor run"}, "Unsupported profile draft field"),
+            ({"note": "x" * (dashboard_server.PROFILE_DRAFT_NOTE_MAX_LENGTH + 1)}, "characters or fewer"),
+        ]:
+            with self.subTest(body=list(body)):
+                handler = FakeHandler(body)
+                dashboard_server.DashboardHandler.do_POST(handler)
+
+                self.assertEqual(handler.status, HTTPStatus.BAD_REQUEST)
+                self.assertIn(error_fragment, handler.payload["error"])
+
+    def test_profile_create_endpoint_writes_local_profile_and_config(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            db_path = root / "tgcs.db"
+
+            class FakeHandler:
+                path = "/api/profiles/create"
+                status = None
+                payload = None
+                client_address = ("127.0.0.1", 51000)
+
+                def _connect(self):
+                    return monitor_state.connect(db_path)
+
+                def _read_json_body(self):
+                    return {
+                        "brief": "Senior remote AI engineering roles. Avoid unpaid internships and vague promos.",
+                        "source_filename": "background.txt",
+                        "source_text": "Prefer agent platforms, backend automation, and clear paid work.",
+                    }
+
+                def _json(self, status, payload):
+                    self.status = status
+                    self.payload = payload
+
+            with patch.object(dashboard_server, "PROJECT_ROOT", root):
+                handler = FakeHandler()
+                dashboard_server.DashboardHandler.do_POST(handler)
+                conn = monitor_state.connect(db_path)
+                try:
+                    snapshot = monitor_state.dashboard_snapshot(conn)
+                finally:
+                    conn.close()
+
+            profile = handler.payload["profile"]
+            profile_path = root / profile["profile_path"]
+            profile_body = profile_path.read_text(encoding="utf-8")
+            config_exists = (root / ".tgcs" / "profiles.toml").exists()
+
+        self.assertEqual(handler.status, HTTPStatus.OK)
+        self.assertEqual(profile["schema_version"], "desk_profile_create_result_v1")
+        self.assertIn("Senior remote AI engineering roles", profile_body)
+        self.assertTrue(config_exists)
+        self.assertEqual(snapshot["profiles"][0]["profile_id"], profile["profile_id"])
+
+    def test_profile_create_endpoint_rejects_invalid_payloads(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "tgcs.db"
+
+            class FakeHandler:
+                status = None
+                payload = None
+                client_address = ("127.0.0.1", 51000)
+
+                def __init__(self, body):
+                    self.body = body
+                    self.path = "/api/profiles/create"
+
+                def _connect(self):
+                    return monitor_state.connect(db_path)
+
+                def _read_json_body(self):
+                    return self.body
+
+                def _json(self, status, payload):
+                    self.status = status
+                    self.payload = payload
+
+            for body, error_fragment in [
+                ({}, "Describe the profile"),
+                ({"brief": "valid", "command": "tgcs monitor run"}, "Unsupported profile creation field"),
+                ({"brief": "x" * (dashboard_server.PROFILE_CREATE_MAX_TEXT_LENGTH + 1)}, "characters or fewer"),
+            ]:
+                with self.subTest(body=list(body)):
+                    handler = FakeHandler(body)
+                    dashboard_server.DashboardHandler.do_POST(handler)
+
+                    self.assertEqual(handler.status, HTTPStatus.BAD_REQUEST)
+                    self.assertIn(error_fragment, handler.payload["error"])
+
     def test_telegram_post_endpoints_require_loopback_client(self):
         class FakeHandler:
             status = None
@@ -1549,10 +1767,12 @@ class DashboardServerGitTests(unittest.TestCase):
             "/api/profiles/jobs-fast/enabled": "update_profile_enabled",
             "/api/profiles/jobs-fast/runtime-settings": "update_profile_runtime_settings",
             "/api/profiles/jobs-fast/alert-mode": "update_profile_alert_mode",
+            "/api/profiles/jobs-fast/draft-note": "create_profile_patch_suggestion",
+            "/api/profiles/create": "create_profile_from_brief",
         }
         for path, function_name in endpoint_functions.items():
             with self.subTest(path=path):
-                module = dashboard_server.monitor_state if function_name.startswith("update_profile_") else dashboard_server
+                module = dashboard_server.monitor_state if function_name.startswith("update_profile_") or function_name == "create_profile_patch_suggestion" else dashboard_server
                 with patch.object(module, function_name) as action_mock:
                     handler = FakeHandler(path)
                     dashboard_server.DashboardHandler.do_POST(handler)
@@ -1616,7 +1836,7 @@ class DashboardServerGitTests(unittest.TestCase):
                 "schema_version": "desk_action_result_v1",
                 "action_id": "monitor_jobs_dry_run",
                 "status": "success",
-                "title": "Run jobs monitor dry-run",
+                "title": "Run practice scan",
                 "detail": "done",
                 "display_command": "tgcs monitor run --profile-id jobs-fast --delivery-mode dry-run",
                 "exit_code": 0,
@@ -1855,6 +2075,55 @@ class DashboardServerGitTests(unittest.TestCase):
         self.assertEqual(handler.status, HTTPStatus.OK)
         self.assertFalse(handler.payload["token"]["configured"])
 
+    def test_ai_settings_status_endpoint_requires_loopback_and_returns_status(self):
+        class FakeHandler:
+            path = "/api/desk/ai-settings/status"
+            client_address = ("127.0.0.1", 12345)
+            status = None
+            payload = None
+
+            def _json(self, status, payload):
+                self.status = status
+                self.payload = payload
+
+        with patch.object(
+            dashboard_server,
+            "desk_ai_settings_status",
+            return_value={"schema_version": "desk_ai_settings_status_v1", "configured_count": 1},
+        ) as status_mock:
+            handler = FakeHandler()
+            dashboard_server.DashboardHandler.do_GET(handler)
+
+        status_mock.assert_called_once_with()
+        self.assertEqual(handler.status, HTTPStatus.OK)
+        self.assertEqual(handler.payload["ai"]["configured_count"], 1)
+
+    def test_ai_settings_update_endpoint_uses_safe_body(self):
+        class FakeHandler:
+            path = "/api/desk/ai-settings"
+            client_address = ("127.0.0.1", 12345)
+            status = None
+            payload = None
+
+            def _read_json_body(self):
+                return {"provider": "deepseek", "api_key": "sk-deepseek123"}
+
+            def _json(self, status, payload):
+                self.status = status
+                self.payload = payload
+
+        with patch.object(
+            dashboard_server,
+            "update_desk_ai_settings",
+            return_value={"schema_version": "desk_ai_settings_status_v1", "configured_count": 1},
+        ) as update_mock:
+            handler = FakeHandler()
+            dashboard_server.DashboardHandler.do_POST(handler)
+
+        update_mock.assert_called_once_with({"provider": "deepseek", "api_key": "sk-deepseek123"})
+        self.assertEqual(handler.status, HTTPStatus.OK)
+        self.assertEqual(handler.payload["ai"]["configured_count"], 1)
+
     def test_profile_patch_revert_endpoint_calls_monitor_state(self):
         class FakeConnection:
             closed = False
@@ -1890,6 +2159,43 @@ class DashboardServerGitTests(unittest.TestCase):
         self.assertTrue(handler.conn.closed)
         self.assertEqual(handler.status, HTTPStatus.OK)
         self.assertEqual(handler.payload["result"]["status"], "reverted")
+
+    def test_feedback_profile_suggestions_endpoint_calls_monitor_state(self):
+        class FakeConnection:
+            closed = False
+
+            def close(self):
+                self.closed = True
+
+        class FakeHandler:
+            path = "/api/feedback/profile-suggestions"
+            client_address = ("127.0.0.1", 12345)
+            status = None
+            payload = None
+            conn = FakeConnection()
+
+            def _read_json_body(self):
+                return {}
+
+            def _connect(self):
+                return self.conn
+
+            def _json(self, status, payload):
+                self.status = status
+                self.payload = payload
+
+        with patch.object(
+            dashboard_server.monitor_state,
+            "create_feedback_profile_patch_suggestions",
+            return_value={"schema_version": "feedback_profile_suggestions_result_v1", "created_count": 1},
+        ) as suggestions_mock:
+            handler = FakeHandler()
+            dashboard_server.DashboardHandler.do_POST(handler)
+
+        suggestions_mock.assert_called_once_with(handler.conn)
+        self.assertTrue(handler.conn.closed)
+        self.assertEqual(handler.status, HTTPStatus.OK)
+        self.assertEqual(handler.payload["suggestions"]["created_count"], 1)
 
 
 if __name__ == "__main__":

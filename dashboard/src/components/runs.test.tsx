@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
+import { renderToStaticMarkup } from "react-dom/server";
 
 import {
+  RunsView,
   buildCompactRunTimeline,
   buildRunEvidenceClusters,
   buildRunEvidenceGroups,
@@ -23,11 +25,21 @@ function run(overrides: Partial<Run>): Run {
 describe("run health decision", () => {
   it("prioritizes failed runs over card volume", () => {
     expect(buildRunHealthDecision([
-      run({ status: "failed", review_card_count: 4, alert_count: 2 }),
-      run({ run_id: "run-2", review_card_count: 8, alert_count: 3 }),
+      run({ run_id: "run-1", review_card_count: 8, alert_count: 3, started_at: "2026-05-10T08:00:00Z" }),
+      run({ run_id: "run-2", status: "failed", review_card_count: 4, alert_count: 2, started_at: "2026-05-10T12:00:00Z" }),
     ])).toMatchObject({
       tone: "danger",
       headline: "Fix failed scans",
+    });
+  });
+
+  it("does not keep the main health card red after a newer successful scan", () => {
+    expect(buildRunHealthDecision([
+      run({ run_id: "run-1", status: "failed", review_card_count: 0, alert_count: 0, started_at: "2026-05-09T08:00:00Z" }),
+      run({ run_id: "run-2", status: "complete", review_card_count: 5, alert_count: 1, started_at: "2026-05-11T12:00:00Z" }),
+    ])).toMatchObject({
+      tone: "info",
+      headline: "Review 1 alert candidate",
     });
   });
 
@@ -56,6 +68,19 @@ describe("run health decision", () => {
     });
   });
 
+  it("does not turn default-off OCR into a red or yellow run-health warning", () => {
+    expect(buildRunHealthDecision([
+      run({
+        review_card_count: 4,
+        alert_count: 1,
+        quality: { diagnostic_count: 1, diagnostic_warning_count: 1, top_diagnostic_code: "ocr_disabled_media_present" },
+      }),
+    ])).toMatchObject({
+      tone: "info",
+      headline: "Review 1 alert candidate",
+    });
+  });
+
   it("labels rows by outcome instead of repeating profile and date", () => {
     expect(buildRunOutcome(run({ review_card_count: 4, alert_count: 0 }))).toMatchObject({
       tone: "info",
@@ -74,6 +99,7 @@ describe("run health decision", () => {
       run({ run_id: "run-3", review_card_count: 0, alert_count: 0 }),
     ]);
     expect(groups.map((group) => group.key)).toEqual(["attention", "review", "clean"]);
+    expect(groups[0].title).toBe("Earlier failed scans");
     expect(groups[1].detail).toBe("2 cards / 0 alerts");
   });
 
@@ -104,7 +130,8 @@ describe("run health decision", () => {
       }),
     ]);
     expect(clusters).toHaveLength(1);
-    expect(clusters[0].outcome.title).toBe("OCR media skipped");
+    expect(clusters[0].outcome.title).toBe("OCR optional");
+    expect(clusters[0].outcome.tone).toBe("info");
   });
 
   it("does not escalate info-only diagnostics into the attention group", () => {
@@ -140,5 +167,13 @@ describe("run health decision", () => {
       { cards: 20, alerts: 10 },
     ])).toBe(20);
     expect(runCountScaleMax([])).toBe(1);
+  });
+
+  it("gives empty run history direct app actions", () => {
+    const html = renderToStaticMarkup(<RunsView runs={[]} onRunDeskAction={() => undefined} />);
+
+    expect(html).toContain("Run first scan");
+    expect(html).toContain("Check setup");
+    expect(html).not.toContain("Run history is empty in this database.");
   });
 });

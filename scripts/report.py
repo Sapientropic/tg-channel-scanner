@@ -22,7 +22,7 @@ from typing import Any, Iterable
 from urllib.parse import urlparse
 
 try:
-    from scripts import agent_cli, decision_intelligence, report_diagnostics, source_registry, state_store
+    from scripts import agent_cli, decision_intelligence, local_credentials, report_diagnostics, source_registry, state_store
     from scripts.item_display import display_item_title, display_title_parts, meaningful_text
     from scripts.profile_schema import ProfileConfig, build_json_schema_prompt, parse_profile_config
     from scripts.summarize import (
@@ -35,7 +35,7 @@ except ModuleNotFoundError:
     _PROJECT_ROOT = str(Path(__file__).resolve().parent.parent)
     if _PROJECT_ROOT not in sys.path:
         sys.path.insert(0, _PROJECT_ROOT)
-    from scripts import agent_cli, decision_intelligence, report_diagnostics, source_registry, state_store
+    from scripts import agent_cli, decision_intelligence, local_credentials, report_diagnostics, source_registry, state_store
     from scripts.item_display import display_item_title, display_title_parts, meaningful_text
     from scripts.profile_schema import ProfileConfig, build_json_schema_prompt, parse_profile_config
     from scripts.summarize import (
@@ -56,6 +56,11 @@ DEFAULT_MINIMAX_TOKEN_PLAN_BASE_URL = DEFAULT_MINIMAX_CN_BASE_URL
 DEFAULT_MINIMAX_MODEL = "MiniMax-M2.7"
 AGENT_EXTRACTION_REQUEST_SCHEMA_VERSION = "agent_extraction_request_v1"
 SEMANTIC_ITEMS_SCHEMA_VERSION = "semantic_items_v1"
+LOCAL_AI_SECRET_TARGETS = {
+    "OPENAI_API_KEY": "tgcs.signal-desk.openai-api-key",
+    "DEEPSEEK_API_KEY": "tgcs.signal-desk.deepseek-api-key",
+    "MINIMAX_TOKEN_PLAN_KEY": "tgcs.signal-desk.minimax-token-plan-key",
+}
 
 _DEFAULT_ACTIONS = {"high": "Apply", "medium": "Inspect", "low": "Skip unless criteria change"}
 
@@ -1277,11 +1282,25 @@ def parse_extraction_response(text: str, top_level_key: str = "jobs") -> list[di
 
 def llm_key_available() -> bool:
     return bool(
-        os.environ.get("OPENAI_API_KEY")
-        or os.environ.get("DEEPSEEK_API_KEY")
+        ai_secret("OPENAI_API_KEY")
+        or ai_secret("DEEPSEEK_API_KEY")
         or os.environ.get("MINIMAX_API_KEY")
-        or os.environ.get("MINIMAX_TOKEN_PLAN_KEY")
+        or ai_secret("MINIMAX_TOKEN_PLAN_KEY")
     )
+
+
+def ai_secret(env_name: str) -> str | None:
+    value = os.environ.get(env_name, "").strip()
+    if value:
+        return value
+    target = LOCAL_AI_SECRET_TARGETS.get(env_name)
+    if not target:
+        return None
+    try:
+        stored = local_credentials.read_secret(target)
+    except local_credentials.CredentialStoreError:
+        return None
+    return stored.secret.strip() if stored and stored.secret.strip() else None
 
 
 def llm_provider(base_url: str | None, model: str) -> str:
@@ -1297,13 +1316,13 @@ def llm_provider(base_url: str | None, model: str) -> str:
 
 def api_key_for_provider(provider: str) -> str | None:
     if provider == "deepseek":
-        return os.environ.get("DEEPSEEK_API_KEY") or os.environ.get("OPENAI_API_KEY")
+        return ai_secret("DEEPSEEK_API_KEY") or ai_secret("OPENAI_API_KEY")
     if provider == "minimax":
-        return os.environ.get("MINIMAX_TOKEN_PLAN_KEY") or os.environ.get("MINIMAX_API_KEY")
+        return ai_secret("MINIMAX_TOKEN_PLAN_KEY") or os.environ.get("MINIMAX_API_KEY")
     return (
-        os.environ.get("OPENAI_API_KEY")
-        or os.environ.get("DEEPSEEK_API_KEY")
-        or os.environ.get("MINIMAX_TOKEN_PLAN_KEY")
+        ai_secret("OPENAI_API_KEY")
+        or ai_secret("DEEPSEEK_API_KEY")
+        or ai_secret("MINIMAX_TOKEN_PLAN_KEY")
         or os.environ.get("MINIMAX_API_KEY")
     )
 
@@ -1312,7 +1331,7 @@ def default_minimax_base_url() -> str:
     region = (os.environ.get("MINIMAX_REGION") or os.environ.get("MINIMAX_API_REGION") or "").strip().casefold()
     if region in {"cn", "china", "mainland", "zh-cn"}:
         return DEFAULT_MINIMAX_CN_BASE_URL
-    return DEFAULT_MINIMAX_TOKEN_PLAN_BASE_URL if os.environ.get("MINIMAX_TOKEN_PLAN_KEY") else DEFAULT_MINIMAX_BASE_URL
+    return DEFAULT_MINIMAX_TOKEN_PLAN_BASE_URL if ai_secret("MINIMAX_TOKEN_PLAN_KEY") else DEFAULT_MINIMAX_BASE_URL
 
 
 def normalized_usage(usage: object) -> dict:
@@ -1632,9 +1651,9 @@ def extract_jobs(
 def resolve_llm_settings(base_url: str | None, model: str) -> tuple[str | None, str]:
     resolved_base_url = base_url or os.environ.get("OPENAI_BASE_URL")
     model_marker = model.casefold()
-    has_openai_key = bool(os.environ.get("OPENAI_API_KEY"))
-    has_deepseek_key = bool(os.environ.get("DEEPSEEK_API_KEY"))
-    has_minimax_key = bool(os.environ.get("MINIMAX_API_KEY") or os.environ.get("MINIMAX_TOKEN_PLAN_KEY"))
+    has_openai_key = bool(ai_secret("OPENAI_API_KEY"))
+    has_deepseek_key = bool(ai_secret("DEEPSEEK_API_KEY"))
+    has_minimax_key = bool(os.environ.get("MINIMAX_API_KEY") or ai_secret("MINIMAX_TOKEN_PLAN_KEY"))
     if "deepseek" in model_marker and not resolved_base_url:
         resolved_base_url = os.environ.get("DEEPSEEK_BASE_URL") or DEFAULT_DEEPSEEK_BASE_URL
     if "minimax" in model_marker and not resolved_base_url:
@@ -2081,14 +2100,34 @@ def _link_or_text(href: object, label: object, *, label_is_html: bool = False) -
 def readable_url_label(value: object, *, field_name: str = "") -> str:
     parsed = urlparse(str(value or "").strip())
     field = field_name.lower()
-    if field in {"apply_url", "application_url"}:
-        return "Apply"
     if field == "origin_url":
         return "Open source"
     if parsed.netloc:
         host = parsed.netloc.removeprefix("www.")
-        return host[:34] + "..." if len(host) > 37 else host
+        path = parsed.path.strip("/")
+        label = host if not path else f"{host}/{path.split('/')[0]}"
+        return label[:34] + "..." if len(label) > 37 else label
     return "Open link"
+
+
+def missing_url_label(field_name: str) -> str:
+    field = field_name.lower()
+    if field in {"apply_url", "application_url"}:
+        return "No apply link found"
+    return "No link found"
+
+
+def _url_field_html(field_name: str, values: list[str]) -> str:
+    rendered: list[str] = []
+    for value in _split_inline_values(values):
+        text = str(value or "").strip()
+        if safe_href(text):
+            rendered.append(_link_or_text(text, readable_url_label(text, field_name=field_name)))
+        elif not text or text.lower() in {"not specified", "unknown", "none", "n/a"}:
+            rendered.append(_esc(missing_url_label(field_name)))
+        else:
+            rendered.append(_esc(f"{missing_url_label(field_name)}: {text}"))
+    return _inline_html_group(rendered)
 
 
 def _tg_md_to_html(text: str) -> str:
@@ -2338,20 +2377,17 @@ def _render_generic_card(
                 val_list = None
 
             # Special rendering for contact/link/source fields
-            if f.name == "contact" and val_list:
-                rendered = _inline_html_group([_contact_html(c) for c in _split_inline_values(val_list)])
+            if f.name == "contact":
+                values = val_list or [str(val)]
+                rendered = _inline_html_group([_contact_html(c) for c in _split_inline_values(values)])
             elif f.name == "source" and val_list:
                 rendered = _source_links(val_list)
             elif f.name == "link":
                 values = val_list or [str(val)]
-                rendered = _inline_html_group(
-                    [_link_or_text(str(v), readable_url_label(v, field_name=f.name)) for v in _split_inline_values(values)]
-                )
+                rendered = _url_field_html(f.name, values)
             elif f.name == "url" or f.name.endswith("_url"):
                 values = val_list or [str(val)]
-                rendered = _inline_html_group(
-                    [_link_or_text(str(v), readable_url_label(v, field_name=f.name)) for v in _split_inline_values(values)]
-                )
+                rendered = _url_field_html(f.name, values)
             else:
                 display = ", ".join(str(v) for v in val_list) if val_list else str(val)
                 rendered = _esc(display)

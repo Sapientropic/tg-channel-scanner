@@ -5,12 +5,14 @@ import {
   CheckCircle2,
   CircleDashed,
   ExternalLink,
+  KeyRound,
   LockKeyhole,
   Play,
   ShieldAlert,
+  UserRoundCog,
   Wrench,
 } from "lucide-react";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 
 import { CopyableCommand, InlineEmpty } from "./common";
 import type { DashboardState, DeliveryTarget, DeskAction, DeskActionResult, DeskSchedulerStatus, DeskTelegramStatus } from "../domain/types";
@@ -45,6 +47,8 @@ type NotificationReadiness = {
   detail: string;
 };
 
+type SettingsShortcutTarget = "sources" | "ai" | "notifications" | "learning" | "evidence";
+
 type TelegramControls = {
   status: DeskTelegramStatus | null;
   busy: string;
@@ -76,6 +80,9 @@ export function ActionsView({
   targets = [],
   reviewCount = 0,
   onOpenReview,
+  onOpenProfiles,
+  onOpenRuns,
+  onOpenSettings,
   onRun,
 }: {
   actions: DeskAction[];
@@ -88,9 +95,13 @@ export function ActionsView({
   targets?: DeliveryTarget[];
   reviewCount?: number;
   onOpenReview?: () => void;
+  onOpenProfiles?: () => void;
+  onOpenRuns?: () => void;
+  onOpenSettings?: (target?: SettingsShortcutTarget) => void;
   onRun: (actionId: string) => Promise<void>;
 }) {
   const actionMap = new Map(actions.map((action) => [action.action_id, action]));
+  const [showSetupSteps, setShowSetupSteps] = useState(false);
   const steps = buildJourneySteps(actions, results, setupStatus, telegram.status, scheduler, targets);
   const activeStep = steps.find((step) => step.state === "active");
   const currentStep = activeStep ?? steps.find((step) => step.state === "ready") ?? steps.find((step) => step.state === "manual") ?? steps[0];
@@ -101,9 +112,10 @@ export function ActionsView({
   const heroDetail = activeStep
     ? currentStep?.detail
     : reviewCount
-      ? "Review the current queue before running more scans or changing automation."
+      ? ""
       : "Run a fresh practice scan first. Automation and notifications can wait.";
   const compactReadyMode = !activeStep && (stage === "ready" || stage === "needs_delivery_target");
+  const showCompactMoreControls = false;
   const firstRunStep = steps.find((step) => step.key === "first-run");
   const secondaryReadyStepOrder = ["feedback", "automation"];
   const secondaryReadyStepKeys = new Set(["first-run", ...secondaryReadyStepOrder]);
@@ -152,7 +164,7 @@ export function ActionsView({
         <div className="start-hero-main">
           <div>
             <h2>{heroTitle || "Open Signal Desk"}</h2>
-            <p>{heroDetail || "Use the guided controls below to set up and run the local scanner."}</p>
+            {heroDetail && <p>{heroDetail}</p>}
           </div>
           <div className="start-stage" aria-label="Current setup stage">
             <span>{stageLabel}</span>
@@ -163,8 +175,10 @@ export function ActionsView({
 
       {!compactReadyMode && summaryBlock}
 
-      {loadError && <InlineEmpty title={loadError} />}
-      {!actions.length && !loadError && <InlineEmpty title="Signal Desk controls are not exposed by the local server." />}
+      {loadError && <InlineEmpty title={loadError} tone="error" />}
+      {!actions.length && !loadError && (
+        <InlineEmpty title="Signal Desk controls are not exposed by the local server." tone="warning" />
+      )}
 
       {primaryReadyAction && (
         <StartPrimaryActionCard
@@ -174,6 +188,49 @@ export function ActionsView({
           onOpenReview={onOpenReview}
           onRun={onRun}
         />
+      )}
+
+      {compactReadyMode && (
+        <StartManagementStrip
+          anyBusy={Boolean(busyActionId)}
+          automationStep={steps.find((step) => step.key === "automation")}
+          onOpenProfiles={onOpenProfiles}
+          onOpenRuns={onOpenRuns}
+          onOpenSettings={onOpenSettings}
+          onRun={onRun}
+          scheduler={scheduler}
+          setupOpen={showSetupSteps}
+          onToggleSetup={() => setShowSetupSteps((value) => !value)}
+        />
+      )}
+
+      {compactReadyMode && showSetupSteps && (
+        <section className="start-setup-drawer" aria-label="Setup and credentials">
+          <div className="start-setup-drawer-head">
+            <div>
+              <span className="panel-kicker">Setup controls</span>
+              <strong>Edit login, sources, checks, and first-run setup</strong>
+            </div>
+            <button className="journey-button secondary" type="button" onClick={() => setShowSetupSteps(false)}>
+              Close
+            </button>
+          </div>
+          <div className="journey-list">
+            {steps.map((step, index) => (
+              <JourneyStepCard
+                actionMap={actionMap}
+                anyBusy={Boolean(busyActionId)}
+                busyActionId={busyActionId}
+                index={index + 1}
+                key={step.key}
+                onRun={onRun}
+                results={results}
+                step={step}
+                telegram={telegram}
+              />
+            ))}
+          </div>
+        </section>
       )}
 
       {!compactReadyMode && (
@@ -193,7 +250,7 @@ export function ActionsView({
           ))}
         </div>
       )}
-      {compactReadyMode ? (
+      {showCompactMoreControls && (
         <details className="journey-secondary start-more-controls">
           <summary>More controls</summary>
           <div className="start-more-body">
@@ -243,7 +300,8 @@ export function ActionsView({
             )}
           </div>
         </details>
-      ) : (
+      )}
+      {!compactReadyMode && (
         <>
           {secondaryReadySteps.length > 0 && (
             <details className="journey-secondary">
@@ -291,6 +349,105 @@ export function ActionsView({
   );
 }
 
+type StartManagementControl = {
+  key: string;
+  label: string;
+  detail: string;
+  icon: ReactNode;
+  disabled?: boolean;
+  onClick: () => void;
+};
+
+function StartManagementStrip({
+  anyBusy,
+  automationStep,
+  onOpenProfiles,
+  onOpenRuns,
+  onOpenSettings,
+  onRun,
+  scheduler,
+  setupOpen,
+  onToggleSetup,
+}: {
+  anyBusy: boolean;
+  automationStep?: JourneyStep;
+  onOpenProfiles?: () => void;
+  onOpenRuns?: () => void;
+  onOpenSettings?: (target?: SettingsShortcutTarget) => void;
+  onRun: (actionId: string) => Promise<void>;
+  scheduler?: DeskSchedulerStatus | null;
+  setupOpen: boolean;
+  onToggleSetup: () => void;
+}) {
+  const automationButton =
+    automationStep?.buttons.find((button) => button.actionId === "schedule_install_dry_run" || button.actionId === "schedule_remove_dry_run") ??
+    automationStep?.buttons.find((button) => button.actionId === "schedule_preview");
+  const controls: StartManagementControl[] = [
+    ...(automationButton
+      ? [
+          {
+            key: "automation",
+            label: scheduler?.installed ? "Auto scan on" : "Automation",
+            detail: scheduler?.installed ? "Every 15 min" : "Set schedule",
+            icon: <Bell size={15} />,
+            disabled: anyBusy,
+            onClick: () => void onRun(automationButton.actionId),
+          } satisfies StartManagementControl,
+        ]
+      : []),
+    {
+      key: "setup",
+      label: "Setup",
+      detail: setupOpen ? "Hide setup" : "Edit / login",
+      icon: <Wrench size={15} />,
+      onClick: onToggleSetup,
+    },
+    {
+      key: "ai",
+      label: "AI API",
+      detail: "LLM / OCR keys",
+      icon: <KeyRound size={15} />,
+      disabled: !onOpenSettings,
+      onClick: () => onOpenSettings?.("ai"),
+    },
+    {
+      key: "profiles",
+      label: "Profiles",
+      detail: "Create / edit",
+      icon: <UserRoundCog size={15} />,
+      disabled: !onOpenProfiles,
+      onClick: () => onOpenProfiles?.(),
+    },
+    {
+      key: "sources",
+      label: "Sources",
+      detail: "Channels",
+      icon: <Wrench size={15} />,
+      disabled: !onOpenSettings,
+      onClick: () => onOpenSettings?.("sources"),
+    },
+    {
+      key: "runs",
+      label: "Runs",
+      detail: "Open evidence",
+      icon: <CircleDashed size={15} />,
+      disabled: !onOpenRuns,
+      onClick: () => onOpenRuns?.(),
+    },
+  ];
+  return (
+    <nav className="start-management-strip" aria-label="Desk management shortcuts">
+      {controls.map((control) => (
+        <button data-control-key={control.key} disabled={control.disabled} key={control.key} onClick={control.onClick} type="button">
+          {control.icon}
+          <span>{control.label}</span>
+          <small>{control.detail}</small>
+        </button>
+      ))}
+    </nav>
+  );
+}
+
 export function buildJourneySteps(
   actions: DeskAction[],
   results: Record<string, DeskActionResult>,
@@ -312,8 +469,8 @@ export function buildJourneySteps(
   const dryRunScheduleOn = scheduler?.installed || (hasSuccess("schedule_install_dry_run") && results.schedule_remove_dry_run?.status !== "success");
   const notifications = notificationReadiness(targets);
   const automationDetail = scheduler?.installed
-    ? "Automatic dry-run checks are on every 15 minutes."
-    : "Automatic dry-run checks can run every 15 minutes from Signal Desk.";
+    ? "Automatic practice scans are on every 15 minutes."
+    : "Automatic practice scans can run every 15 minutes from Signal Desk.";
   const availableButtons = (buttons: JourneyButton[]) => buttons.filter((button) => actionIds.has(button.actionId));
   const availableAdvanced = (ids: string[]) => ids.filter((actionId) => actionIds.has(actionId));
 
@@ -328,59 +485,50 @@ export function buildJourneySteps(
       advancedActionIds: availableAdvanced(["demo_render"]),
     },
     {
+      key: "telegram",
+      title: "Connect Telegram",
+      detail: "Connect Telegram first so Signal Desk can read your saved channels inside this local app.",
+      state: telegramState(stage, telegramReady),
+      stateLabel: telegramStateLabel(stage, telegramReady),
+      buttons: availableButtons([
+        { actionId: "doctor_jobs", label: "Check setup", variant: stage === "needs_first_run" || ready ? "secondary" : "primary" },
+      ]),
+      advancedActionIds: availableAdvanced(["doctor_jobs", "login_human"]),
+    },
+    {
       key: "workspace",
-      title: sourceAttention ? "Repair source access" : "Set up the local workspace",
+      title: sourceAttention ? "Repair source list" : "Prepare Signal Desk files",
       detail: sourceAttention
-        ? "Refresh the starter source list and check that Signal Desk can read it before scanning again."
-        : "Create the local working files and starter source list used for your first scan.",
+        ? "Restore the saved Telegram channels, then check that Signal Desk can read them."
+        : "Create the private settings and saved-channel files Signal Desk needs after Telegram is connected.",
       state: workspaceState(stage, workspaceDone, sourceAttention),
       stateLabel: workspaceStateLabel(stage, workspaceDone, sourceAttention),
       buttons: availableButtons([
-        { actionId: "init_jobs", label: workspaceDone ? "Refresh workspace" : "Create workspace", variant: workspaceDone ? "secondary" : "primary" },
-        { actionId: "sources_import_jobs", label: "Add starter sources", variant: sourceAttention ? "primary" : "secondary" },
+        { actionId: "init_jobs", label: workspaceDone ? "Refresh files" : "Prepare files", variant: workspaceDone ? "secondary" : "primary" },
+        { actionId: "sources_import_jobs", label: "Repair source list", variant: sourceAttention ? "primary" : "secondary" },
         { actionId: "sources_validate", label: "Check source list", variant: "secondary" },
       ]),
       advancedActionIds: availableAdvanced(["init_jobs", "sources_import_jobs", "sources_validate"]),
     },
     {
-      key: "telegram",
-      title: "Connect Telegram",
-      detail: "Save Telegram app credentials, send the verification code, and finish login inside Signal Desk.",
-      state: telegramState(stage, telegramReady),
-      stateLabel: telegramStateLabel(stage, telegramReady),
-      buttons: availableButtons([
-        { actionId: "doctor_jobs", label: "Test setup", variant: stage === "needs_first_run" || ready ? "secondary" : "primary" },
-      ]),
-      advancedActionIds: availableAdvanced(["doctor_jobs", "login_human"]),
-    },
-    {
       key: "first-run",
       title: hasRuns ? "Run another scan" : "Run the first scan",
-      detail: "Run a practice scan to create your first review cards. Nothing gets sent to Telegram yet.",
+      detail: "Fetch the latest saved-channel messages and create Review cards locally. Nothing sends to Telegram.",
       state: firstRunState(stage, hasRuns, workspaceDone, sourceAttention, telegramReady),
       stateLabel: firstRunStateLabel(stage, hasRuns, sourceAttention, telegramReady),
-      buttons: availableButtons([{ actionId: "monitor_jobs_dry_run", label: hasRuns ? "Run again" : "Run first scan", variant: "primary" }]),
+      buttons: availableButtons([{ actionId: "monitor_jobs_dry_run", label: hasRuns ? "Run fresh scan" : "Run first scan", variant: "primary" }]),
       advancedActionIds: availableAdvanced(["monitor_jobs_dry_run"]),
-    },
-    {
-      key: "feedback",
-      title: "Tune results",
-      detail: "Teach Signal Desk which results matter by reviewing cards and adjusting your preferences.",
-      state: hasRuns || ready ? "ready" : "blocked",
-      stateLabel: hasRuns || ready ? "Available after review" : "Needs a scan first",
-      buttons: availableButtons([{ actionId: "feedback_export", label: "Export feedback", variant: "secondary" }]),
-      advancedActionIds: availableAdvanced(["feedback_export"]),
     },
     {
       key: "automation",
       title: "Automation",
       detail: `${automationDetail} Notifications: ${notifications.value}. ${notifications.detail}`,
       state: ready || stage === "needs_delivery_target" ? "ready" : "blocked",
-      stateLabel: ready || stage === "needs_delivery_target" ? (scheduler?.installed ? "Running dry-runs" : "Off") : "Finish setup first",
+      stateLabel: ready || stage === "needs_delivery_target" ? (scheduler?.installed ? "Auto scan on" : "Off") : "Finish setup first",
       buttons: availableButtons([
         { actionId: "schedule_preview", label: "Preview schedule", variant: "secondary" },
-        ...(dryRunScheduleOn ? [] : [{ actionId: "schedule_install_dry_run", label: "Turn on dry-runs", variant: "primary" as const }]),
-        ...(dryRunScheduleOn ? [{ actionId: "schedule_remove_dry_run", label: "Turn off dry-runs", variant: "secondary" as const }] : []),
+        ...(dryRunScheduleOn ? [] : [{ actionId: "schedule_install_dry_run", label: "Turn on auto scan", variant: "primary" as const }]),
+        ...(dryRunScheduleOn ? [{ actionId: "schedule_remove_dry_run", label: "Turn off auto scan", variant: "secondary" as const }] : []),
         { actionId: "live_delivery_human", label: "Notifications", variant: "secondary" },
       ]),
       advancedActionIds: availableAdvanced([
@@ -389,6 +537,15 @@ export function buildJourneySteps(
         "schedule_remove_dry_run",
         "schedule_install_human",
       ]),
+    },
+    {
+      key: "feedback",
+      title: "Tune results",
+      detail: "Teach Signal Desk which results matter by reviewing cards and adjusting your preferences.",
+      state: hasRuns || ready ? "ready" : "blocked",
+      stateLabel: hasRuns || ready ? "Available after review" : "Needs a scan first",
+      buttons: availableButtons([{ actionId: "feedback_export", label: "Generate profile suggestions", variant: "secondary" }]),
+      advancedActionIds: availableAdvanced(["feedback_export"]),
     },
   ];
 }
@@ -441,7 +598,7 @@ function buildPrimaryReadyAction(step: JourneyStep | undefined, reviewCount: num
     return {
       kind: "review",
       title: "Review cards first",
-      detail: "Clear the current queue before running more scans or tuning automation.",
+      detail: "Handle the current cards before changing automation.",
       label: `Review ${reviewCount} card${reviewCount === 1 ? "" : "s"}`,
     };
   }
@@ -548,9 +705,6 @@ function telegramState(stage: string, telegramReady: boolean): JourneyState {
   if (stage === "ready" || stage === "needs_delivery_target") {
     return "ready";
   }
-  if (stage === "needs_profiles" || stage === "needs_enabled_profile") {
-    return "blocked";
-  }
   return "active";
 }
 
@@ -560,9 +714,6 @@ function telegramStateLabel(stage: string, telegramReady: boolean) {
   }
   if (stage === "ready" || stage === "needs_delivery_target") {
     return "Optional";
-  }
-  if (stage === "needs_profiles" || stage === "needs_enabled_profile") {
-    return "Workspace first";
   }
   return "Check before scan";
 }
@@ -591,7 +742,7 @@ function firstRunStateLabel(stage: string, hasRuns: boolean, sourceAttention: bo
     return "Connect Telegram first";
   }
   if (sourceAttention) {
-    return "Fix sources first";
+    return "Repair source list first";
   }
   if (stage === "needs_first_run") {
     return "Next";

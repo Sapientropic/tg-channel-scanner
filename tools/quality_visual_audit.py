@@ -4,22 +4,57 @@ import json
 import os
 import sys
 from pathlib import Path
+from typing import TypedDict
 
 from playwright.sync_api import sync_playwright
+
+
+class Viewport(TypedDict):
+    name: str
+    width: int
+    height: int
+
+
+def _parse_tabs(raw: str) -> list[str]:
+    return [tab.strip() for tab in raw.split(",") if tab.strip()]
+
+
+def _parse_viewports(raw: str) -> list[Viewport]:
+    viewports: list[Viewport] = []
+    for chunk in raw.split(","):
+        item = chunk.strip()
+        if not item:
+            continue
+        try:
+            name, size = item.split(":", 1)
+            width_text, height_text = size.lower().split("x", 1)
+            width = int(width_text.strip())
+            height = int(height_text.strip())
+        except ValueError as exc:
+            raise SystemExit(
+                "TGCS_DASHBOARD_VIEWPORTS must use comma-separated name:WIDTHxHEIGHT entries, "
+                "for example desktop:1440x1000,mobile:390x844"
+            ) from exc
+        if not name.strip() or width <= 0 or height <= 0:
+            raise SystemExit("TGCS_DASHBOARD_VIEWPORTS entries must have a name and positive dimensions.")
+        viewports.append({"name": name.strip(), "width": width, "height": height})
+    if not viewports:
+        raise SystemExit("At least one dashboard viewport is required.")
+    return viewports
 
 
 def main() -> int:
     base_url = os.environ.get("TGCS_DASHBOARD_URL", "http://127.0.0.1:5173/")
     out_dir = Path(sys.argv[1] if len(sys.argv) > 1 else "output/quality-review/latest")
-    tabs = [
-        tab.strip()
-        for tab in os.environ.get("TGCS_DASHBOARD_TABS", "Start,Review,Runs,Settings").split(",")
-        if tab.strip()
-    ]
-    viewports = [
-        {"name": "desktop", "width": 1440, "height": 1000},
-        {"name": "mobile", "width": 390, "height": 844},
-    ]
+    tabs = _parse_tabs(os.environ.get("TGCS_DASHBOARD_TABS", "Start,Review,Profiles,Runs,Settings"))
+    viewports = _parse_viewports(
+        os.environ.get(
+            "TGCS_DASHBOARD_VIEWPORTS",
+            "desktop:1440x1000,desktop-1360:1360x900,tablet-1024:1024x768,mobile:390x844,mobile-375:375x812",
+        )
+    )
+    if os.environ.get("TGCS_DASHBOARD_INCLUDE_PRESSURE") == "1":
+        viewports.append({"name": "mobile-320", "width": 320, "height": 812})
     out_dir.mkdir(parents=True, exist_ok=True)
     results: list[dict[str, object]] = []
 
@@ -32,7 +67,8 @@ def main() -> int:
                 page.wait_for_selector("[data-testid='tgcs-dashboard']", timeout=15_000)
 
                 for tab in tabs:
-                    page.locator(".tab", has_text=tab).first.click()
+                    tab_button = page.locator(".tab", has_text=tab).first
+                    tab_button.click()
                     page.wait_for_timeout(250)
                     page.screenshot(path=out_dir / f"{viewport['name']}-{tab.lower()}.png", full_page=False)
                     metrics = page.evaluate(
@@ -40,6 +76,7 @@ def main() -> int:
                         () => {
                           const doc = document.documentElement;
                           const nav = document.querySelector(".nav-rail")?.getBoundingClientRect();
+                          const activeTab = document.querySelector(".tab.active")?.textContent?.trim().replace(/\\s+/g, " ") || "";
                           const smallTargets = Array.from(document.querySelectorAll("button, a, input, textarea, select"))
                             .map((item) => {
                               const rawRect = item.getBoundingClientRect();
@@ -65,6 +102,7 @@ def main() -> int:
                             .filter((item) => item.visible && (item.width < 44 || item.height < 44));
                           return {
                             title: document.querySelector(".workbench-title, h2, h3")?.textContent?.trim() || "",
+                            activeTab,
                             scrollHeight: doc.scrollHeight,
                             clientHeight: doc.clientHeight,
                             horizontalOverflow: doc.scrollWidth > doc.clientWidth + 1,

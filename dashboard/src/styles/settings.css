@@ -1,5 +1,6 @@
 @import "./settings/layout.css";
 @import "./settings/notifications.css";
+@import "./settings/ai.css";
 @import "./settings/sources.css";
 @import "./settings/feedback.css";
 @import "./settings/repository.css";

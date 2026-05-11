@@ -36,7 +36,7 @@ _PROJECT_ROOT = str(Path(__file__).resolve().parent.parent)
 if _PROJECT_ROOT not in sys.path:
     sys.path.insert(0, _PROJECT_ROOT)
 
-from scripts import agent_cli, source_registry
+from scripts import agent_cli, local_credentials, source_registry
 from scripts.media_ocr import OcrConfig, process_message
 
 DEFAULT_HOURS = 24
@@ -50,6 +50,10 @@ DEFAULT_XAI_OCR_MODEL = "grok-4.1-fast"
 DEFAULT_OPENAI_OCR_MODEL = "gpt-4o-mini"
 DEFAULT_STT_MODEL = "whisper-1"
 DEFAULT_VIDEO_FRAMES = 3
+LOCAL_OCR_SECRET_TARGETS = {
+    "OPENAI_API_KEY": "tgcs.signal-desk.openai-api-key",
+    "XAI_API_KEY": "tgcs.signal-desk.xai-api-key",
+}
 LOGIN_QUIT_COMMANDS = {"q", "quit", "exit", "cancel"}
 LOGIN_RESEND_COMMANDS = {"r", "resend"}
 
@@ -416,8 +420,8 @@ def load_config() -> ScannerConfig:
 
 
 def _resolve_ocr_settings(args) -> tuple[str, str, str, str]:
-    xai_key = os.environ.get("XAI_API_KEY")
-    openai_key = os.environ.get("OPENAI_API_KEY")
+    xai_key = ai_secret("XAI_API_KEY")
+    openai_key = ai_secret("OPENAI_API_KEY")
     provider = args.ocr_provider
     if provider is None:
         if xai_key:
@@ -448,6 +452,20 @@ def _resolve_ocr_settings(args) -> tuple[str, str, str, str]:
         raise ScanError("OCR provider custom requires --ocr-base-url.")
     model = args.ocr_model or DEFAULT_OPENAI_OCR_MODEL
     return provider, api_key, args.ocr_base_url, model
+
+
+def ai_secret(env_name: str) -> str | None:
+    value = os.environ.get(env_name, "").strip()
+    if value:
+        return value
+    target = LOCAL_OCR_SECRET_TARGETS.get(env_name)
+    if not target:
+        return None
+    try:
+        stored = local_credentials.read_secret(target)
+    except local_credentials.CredentialStoreError:
+        return None
+    return stored.secret.strip() if stored and stored.secret.strip() else None
 
 
 def _make_ocr_config(args) -> OcrConfig | None:

@@ -1,13 +1,22 @@
-import { Copy, Download, Play, RotateCcw, Trash2 } from "lucide-react";
+import { Check, Copy, Download, FileDiff, Play, RotateCcw, Trash2, UserRoundCog } from "lucide-react";
 
 import { InlineEmpty, PanelHeader } from "../common";
 import { feedbackImpactKey, formatActionLabel, toneClass } from "../../domain/display";
-import type { DashboardNextAction, DashboardState, FeedbackExportResult, FeedbackImpact } from "../../domain/types";
+import type {
+  DashboardNextAction,
+  DashboardState,
+  FeedbackExportResult,
+  FeedbackImpact,
+  FeedbackProfileSuggestionsResult,
+} from "../../domain/types";
 
 const FEEDBACK_IMPACT_LIMIT = 4;
 
-export function learningActionLabel(count: number) {
-  return count > 0 ? "Apply feedback to future reports" : "Collect review decisions";
+export function learningActionLabel(count: number, pendingDraftCount = 0) {
+  if (pendingDraftCount > 0) {
+    return "Apply profile drafts";
+  }
+  return count > 0 ? "Generate drafts" : "Collect review decisions";
 }
 
 export function feedbackExportStatusLine(result: FeedbackExportResult | null) {
@@ -15,13 +24,29 @@ export function feedbackExportStatusLine(result: FeedbackExportResult | null) {
     return "";
   }
   const decisionLabel = result.feedback_count === 1 ? "decision" : "decisions";
-  return `${result.feedback_count} ${decisionLabel} applied to future reports · ${result.output_path}`;
+  return `${result.feedback_count} ${decisionLabel} exported for CLI fallback · ${result.output_path}`;
+}
+
+export function feedbackSuggestionStatusLine(result: FeedbackProfileSuggestionsResult | null) {
+  if (!result) {
+    return "";
+  }
+  const parts = [
+    result.created_count ? `${result.created_count} draft${result.created_count === 1 ? "" : "s"} created` : "",
+    result.existing_count ? `${result.existing_count} already waiting` : "",
+    result.skipped_count ? `${result.skipped_count} skipped` : "",
+  ].filter(Boolean);
+  return parts.join(" · ") || result.detail || "No profile drafts created";
 }
 
 export function LearningPanel({
   summary,
   exportResult,
+  suggestionResult,
   exportFeedback,
+  generateProfileSuggestions,
+  applyPendingProfileDrafts,
+  openProfileDrafts,
   clearFeedback,
   undoFeedbackDecision,
   runAgainWithLearning,
@@ -29,15 +54,22 @@ export function LearningPanel({
 }: {
   summary?: DashboardState["feedback_summary"];
   exportResult: FeedbackExportResult | null;
+  suggestionResult: FeedbackProfileSuggestionsResult | null;
   exportFeedback: () => void;
+  generateProfileSuggestions: () => void;
+  applyPendingProfileDrafts: () => void;
+  openProfileDrafts: () => void;
   clearFeedback: () => void;
   undoFeedbackDecision: (cardId: string) => void;
   runAgainWithLearning: () => void;
   busy: boolean;
 }) {
   const exportableCount = summary?.exportable_count ?? exportResult?.feedback_count ?? 0;
+  const pendingDraftCount = summary?.pending_profile_diff_count ?? 0;
   const currentDecisionCount = summary?.current_decision_count ?? exportableCount + (summary?.non_exportable_follow_up_count ?? 0);
   const statusLine = feedbackExportStatusLine(exportResult);
+  const suggestionLine = feedbackSuggestionStatusLine(suggestionResult);
+  const primaryDisabled = busy || (pendingDraftCount <= 0 && exportableCount <= 0);
   const copyExportPath = () => {
     if (!exportResult?.output_path || !navigator.clipboard) {
       return;
@@ -47,21 +79,38 @@ export function LearningPanel({
 
   return (
     <div className="table-section feedback-export-panel learning-panel">
-      <PanelHeader icon={<Download size={18} />} title="Learning" count={currentDecisionCount} />
+      <PanelHeader icon={<FileDiff size={18} />} title="Learning" count={currentDecisionCount} />
       <FeedbackBreakdown summary={summary} exportableCount={exportableCount} />
       {summary?.next_action && <FeedbackNextAction action={summary.next_action} />}
       <FeedbackFlow summary={summary} />
       <FeedbackImpactList impacts={summary?.recent_impacts ?? []} undoFeedbackDecision={undoFeedbackDecision} busy={busy} />
-      <div className="feedback-export-row">
-        <button className="text-button" type="button" onClick={exportFeedback} disabled={busy || exportableCount <= 0}>
-          <Download size={15} />
-          <span>{busy ? "Applying" : learningActionLabel(exportableCount)}</span>
+      <div className="feedback-export-row feedback-primary-actions">
+        <button
+          className="text-button"
+          type="button"
+          onClick={pendingDraftCount > 0 ? applyPendingProfileDrafts : generateProfileSuggestions}
+          disabled={primaryDisabled}
+        >
+          {pendingDraftCount > 0 ? <Check size={15} /> : <FileDiff size={15} />}
+          <span>{busy ? "Working" : learningActionLabel(exportableCount, pendingDraftCount)}</span>
         </button>
+        {pendingDraftCount > 0 && (
+          <button className="text-button secondary" type="button" onClick={openProfileDrafts} disabled={busy}>
+            <UserRoundCog size={15} />
+            <span>Review drafts</span>
+          </button>
+        )}
         <button className="text-button secondary" type="button" onClick={clearFeedback} disabled={busy}>
           <Trash2 size={15} />
           <span>Clear learning decisions</span>
         </button>
       </div>
+      {suggestionLine && (
+        <div className="feedback-export-result" aria-label="Latest profile suggestions">
+          <span className="artifact-chip">{suggestionLine}</span>
+          {suggestionResult?.detail && <small>{suggestionResult.detail}</small>}
+        </div>
+      )}
       {statusLine && (
         <div className="feedback-export-result" aria-label="Latest learning export">
           <span className="artifact-chip" title={exportResult?.output_path}>
@@ -82,11 +131,15 @@ export function LearningPanel({
       <details className="settings-evidence feedback-troubleshooting">
         <summary>
           <Download size={16} />
-          <span>Troubleshooting details</span>
+          <span>JSONL fallback</span>
         </summary>
         <div className="feedback-export-result">
           <span className="panel-kicker">Export JSONL</span>
           <small>{exportResult?.output_path || summary?.last_export_path || "output/feedback/review-feedback.jsonl"}</small>
+          <button className="text-button secondary" type="button" onClick={exportFeedback} disabled={busy || exportableCount <= 0}>
+            <Download size={15} />
+            <span>Export JSONL</span>
+          </button>
         </div>
       </details>
     </div>
@@ -96,9 +149,9 @@ export function LearningPanel({
 function FeedbackFlow({ summary }: { summary?: DashboardState["feedback_summary"] }) {
   return (
     <div className="feedback-flow" aria-label="Feedback learning flow">
-      <span title="Ready for note-free feedback export">
+      <span title="Confirmed decisions ready for profile tuning">
         <strong>{summary?.exportable_count ?? 0}</strong>
-        export
+        ready
       </span>
       <span title="Preference drafts waiting for review">
         <strong>{summary?.pending_profile_diff_count ?? 0}</strong>

@@ -9,6 +9,8 @@ import {
   setupCheckLabel,
   setupCheckTone,
   setupNeedsAttention,
+  sourceRefUrl,
+  telegramChannelUrl,
   telegramMessageUrl,
   type InboxCardLike,
 } from "./inbox";
@@ -84,5 +86,14 @@ describe("inbox domain helpers", () => {
     expect(telegramMessageUrl({ channel: "abc", id: 123 })).toBe("");
     expect(telegramMessageUrl({ channel: "valid_jobs", id: "abc" })).toBe("");
     expect(telegramMessageUrl({ channel: "valid-jobs", id: 123 })).toBe("");
+  });
+
+  it("falls back to channel links or trusted backend source urls", () => {
+    expect(telegramChannelUrl({ channel: "@valid_jobs" })).toBe("https://t.me/valid_jobs");
+    expect(sourceRefUrl({ channel: "valid_jobs", id: "" })).toBe("https://t.me/valid_jobs");
+    expect(sourceRefUrl({ channel: "Display title", id: 5900, url: "https://t.me/c/1674506295/5900" })).toBe(
+      "https://t.me/c/1674506295/5900",
+    );
+    expect(sourceRefUrl({ channel: "Display title", id: 5900, url: "javascript:alert(1)" })).toBe("");
   });
 });

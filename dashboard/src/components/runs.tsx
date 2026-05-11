@@ -1,4 +1,4 @@
-import { type CSSProperties } from "react";
+import { useState, type CSSProperties } from "react";
 import { Activity, Clock3, ExternalLink } from "lucide-react";
 
 import { EmptyStateShell, PanelHeader } from "./common";
@@ -66,9 +66,23 @@ type CompactTimelineItem = {
   detail: string;
 };
 
-export function RunsView({ runs }: { runs: Run[] }) {
+export function RunsView({
+  runs,
+  onRunDeskAction,
+  onOpenReview,
+}: {
+  runs: Run[];
+  onRunDeskAction?: (actionId: string) => void;
+  onOpenReview?: () => void;
+}) {
   if (!runs.length) {
-    return <RunsEmptyState title="No runs yet" detail="Run history is empty in this database." />;
+    return (
+      <RunsEmptyState
+        title="No runs yet"
+        detail="Run a local practice scan before judging source quality."
+        onRunDeskAction={onRunDeskAction}
+      />
+    );
   }
   const evidenceGroups = buildRunEvidenceGroups(runs);
   const visibleClusters = evidenceGroups.flatMap((group) => group.clusters);
@@ -79,8 +93,8 @@ export function RunsView({ runs }: { runs: Run[] }) {
   const archivedScaleMax = runCountScaleMax(archivedClusters);
   return (
     <section className="table-section" aria-label="Run history">
-      <PanelHeader icon={<Activity size={18} />} title="Runs" count={runs.length} />
-      <RunHealthChart runs={runs} />
+      <PanelHeader icon={<Activity size={18} />} title="Runs" />
+      <RunHealthChart runs={runs} onOpenReview={onOpenReview} onRunDeskAction={onRunDeskAction} />
       <div className="run-list-head">
         <strong>Recent Evidence</strong>
         <span>
@@ -89,22 +103,12 @@ export function RunsView({ runs }: { runs: Run[] }) {
       </div>
       <div className="run-evidence-groups">
         {evidenceGroups.map((group) => (
-          <section className={`run-evidence-group is-${group.tone}`} key={group.key} aria-label={group.title}>
-            <div className="run-evidence-head">
-              <strong>{group.title}</strong>
-              <span>{group.detail}</span>
-            </div>
-            <div className="table-list">
-              {group.clusters.map((cluster) => (
-                <RunClusterRow key={cluster.key} cluster={cluster} scaleMax={visibleScaleMax} />
-              ))}
-            </div>
-          </section>
+          <RunEvidenceGroupPanel group={group} key={group.key} scaleMax={visibleScaleMax} />
         ))}
       </div>
       {archivedRuns.length > 0 && (
         <details className="run-archive">
-          <summary>Older runs ({archivedRuns.length})</summary>
+          <summary>Scan history for troubleshooting ({archivedRuns.length})</summary>
           <div className="table-list">
             {archivedClusters.map((cluster) => (
               <RunClusterRow key={cluster.key} cluster={cluster} scaleMax={archivedScaleMax} />
@@ -116,16 +120,52 @@ export function RunsView({ runs }: { runs: Run[] }) {
   );
 }
 
+function RunEvidenceGroupPanel({ group, scaleMax }: { group: RunEvidenceGroup; scaleMax: number }) {
+  const [open, setOpen] = useState(() => shouldOpenRunEvidenceByDefault());
+  return (
+    <details
+      aria-label={group.title}
+      className={`run-evidence-group is-${group.tone}`}
+      onToggle={(event) => setOpen(event.currentTarget.open)}
+      open={open}
+    >
+      <summary className="run-evidence-head">
+        <strong>{group.title}</strong>
+        <span>{group.detail}</span>
+        <b>{open ? "Collapse" : "View"}</b>
+      </summary>
+      <div className="run-evidence-body">
+        {group.key === "attention" && (
+          <p className="run-evidence-next">
+            {group.title === "Failed scans to fix"
+              ? "Fix order: Repair source list, Check setup, then Run fresh scan."
+              : "Latest scan is OK. These older failures stay here only as scan history."}
+          </p>
+        )}
+        <div className="table-list">
+          {group.clusters.map((cluster) => (
+            <RunClusterRow key={cluster.key} cluster={cluster} scaleMax={scaleMax} />
+          ))}
+        </div>
+      </div>
+    </details>
+  );
+}
+
+function shouldOpenRunEvidenceByDefault() {
+  if (typeof window === "undefined") {
+    return true;
+  }
+  return window.innerWidth > 680;
+}
+
 function RunClusterRow({ cluster, scaleMax }: { cluster: RunEvidenceCluster; scaleMax: number }) {
   const run = cluster.sample;
   const artifact = run.report_artifact ?? null;
   const outcome = cluster.outcome;
   const runCountLabel = cluster.runs.length === 1 ? runDisplayDetail(run) : `${cluster.runs.length} runs · latest ${runDisplayDetail(run)}`;
   const statusLabel = cluster.runs.length === 1 ? run.status : cluster.failed > 0 ? `${cluster.failed} failed` : `${cluster.runs.length} runs`;
-  const outcomeDetail =
-    cluster.runs.length === 1
-      ? outcome.detail
-      : `${outcome.detail} ${cluster.cards} cards / ${cluster.alerts} alerts total.`;
+  const outcomeDetail = outcome.detail;
   return (
     <div className="table-row run-row" data-run-tone={outcome.tone}>
       <div className="run-primary">
@@ -180,10 +220,17 @@ export function runCountScaleMax(clusters: Array<{ cards: number; alerts: number
   return Math.max(1, ...clusters.map((cluster) => Math.max(cluster.cards, cluster.alerts)));
 }
 
-function RunHealthChart({ runs }: { runs: Run[] }) {
+function RunHealthChart({
+  runs,
+  onRunDeskAction,
+  onOpenReview,
+}: {
+  runs: Run[];
+  onRunDeskAction?: (actionId: string) => void;
+  onOpenReview?: () => void;
+}) {
   const recentRuns = runs.slice(0, 80);
   const buckets = runDayWindowBuckets(recentRuns, 7);
-  const compactTimeline = buildCompactRunTimeline(buckets);
   const totalRuns = recentRuns.length;
   const completeRuns = recentRuns.filter((run) => run.status.toLowerCase() === "complete").length;
   const failedRuns = recentRuns.filter((run) => run.status.toLowerCase() === "failed").length;
@@ -195,51 +242,37 @@ function RunHealthChart({ runs }: { runs: Run[] }) {
   const decision = buildRunHealthDecision(recentRuns);
   return (
     <div className="run-health-chart" aria-label="Recent run health by day">
-      <div className="run-health-summary">
-        <small>Run Health</small>
-        <strong>{formatPercent(successRate)}</strong>
-        <span>complete</span>
-        <small>
-          {completeRuns} ok / {failedRuns} failed
-        </small>
-        {runningRuns > 0 && <small>{runningRuns} in progress</small>}
-        <small>
-          {cards} cards / {alerts} alerts
-        </small>
+      <div className="run-health-summary" data-tone={decision.tone}>
+        <div className="run-health-score">
+          <small>Run health</small>
+          <strong>{formatPercent(successRate)}</strong>
+          <span>{completeRuns} ok / {failedRuns} failed</span>
+          {runningRuns > 0 && <span>{runningRuns} in progress</span>}
+          <span>{cards} cards / {alerts} alerts</span>
+        </div>
         <div className={`run-health-decision is-${decision.tone}`}>
           <b>{decision.headline}</b>
           <span>{decision.detail}</span>
+          <RunHealthDecisionActions
+            decision={decision}
+            onOpenReview={onOpenReview}
+            onRunDeskAction={onRunDeskAction}
+          />
         </div>
       </div>
-      <div className="run-compact-timeline" aria-label="Compact run timeline">
-        {compactTimeline.map((item) => (
-          <div
-            aria-label={`${item.label}: ${item.detail}`}
-            className={`run-compact-tile is-${item.tone}`}
-            data-empty={item.value ? "false" : "true"}
-            key={item.key}
-            title={item.detail}
-          >
-            <small>{item.label}</small>
-            {item.value && <strong>{item.value}</strong>}
-            <span>{item.detail}</span>
-          </div>
-        ))}
-      </div>
-      <div className="run-day-bars">
+      <div className="run-health-week" aria-label="Past 7 days scan health">
         {buckets.map((bucket) => (
           <div
-            className={`run-day-bucket ${bucket.failed ? "has-failure" : ""}`}
+            className={`run-health-day ${bucket.failed ? "is-danger" : bucket.runs ? "is-ok" : "is-quiet"}`}
             key={bucket.key}
             title={`${bucket.label} · ${bucket.complete} complete · ${bucket.failed} failed · ${bucket.cards} cards · ${bucket.alerts} alerts`}
           >
-            <div className="run-day-bar" aria-hidden="true">
-              {bucket.failed > 0 && <span className="failed" style={{ height: percentWidth(bucket.failed / bucket.runs) }} />}
-              {bucket.complete > 0 && <span className="complete" style={{ height: percentWidth(bucket.complete / bucket.runs) }} />}
-              {!bucket.runs && <em />}
-              <i style={{ width: percentWidth(runBucketSignalScore(bucket)) }} />
+            <span>{bucket.label}</span>
+            <strong>{bucket.failed > 0 ? `Fix ${bucket.failed}` : bucket.runs ? "OK" : "No scan"}</strong>
+            <small>{bucket.runs ? `${bucket.cards} cards · ${bucket.alerts} alerts` : "No run"}</small>
+            <div className="run-health-day-meter" aria-hidden="true">
+              <i style={{ width: percentWidth(bucket.failed > 0 ? 1 : runBucketSignalScore(bucket)) }} />
             </div>
-            <small>{bucket.label}</small>
           </div>
         ))}
       </div>
@@ -247,14 +280,64 @@ function RunHealthChart({ runs }: { runs: Run[] }) {
   );
 }
 
+function RunHealthDecisionActions({
+  decision,
+  onRunDeskAction,
+  onOpenReview,
+}: {
+  decision: RunHealthDecision;
+  onRunDeskAction?: (actionId: string) => void;
+  onOpenReview?: () => void;
+}) {
+  if (decision.tone === "danger") {
+    return (
+      <div className="run-health-actions">
+        <button type="button" onClick={() => onRunDeskAction?.("sources_import_jobs")} disabled={!onRunDeskAction}>
+          Repair source list
+        </button>
+        <button type="button" onClick={() => onRunDeskAction?.("doctor_jobs")} disabled={!onRunDeskAction}>
+          Check setup
+        </button>
+        <button type="button" onClick={() => onRunDeskAction?.("monitor_jobs_dry_run")} disabled={!onRunDeskAction}>
+          Run fresh scan
+        </button>
+      </div>
+    );
+  }
+  if (decision.tone === "warn") {
+    return (
+      <div className="run-health-actions">
+        <button type="button" onClick={() => onRunDeskAction?.("doctor_jobs")} disabled={!onRunDeskAction}>
+          Check setup
+        </button>
+        <button type="button" onClick={() => onRunDeskAction?.("monitor_jobs_dry_run")} disabled={!onRunDeskAction}>
+          Run fresh scan
+        </button>
+      </div>
+    );
+  }
+  if (decision.tone === "info" && /Review/i.test(decision.headline)) {
+    return (
+      <div className="run-health-actions">
+        <button type="button" onClick={onOpenReview} disabled={!onOpenReview}>
+          Open Review
+        </button>
+      </div>
+    );
+  }
+  return null;
+}
+
 export function buildRunEvidenceGroups(runs: Run[]): RunEvidenceGroup[] {
   const visibleRuns = runs.slice(0, RECENT_RUN_LIMIT);
+  const latest = latestRun(runs);
+  const latestFailed = latest?.status.toLowerCase() === "failed";
   const groups = [
     {
       key: "attention",
       tone: "danger",
-      title: "Needs attention",
-      detail: "Fix before trusting automation",
+      title: latestFailed ? "Failed scans to fix" : "Earlier failed scans",
+      detail: latestFailed ? "Use the repair buttons above first" : "History only after latest OK",
       runs: visibleRuns.filter((run) => evidenceBucket(run) === "attention"),
     },
     {
@@ -311,17 +394,18 @@ export function buildRunOutcome(run: Run): RunOutcome {
   const diagnosticCount = run.quality?.diagnostic_count ?? 0;
   const diagnosticFailures = run.quality?.diagnostic_failure_count ?? 0;
   const diagnosticWarnings = run.quality?.diagnostic_warning_count ?? 0;
+  const optionalOcr = isOptionalOcrDiagnostic(run);
 
   if (status === "failed") {
     return {
       tone: "danger",
       title: "Failed scan",
-      detail: "Open the report before trusting later counts.",
+      detail: "Use the repair buttons above, then run a fresh practice scan.",
     };
   }
   if (diagnosticFailures > 0 || diagnosticWarnings > 0 || diagnosticCount > 0) {
     return {
-      tone: diagnosticFailures > 0 ? "danger" : diagnosticWarnings > 0 ? "warn" : "info",
+      tone: optionalOcr ? "info" : diagnosticFailures > 0 ? "danger" : diagnosticWarnings > 0 ? "warn" : "info",
       title: formatRunDiagnostics(run.quality),
       detail: formatRunDiagnosticAction(run.quality) || "Open report diagnostics.",
     };
@@ -365,7 +449,7 @@ function buildRunCluster(key: string, runs: Run[]): RunEvidenceCluster {
   const cards = runs.reduce((sum, run) => sum + (run.review_card_count ?? 0), 0);
   const alerts = runs.reduce((sum, run) => sum + (run.alert_count ?? 0), 0);
   const failed = runs.filter((run) => run.status.toLowerCase() === "failed").length;
-  const outcome = buildClusterOutcome(buildRunOutcome(sample), { runs: runs.length, cards, alerts, failed });
+  const outcome = buildClusterOutcome(buildRunOutcome(sample), { runs: runs.length, cards, alerts, failed }, sample);
   return {
     key,
     outcome,
@@ -399,20 +483,24 @@ export function buildRunHealthDecision(runs: Run[]): RunHealthDecision {
   const failedRuns = runs.filter((run) => run.status.toLowerCase() === "failed").length;
   const cards = runs.reduce((sum, run) => sum + (run.review_card_count ?? 0), 0);
   const alerts = runs.reduce((sum, run) => sum + (run.alert_count ?? 0), 0);
-  const diagnosticFailures = runs.reduce((sum, run) => sum + (run.quality?.diagnostic_failure_count ?? 0), 0);
-  const diagnosticWarnings = runs.reduce((sum, run) => sum + (run.quality?.diagnostic_warning_count ?? 0), 0);
-  const latestIssueCode = runs.find((run) => (run.quality?.diagnostic_count ?? 0) > 0)?.quality?.top_diagnostic_code;
+  const latest = latestRun(runs);
+  const latestFailed = latest?.status.toLowerCase() === "failed";
+  const latestDiagnosticFailures = latest && !isOptionalOcrDiagnostic(latest) ? (latest.quality?.diagnostic_failure_count ?? 0) : 0;
+  const latestDiagnosticWarnings = latest && !isOptionalOcrDiagnostic(latest) ? (latest.quality?.diagnostic_warning_count ?? 0) : 0;
+  const latestIssueCode = latest && (latest.quality?.diagnostic_count ?? 0) > 0 && !isOptionalOcrDiagnostic(latest)
+    ? latest.quality?.top_diagnostic_code
+    : undefined;
 
-  if (failedRuns > 0) {
+  if (latestFailed) {
     return {
       tone: "danger",
       headline: "Fix failed scans",
-      detail: "Use the failed evidence row before trusting automation.",
+      detail: "Use Repair source list to restore saved channels, Check setup to verify login/API/profile, then Run fresh scan. No live alert is sent.",
     };
   }
-  if (diagnosticFailures > 0 || diagnosticWarnings > 0) {
+  if (latestDiagnosticFailures > 0 || latestDiagnosticWarnings > 0) {
     return {
-      tone: diagnosticFailures > 0 ? "danger" : "warn",
+      tone: latestDiagnosticFailures > 0 ? "danger" : "warn",
       headline: "Diagnostics need attention",
       detail: latestIssueCode
         ? formatRunDiagnosticAction({ diagnostic_count: 1, top_diagnostic_code: latestIssueCode })
@@ -423,14 +511,21 @@ export function buildRunHealthDecision(runs: Run[]): RunHealthDecision {
     return {
       tone: "info",
       headline: `Review ${alerts} alert candidate${alerts === 1 ? "" : "s"}`,
-      detail: `${cards} review card${cards === 1 ? "" : "s"} appeared in recent runs. Clear Review before enabling live alerts.`,
+      detail: `${cards} review card${cards === 1 ? "" : "s"} appeared in recent runs. ${failedRuns > 0 ? "Latest scan recovered; older failures are history. " : ""}Clear Review before enabling live alerts.`,
     };
   }
   if (cards > 0) {
     return {
       tone: "info",
       headline: `Review ${cards} card${cards === 1 ? "" : "s"}`,
-      detail: "There are signals to triage, but no alert candidate yet.",
+      detail: `${failedRuns > 0 ? "Latest scan recovered; older failures are history. " : ""}There are signals to triage, but no alert candidate yet.`,
+    };
+  }
+  if (failedRuns > 0) {
+    return {
+      tone: "ok",
+      headline: "Latest scan recovered",
+      detail: "Older failed scans remain in history, but the newest scan no longer needs repair.",
     };
   }
   return {
@@ -438,6 +533,24 @@ export function buildRunHealthDecision(runs: Run[]): RunHealthDecision {
     headline: totalRuns ? "No urgent run issue" : "Run history is empty",
     detail: totalRuns ? "Recent scans completed without cards, alerts, or diagnostics." : "Run a local scan before judging source quality.",
   };
+}
+
+function isOptionalOcrDiagnostic(run: Run) {
+  return run.quality?.top_diagnostic_code === "ocr_disabled_media_present" && (run.quality?.diagnostic_failure_count ?? 0) === 0;
+}
+
+function latestRun(runs: Run[]) {
+  return runs.reduce<Run | null>((latest, run) => {
+    if (!latest) {
+      return run;
+    }
+    return runTime(run) >= runTime(latest) ? run : latest;
+  }, null);
+}
+
+function runTime(run: Run) {
+  const time = new Date(run.started_at).getTime();
+  return Number.isNaN(time) ? 0 : time;
 }
 
 function evidenceBucket(run: Run): RunEvidenceGroup["key"] {
@@ -474,7 +587,7 @@ function runOutcomeClusterKey(run: Run, outcome: RunOutcome) {
   return "clean";
 }
 
-function buildClusterOutcome(outcome: RunOutcome, totals: { runs: number; cards: number; alerts: number; failed: number }): RunOutcome {
+function buildClusterOutcome(outcome: RunOutcome, totals: { runs: number; cards: number; alerts: number; failed: number }, sample: Run): RunOutcome {
   if (totals.runs <= 1) {
     return outcome;
   }
@@ -483,6 +596,9 @@ function buildClusterOutcome(outcome: RunOutcome, totals: { runs: number; cards:
       ...outcome,
       title: `${totals.failed} failed scan${totals.failed === 1 ? "" : "s"}`,
     };
+  }
+  if ((sample.quality?.diagnostic_count ?? 0) > 0) {
+    return outcome;
   }
   if (outcome.tone === "warn" || outcome.tone === "danger") {
     return outcome;
@@ -513,9 +629,11 @@ function runDayKey(run: Run) {
 function RunsEmptyState({
   title,
   detail,
+  onRunDeskAction,
 }: {
   title: string;
   detail?: string;
+  onRunDeskAction?: (actionId: string) => void;
 }) {
   return (
     <EmptyStateShell
@@ -527,6 +645,17 @@ function RunsEmptyState({
         { label: "Run", value: "needed" },
         { label: "Next", value: "local" },
       ]}
-    />
+    >
+      <div className="empty-actions" aria-label="Run history next actions">
+        <button type="button" onClick={() => onRunDeskAction?.("monitor_jobs_dry_run")} disabled={!onRunDeskAction}>
+          <Activity size={15} />
+        <span>Run first scan</span>
+      </button>
+      <button type="button" onClick={() => onRunDeskAction?.("doctor_jobs")} disabled={!onRunDeskAction}>
+        <Clock3 size={15} />
+        <span>Check setup</span>
+      </button>
+      </div>
+    </EmptyStateShell>
   );
 }

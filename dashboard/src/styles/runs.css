@@ -5,10 +5,10 @@
 
 .run-health-chart {
   display: grid;
-  grid-template-columns: minmax(150px, 0.34fr) minmax(0, 1fr);
-  gap: 12px;
+  grid-template-columns: minmax(280px, 0.42fr) minmax(0, 1fr);
+  gap: 14px;
   min-width: 0;
-  padding: 12px;
+  padding: 14px;
   border: 1px solid var(--wash-paper-14);
   background:
     linear-gradient(90deg, color-mix(in oklch, var(--signal-high) 3.5%, transparent) 1px, transparent 1px),
@@ -18,20 +18,31 @@
 
 .run-health-summary {
   display: grid;
-  align-content: center;
+  align-content: start;
+  gap: 10px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--wash-paper-16);
+  background: color-mix(in oklch, var(--ink-2) 68%, transparent);
+}
+
+.run-health-score {
+  display: grid;
+  gap: 4px;
   min-width: 0;
 }
 
-.run-health-summary strong {
+.run-health-score strong {
   color: var(--paper);
   font-family: var(--font-display);
-  font-size: 36px;
+  font-size: 34px;
   line-height: 0.9;
 }
 
 .run-health-summary span,
 .run-health-summary small,
-.run-day-bucket small {
+.run-health-day span,
+.run-health-day small {
   color: var(--muted);
   font-size: 10px;
   font-weight: var(--badge-weight);
@@ -39,15 +50,10 @@
   text-transform: uppercase;
 }
 
-.run-health-summary small {
-  margin-top: 5px;
-}
-
 .run-health-decision {
   display: grid;
   gap: 4px;
   min-width: 0;
-  margin-top: 10px;
   padding: 9px;
   border: 1px solid var(--wash-paper-18);
   background: var(--wash-paper-7);
@@ -67,6 +73,39 @@
   line-height: 1.35;
   overflow-wrap: anywhere;
   text-transform: none;
+}
+
+.run-health-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+  margin-top: 3px;
+}
+
+.run-health-actions button {
+  min-height: 44px;
+  padding: 0 9px;
+  border: 1px solid var(--wash-paper-18);
+  background: var(--paper);
+  color: var(--ink);
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+  font-weight: var(--badge-weight);
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.run-health-actions button:hover:not(:disabled),
+.run-health-actions button:focus-visible {
+  border-color: var(--amber);
+  background: color-mix(in oklch, var(--paper) 84%, var(--amber));
+}
+
+.run-health-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
 }
 
 .run-health-decision.is-danger {
@@ -89,113 +128,63 @@
   background: color-mix(in oklch, var(--signal-high) 9%, transparent);
 }
 
-.run-compact-timeline {
-  display: none;
-  min-width: 0;
-}
-
-.run-compact-tile {
-  display: grid;
-  align-content: start;
-  align-items: stretch;
-  min-width: 0;
-  gap: 4px;
-  padding: 8px;
-  border: 1px solid var(--wash-paper-16);
-  background: var(--wash-paper-7);
-}
-
-.run-compact-tile small,
-.run-compact-tile span {
-  min-width: 0;
-  color: var(--muted);
-  font-size: 9px;
-  font-weight: var(--badge-weight);
-  line-height: 1.25;
-  overflow-wrap: anywhere;
-}
-
-.run-compact-tile strong {
-  min-width: 0;
-  color: var(--paper);
-  font-size: 13px;
-  line-height: 1.15;
-  overflow-wrap: anywhere;
-}
-
-.run-compact-tile.is-danger {
-  border-color: color-mix(in oklch, var(--signal-danger) 44%, transparent);
-  background: color-mix(in oklch, var(--signal-danger) 10%, transparent);
-}
-
-.run-compact-tile.is-info {
-  border-color: color-mix(in oklch, var(--signal-low) 38%, transparent);
-  background: color-mix(in oklch, var(--signal-low) 9%, transparent);
-}
-
-.run-compact-tile.is-ok {
-  border-color: color-mix(in oklch, var(--signal-high) 34%, transparent);
-  background: color-mix(in oklch, var(--signal-high) 8%, transparent);
-}
-
-.run-day-bars {
+.run-health-week {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
   gap: 8px;
   min-width: 0;
+  align-content: stretch;
 }
 
-.run-day-bucket {
+.run-health-day {
   display: grid;
-  gap: 5px;
+  grid-template-rows: auto auto auto 1fr;
+  gap: 7px;
   min-width: 0;
+  min-height: 128px;
+  padding: 10px;
+  border: 1px solid var(--wash-paper-16);
+  background: color-mix(in oklch, var(--ink-2) 58%, transparent);
 }
 
-.run-day-bar {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
-  min-height: 58px;
+.run-health-day strong {
+  min-width: 0;
+  color: var(--paper);
+  font-size: 15px;
+  line-height: 1.1;
+  overflow-wrap: anywhere;
+}
+
+.run-health-day.is-danger {
+  border-color: color-mix(in oklch, var(--signal-danger) 44%, transparent);
+  background: color-mix(in oklch, var(--signal-danger) 10%, transparent);
+}
+
+.run-health-day.is-ok {
+  border-color: color-mix(in oklch, var(--signal-high) 34%, transparent);
+}
+
+.run-health-day.is-quiet {
+  opacity: 0.68;
+}
+
+.run-health-day-meter {
+  align-self: end;
+  height: 6px;
   overflow: hidden;
   border: 1px solid var(--wash-paper-14);
   background: var(--wash-paper-6);
 }
 
-.run-day-bar span {
-  display: block;
-  width: 100%;
-  min-height: 3px;
-}
-
-.run-day-bar em {
-  display: block;
-  width: 100%;
-  height: 100%;
-  background: color-mix(in oklch, var(--wash-paper-8) 42%, transparent);
-}
-
-.run-day-bar .complete {
-  background: color-mix(in oklch, var(--signal-high) 48%, transparent);
-}
-
-.run-day-bar .failed {
-  background: color-mix(in oklch, var(--signal-danger) 58%, transparent);
-}
-
-.run-day-bar i {
-  position: absolute;
-  right: auto;
-  bottom: 0;
-  left: 0;
+.run-health-day-meter i {
   display: block;
   max-width: 100%;
-  height: 5px;
+  height: 100%;
   background: linear-gradient(90deg, var(--teal), var(--amber));
 }
 
-.run-day-bucket.has-failure .run-day-bar {
-  border-color: color-mix(in oklch, var(--signal-danger) 34%, transparent);
+.run-health-day.is-danger .run-health-day-meter i {
+  background: var(--signal-danger);
 }
 
 .run-list-head {
@@ -231,28 +220,44 @@
   display: grid;
   gap: 8px;
   min-width: 0;
-  padding-left: 10px;
-  border-left: 2px solid var(--wash-paper-18);
+  padding: 6px;
+  border: 1px solid var(--wash-paper-18);
+  background: var(--wash-paper-4);
 }
 
 .run-evidence-group.is-danger {
-  border-left-color: color-mix(in oklch, var(--signal-danger) 55%, transparent);
+  border-color: color-mix(in oklch, var(--signal-danger) 45%, transparent);
+  background: color-mix(in oklch, var(--signal-danger) 7%, transparent);
 }
 
 .run-evidence-group.is-info {
-  border-left-color: color-mix(in oklch, var(--signal-low) 46%, transparent);
+  border-color: color-mix(in oklch, var(--signal-low) 38%, transparent);
+  background: color-mix(in oklch, var(--signal-low) 6%, transparent);
 }
 
 .run-evidence-group.is-quiet {
-  border-left-color: color-mix(in oklch, var(--muted) 40%, transparent);
+  border-color: color-mix(in oklch, var(--muted) 30%, transparent);
+  background: color-mix(in oklch, var(--muted) 5%, transparent);
 }
 
 .run-evidence-head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   gap: 10px;
+  align-items: baseline;
   min-width: 0;
+  cursor: pointer;
+  list-style: none;
+}
+
+.run-evidence-head::-webkit-details-marker {
+  display: none;
+}
+
+.run-evidence-head:focus-visible,
+.run-archive summary:focus-visible {
+  outline: 2px solid var(--amber);
+  outline-offset: 2px;
 }
 
 .run-evidence-head strong {
@@ -270,6 +275,34 @@
   line-height: 1.25;
   overflow-wrap: anywhere;
   text-align: right;
+}
+
+.run-evidence-head b {
+  color: var(--amber);
+  font-size: 11px;
+  font-weight: var(--badge-weight);
+  line-height: 1;
+  text-transform: uppercase;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+  white-space: nowrap;
+}
+
+.run-evidence-body {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.run-evidence-next {
+  margin: 0;
+  padding: 8px 9px;
+  border: 1px solid color-mix(in oklch, var(--signal-danger) 36%, transparent);
+  background: color-mix(in oklch, var(--signal-danger) 8%, transparent);
+  color: var(--paper);
+  font-size: 12px;
+  line-height: 1.35;
 }
 
 .run-archive {

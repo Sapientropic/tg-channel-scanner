@@ -62,7 +62,7 @@ const diagnosticLabels: Record<string, string> = {
   llm_unavailable: "LLM unavailable",
   missing_scan_metadata: "Scan metadata missing",
   no_messages_fetched: "No messages fetched",
-  ocr_disabled_media_present: "OCR media skipped",
+  ocr_disabled_media_present: "OCR optional",
   scan_failed: "Scan failed",
   scan_incomplete: "Scan incomplete",
 };

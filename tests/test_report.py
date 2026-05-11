@@ -654,10 +654,49 @@ fields:
         self.assertEqual(html.count("Strong fit."), 1)
         self.assertIn('href="https://example.com/apply"', html)
         self.assertIn('rel="noopener noreferrer"', html)
-        self.assertIn(">Apply</a>", html)
+        self.assertIn(">example.com/apply</a>", html)
         self.assertNotIn(">https://example.com/apply</a>", html)
         self.assertIn("Apply URL", html)
         self.assertNotIn("Apply_Url", html)
+
+    def test_generic_html_card_names_missing_apply_url_and_links_contact_handle(self):
+        report = load_report_module(self)
+        profile = """# Developer Opportunities
+
+## Extraction Schema
+mode: custom
+top_level_key: items
+dedup_fields: [company, role]
+fields:
+  - name: company
+  - name: role
+  - name: apply_url
+  - name: contact
+  - name: why
+  - name: rating
+    values: [high, medium, low]
+"""
+        profile_config = report.parse_profile_config(profile)
+
+        html = report._render_generic_card(
+            {
+                "company": "Example Co",
+                "role": "AI Engineer",
+                "apply_url": "Not specified",
+                "contact": "@eupaslavska",
+                "why": "Strong fit.",
+                "rating": "high",
+            },
+            1,
+            {},
+            profile_config,
+        )
+
+        self.assertIn("No apply link found", html)
+        apply_detail = html.split("Apply URL", 1)[1].split("</div>", 1)[0]
+        self.assertNotIn(">Apply<", apply_detail)
+        self.assertIn('href="https://t.me/eupaslavska"', html)
+        self.assertIn(">@eupaslavska</a>", html)
 
     def test_markdown_field_labels_are_human_readable(self):
         report = load_report_module(self)

@@ -20,6 +20,16 @@ function profile(overrides: Partial<Profile>): Profile {
   };
 }
 
+const createProfileFromBrief = vi.fn(async () => ({
+  schema_version: "desk_profile_create_result_v1" as const,
+  profile_id: "new-profile",
+  display_name: "New Profile",
+  profile_path: "profiles/desk/new-profile.md",
+  created: true,
+  detail: "Profile created.",
+  next_action: "Review the new profile.",
+}));
+
 describe("ProfilesView", () => {
   it("renders monitoring controls as human actions", () => {
     const html = renderToStaticMarkup(
@@ -31,6 +41,10 @@ describe("ProfilesView", () => {
         setAlertMode={vi.fn()}
         setProfileEnabled={vi.fn()}
         setProfileRuntimeSettings={vi.fn()}
+        createProfileDraftNote={vi.fn()}
+        createProfileMatchingPreferencesDraft={vi.fn()}
+        createProfileFromBrief={createProfileFromBrief}
+        profileCreateResult={null}
         busy={false}
       />,
     );
@@ -44,7 +58,7 @@ describe("ProfilesView", () => {
     expect(html).toContain("2h history");
     expect(html).toContain("20 messages");
     expect(html).toContain("1 notification");
-    expect(html).toContain("Scan settings");
+    expect(html).toContain("Edit profile");
     expect(html).not.toContain("per run");
     expect(html).not.toContain("WINDOW");
     expect(html).not.toContain("ITEMS");
@@ -54,8 +68,31 @@ describe("ProfilesView", () => {
     expect(html).not.toContain("SEMANTIC");
     expect(html).not.toContain("COPY COMMAND");
     expect(html).not.toContain("tgcs monitor run");
-    expect(html).not.toContain("Preference Drafts");
+    expect(html).not.toContain("Profile Drafts");
     expect(html).not.toContain("No pending preference drafts");
+  });
+
+  it("keeps new profile creation visible without opening editor noise by default", () => {
+    const html = renderToStaticMarkup(
+      <ProfilesView
+        profiles={[]}
+        patches={[]}
+        applyPatch={vi.fn()}
+        revertPatch={vi.fn()}
+        setAlertMode={vi.fn()}
+        setProfileEnabled={vi.fn()}
+        setProfileRuntimeSettings={vi.fn()}
+        createProfileDraftNote={vi.fn()}
+        createProfileMatchingPreferencesDraft={vi.fn()}
+        createProfileFromBrief={createProfileFromBrief}
+        profileCreateResult={null}
+        busy={false}
+      />,
+    );
+
+    expect(html).toContain("New profile");
+    expect(html).toContain("Markdown, text, or PDF");
+    expect(html).toContain("No profiles yet");
   });
 
   it("shows preference drafts only when there is work to review", () => {
@@ -77,13 +114,19 @@ describe("ProfilesView", () => {
         setAlertMode={vi.fn()}
         setProfileEnabled={vi.fn()}
         setProfileRuntimeSettings={vi.fn()}
+        createProfileDraftNote={vi.fn()}
+        createProfileMatchingPreferencesDraft={vi.fn()}
+        createProfileFromBrief={createProfileFromBrief}
+        profileCreateResult={null}
         busy={false}
       />,
     );
 
-    expect(html).toContain("Preference Drafts");
+    expect(html).toContain("Profile Drafts");
+    expect(html).toContain("aria-expanded=\"true\"");
     expect(html).toContain("React contract role");
-    expect(html).toContain("Apply");
+    expect(html).toContain("Apply to profile");
+    expect(html).toContain("Adds your manual preference");
   });
 
   it("validates profile scan setting edits before save", () => {

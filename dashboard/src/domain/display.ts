@@ -115,7 +115,7 @@ export function opportunityHeadline(summary: OpportunitySummary) {
     return `${count} action signal${count === 1 ? "" : "s"}`;
   }
   if (summary.all_clear) {
-    return "All Clear";
+    return "No priority cards";
   }
   return "Latest run ready";
 }

@@ -517,6 +517,68 @@ class MonitorStateTests(unittest.TestCase):
         self.assertEqual(sources["jobs_empty"]["raw_count"], 5)
         self.assertEqual(sources["jobs_empty"]["kept_count"], 0)
 
+    def test_dashboard_snapshot_enriches_source_ref_links_from_scan_meta(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            scan_meta_path = root / "scan.meta.json"
+            scan_meta_path.write_text(
+                json.dumps(
+                    {
+                        "source_health": [
+                            {
+                                "source_id": "telegram:1674506295",
+                                "channel": "Remocate: релокация, удалёнка, работа и вакансии",
+                                "username": None,
+                                "channel_id": 1674506295,
+                                "label": "1674506295",
+                                "raw_count": 3,
+                                "kept_count": 2,
+                            }
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+            conn = sqlite3.connect(":memory:")
+            conn.row_factory = sqlite3.Row
+            monitor_state.init_db(conn)
+            monitor_state.record_run(
+                conn,
+                {
+                    "run_id": "run-1",
+                    "profile_id": "jobs-fast",
+                    "status": "complete",
+                    "started_at": "2026-05-11T14:00:00Z",
+                    "completed_at": "2026-05-11T14:01:00Z",
+                    "artifacts": [
+                        {
+                            "artifact_id": "scan_meta:scan.meta.json",
+                            "type": "scan_meta",
+                            "path": str(scan_meta_path),
+                        }
+                    ],
+                },
+            )
+            monitor_state.upsert_review_cards(
+                conn,
+                profile_id="jobs-fast",
+                run_id="run-1",
+                items=[
+                    {
+                        "topic": "Senior backend",
+                        "rating": "high",
+                        "decision_state": {"status": "new", "semantic_cluster": "remocate-backend"},
+                        "source_message_refs": [
+                            {"channel": "Remocate: релокация, удалёнка, работа и вакансии", "id": 5900}
+                        ],
+                    }
+                ],
+            )
+
+            snapshot = monitor_state.dashboard_snapshot(conn)
+
+        self.assertEqual(snapshot["inbox"][0]["source_refs"][0]["url"], "https://t.me/c/1674506295/5900")
+
     def test_dashboard_snapshot_includes_actionable_source_insights(self):
         conn = sqlite3.connect(":memory:")
         conn.row_factory = sqlite3.Row
@@ -1608,6 +1670,49 @@ class MonitorStateTests(unittest.TestCase):
         self.assertEqual(entries[0]["feedback"], "false_positive")
         self.assertEqual(summary["by_action"], {"false_positive": 1})
 
+    def test_confirmed_feedback_generates_idempotent_profile_suggestion(self):
+        conn = sqlite3.connect(":memory:")
+        conn.row_factory = sqlite3.Row
+        monitor_state.init_db(conn)
+        with tempfile.TemporaryDirectory() as tmp:
+            profile_path = Path(tmp) / "jobs.md"
+            profile_path.write_text("# Jobs profile\n", encoding="utf-8")
+            monitor_state.upsert_profile(
+                conn,
+                {"id": "jobs-fast", "path": str(profile_path), "enabled": True},
+            )
+            cards = monitor_state.upsert_review_cards(
+                conn,
+                profile_id="jobs-fast",
+                run_id="run-1",
+                items=[
+                    {"topic": "Kept TypeScript role", "rating": "high", "source_message_refs": [{"channel": "jobs", "id": 1}]},
+                    {"topic": "Skipped internship", "rating": "low", "source_message_refs": [{"channel": "jobs", "id": 2}]},
+                    {"topic": "Wrong crypto promo", "rating": "medium", "source_message_refs": [{"channel": "jobs", "id": 3}]},
+                ],
+            )
+            monitor_state.set_card_action(conn, card_id=cards[0]["card_id"], action="keep")
+            monitor_state.set_card_action(conn, card_id=cards[1]["card_id"], action="skip")
+            monitor_state.set_card_action(conn, card_id=cards[2]["card_id"], action="false_positive")
+
+            result = monitor_state.create_feedback_profile_patch_suggestions(conn)
+            second_result = monitor_state.create_feedback_profile_patch_suggestions(conn)
+            patch = conn.execute("SELECT * FROM profile_patch_suggestions").fetchone()
+            summary = monitor_state.feedback_summary(conn)
+
+        self.assertEqual(result["created_count"], 1)
+        self.assertEqual(result["existing_count"], 0)
+        self.assertEqual(second_result["created_count"], 0)
+        self.assertEqual(second_result["existing_count"], 1)
+        self.assertIn("Desk feedback tuning", patch["note"])
+        self.assertIn("Extract the generalized matching patterns", patch["note"])
+        self.assertNotIn("Kept TypeScript role", patch["note"])
+        self.assertNotIn("Skipped internship", patch["note"])
+        self.assertNotIn("Wrong crypto promo", patch["note"])
+        self.assertIn("## Follow-up Preferences", patch["proposed_profile_text"])
+        self.assertEqual(summary["next_action"]["label"], "Apply profile drafts")
+        self.assertEqual(summary["next_action"]["target_tab"], "profiles")
+
     def test_feedback_summary_tracks_changes_since_last_export(self):
         conn = sqlite3.connect(":memory:")
         conn.row_factory = sqlite3.Row
@@ -1804,11 +1909,11 @@ class MonitorStateTests(unittest.TestCase):
         self.assertEqual(snapshot["feedback_summary"]["by_action"], {"false_positive": 1, "keep": 1, "skip": 1})
         self.assertEqual(snapshot["feedback_summary"]["by_rating"], {"high": 1, "low": 1, "medium": 1})
         self.assertEqual(snapshot["feedback_summary"]["by_decision_status"], {"unknown": 3})
-        self.assertEqual(snapshot["feedback_summary"]["next_action"]["label"], "Review preference drafts")
+        self.assertEqual(snapshot["feedback_summary"]["next_action"]["label"], "Apply profile drafts")
         impacts = {item["item_title"]: item for item in snapshot["feedback_summary"]["recent_impacts"]}
-        self.assertEqual(impacts["Kept role"]["impact_type"], "decision_memory_export")
+        self.assertEqual(impacts["Kept role"]["impact_type"], "profile_tuning_source")
         self.assertEqual(impacts["Kept role"]["impact_status"], "ready")
-        self.assertEqual(impacts["Kept role"]["impact_label"], "Ready for export")
+        self.assertEqual(impacts["Kept role"]["impact_label"], "Ready for profile draft")
         self.assertEqual(impacts["Follow up role"]["impact_type"], "profile_diff")
         self.assertEqual(impacts["Follow up role"]["impact_status"], "pending")
         self.assertEqual(impacts["Follow up role"]["impact_label"], "Preference draft pending")
@@ -1844,11 +1949,11 @@ class MonitorStateTests(unittest.TestCase):
         snapshot = monitor_state.dashboard_snapshot(conn)
 
         feedback_json = json.dumps(snapshot["feedback_summary"], ensure_ascii=False)
-        self.assertEqual(snapshot["feedback_summary"]["next_action"]["label"], "Apply feedback to future reports")
+        self.assertEqual(snapshot["feedback_summary"]["next_action"]["label"], "Generate profile suggestions")
         self.assertNotIn("decision-memory import", feedback_json)
         self.assertNotIn("note-free", feedback_json)
-        self.assertIn("future reports learn", snapshot["feedback_summary"]["next_action"]["detail"])
-        self.assertEqual(snapshot["feedback_summary"]["recent_impacts"][0]["impact_label"], "Ready for export")
+        self.assertIn("profile drafts", snapshot["feedback_summary"]["next_action"]["detail"])
+        self.assertEqual(snapshot["feedback_summary"]["recent_impacts"][0]["impact_label"], "Ready for profile draft")
         self.assertIn("future reports learn", snapshot["feedback_summary"]["recent_impacts"][0]["impact_detail"])
 
     def test_dashboard_delivery_targets_include_user_facing_labels(self):

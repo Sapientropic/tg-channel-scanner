@@ -1,0 +1,108 @@
+.ai-api-panel {
+  gap: 12px;
+}
+
+.ai-provider-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+  gap: 8px;
+  min-width: 0;
+}
+
+.ai-provider-grid button {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  min-height: 54px;
+  padding: 9px;
+  border: 1px solid var(--wash-paper-16);
+  background: var(--wash-paper-6);
+  color: var(--paper);
+  cursor: pointer;
+  text-align: left;
+}
+
+.ai-provider-grid button[aria-pressed="true"],
+.ai-provider-grid button:hover,
+.ai-provider-grid button:focus-visible {
+  border-color: var(--amber);
+  background: color-mix(in oklch, var(--signal-medium) 10%, transparent);
+}
+
+.ai-provider-grid button.configured {
+  border-color: color-mix(in oklch, var(--signal-high) 36%, transparent);
+}
+
+.ai-provider-grid strong,
+.ai-provider-grid span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.ai-provider-grid strong {
+  color: var(--paper);
+  font-size: 12px;
+  line-height: 1.15;
+}
+
+.ai-provider-grid span {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: var(--badge-weight);
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.ai-api-form {
+  display: grid;
+  grid-template-columns: minmax(150px, 0.36fr) minmax(220px, 1fr);
+  gap: 10px;
+  min-width: 0;
+}
+
+.ai-oauth-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  min-width: 0;
+  padding: 10px;
+  border: 1px dashed var(--wash-paper-22);
+  background: color-mix(in oklch, var(--teal) 7%, transparent);
+}
+
+.ai-oauth-card > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.ai-oauth-card strong,
+.ai-oauth-card span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.ai-oauth-card strong {
+  color: var(--paper);
+  font-size: 13px;
+}
+
+.ai-oauth-card span {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.ai-api-form .delivery-actions {
+  grid-column: 1 / -1;
+}
+
+.ai-api-note {
+  min-width: 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: var(--badge-weight);
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}

@@ -1,6 +1,8 @@
 import type {
   DeskAction,
   DeskActionResult,
+  DeskAiProviderStatus,
+  DeskAiSettingsStatus,
   DeskNotificationTokenStatus,
   DeskSchedulerStatus,
   DeskSource,
@@ -8,7 +10,9 @@ import type {
   DeskTelegramStatus,
   DeliveryTestResult,
   FeedbackExportResult,
+  FeedbackProfileSuggestionsResult,
   GitUpdateStatus,
+  ProfileCreateResult,
   SourceImportResult,
 } from "../types";
 
@@ -60,6 +64,60 @@ export function sanitizeFeedbackExportResult(value: unknown): FeedbackExportResu
     result.exported_at = exportedAt;
   }
   return result;
+}
+
+export function sanitizeFeedbackProfileSuggestionsResult(value: unknown): FeedbackProfileSuggestionsResult | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+  const createdCount = value.created_count;
+  const existingCount = value.existing_count;
+  const skippedCount = value.skipped_count;
+  if (
+    typeof createdCount !== "number" ||
+    typeof existingCount !== "number" ||
+    typeof skippedCount !== "number" ||
+    !Number.isInteger(createdCount) ||
+    !Number.isInteger(existingCount) ||
+    !Number.isInteger(skippedCount) ||
+    createdCount < 0 ||
+    existingCount < 0 ||
+    skippedCount < 0
+  ) {
+    return null;
+  }
+  return {
+    schema_version: "feedback_profile_suggestions_result_v1",
+    created_count: createdCount,
+    existing_count: existingCount,
+    skipped_count: skippedCount,
+    patch_ids: stringArray(value.patch_ids),
+    profile_ids: stringArray(value.profile_ids),
+    detail: optionalString(value.detail),
+    generated_at: optionalString(value.generated_at),
+  };
+}
+
+export function sanitizeProfileCreateResult(value: unknown): ProfileCreateResult | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+  const profileId = optionalString(value.profile_id);
+  const displayName = optionalString(value.display_name);
+  const profilePath = optionalString(value.profile_path);
+  if (!profileId || !displayName || !profilePath) {
+    return null;
+  }
+  return {
+    schema_version: value.schema_version === "desk_profile_create_result_v1" ? value.schema_version : undefined,
+    profile_id: profileId,
+    display_name: displayName,
+    profile_path: profilePath,
+    created: value.created === true,
+    detail: optionalString(value.detail) ?? "",
+    next_action: optionalString(value.next_action) ?? "",
+    created_at: optionalString(value.created_at),
+  };
 }
 
 export function sanitizeDeskActions(value: unknown): DeskAction[] {
@@ -187,6 +245,50 @@ export function sanitizeDeskNotificationTokenStatus(value: unknown): DeskNotific
     platform: optionalString(value.platform) ?? "",
     detail: optionalString(value.detail) ?? "",
   };
+}
+
+export function sanitizeDeskAiSettingsStatus(value: unknown): DeskAiSettingsStatus | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+  const configuredCount = nonNegativeIntegerOrDefault(value.configured_count, 0);
+  return {
+    schema_version: value.schema_version === "desk_ai_settings_status_v1" ? value.schema_version : undefined,
+    configured_count: configuredCount,
+    local_store_supported: value.local_store_supported === true,
+    platform: optionalString(value.platform) ?? "",
+    detail: optionalString(value.detail) ?? "",
+    providers: sanitizeDeskAiProviders(value.providers),
+    checked_at: optionalString(value.checked_at),
+  };
+}
+
+function sanitizeDeskAiProviders(value: unknown): DeskAiProviderStatus[] {
+  return sanitizeObjectArray(value, "desk_ai_settings.providers").flatMap((record, index) => {
+    const provider = optionalString(record.provider);
+    const label = optionalString(record.label);
+    const envName = optionalString(record.env_name);
+    const source = optionalString(record.source);
+    if (!provider || !label || !envName || !source) {
+      console.warn(`[tgcs dashboard schema] desk_ai_settings.providers[${index}] missing required field`, record);
+      return [];
+    }
+    return [
+      {
+        provider,
+        label,
+        env_name: envName,
+        configured: record.configured === true,
+        source,
+        env_configured: record.env_configured === true,
+        local_store_configured: record.local_store_configured === true,
+        can_save: record.can_save === true,
+        can_clear: record.can_clear === true,
+        updated_at: optionalStringOrNull(record.updated_at),
+        detail: optionalString(record.detail) ?? "",
+      },
+    ];
+  });
 }
 
 export function sanitizeDeliveryTestResult(value: unknown): DeliveryTestResult | null {

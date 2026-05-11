@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type RefObject } from "react";
 import {
   Activity,
   Bell,
@@ -8,6 +8,7 @@ import {
   Database,
   Eye,
   KeyRound,
+  PlugZap,
   Save,
   ShieldCheck,
   Trash2,
@@ -27,12 +28,14 @@ import { channelDisplayName, formatPercent } from "../domain/format";
 import { LearningPanel } from "./settings/learning-panel";
 import type {
   DashboardState,
+  DeskAiSettingsStatus,
   DeskNotificationTokenStatus,
   DeskSource,
   DeskSourcesResult,
   DeliveryTestResult,
   DeliveryTarget,
   FeedbackExportResult,
+  FeedbackProfileSuggestionsResult,
   SourceImportResult,
   SourceInsight,
   SourceStat,
@@ -43,7 +46,7 @@ const SOURCE_HEAT_LIMIT = 72;
 const SOURCE_ACTION_LIMIT = 6;
 export const SOURCE_LIBRARY_PAGE_SIZE = 8;
 
-type SettingsTask = "sources" | "notifications" | "learning" | "evidence";
+export type SettingsTask = "sources" | "ai" | "notifications" | "learning" | "evidence";
 
 export function SettingsView({
   targets,
@@ -51,7 +54,13 @@ export function SettingsView({
   sourceInsights,
   feedbackSummary,
   feedbackExport,
+  feedbackProfileSuggestions,
+  aiSettingsStatus,
+  aiSettingsError,
   exportFeedback,
+  generateFeedbackProfileSuggestions,
+  applyPendingProfileDrafts,
+  openProfileDrafts,
   clearFeedback,
   undoFeedbackDecision,
   runAgainWithLearning,
@@ -64,6 +73,8 @@ export function SettingsView({
   saveDeliveryTarget,
   saveNotificationToken,
   clearNotificationToken,
+  saveAiApiKey,
+  clearAiApiKey,
   testDeliveryTarget,
   previewSourceImport,
   importSources,
@@ -78,7 +89,13 @@ export function SettingsView({
   sourceInsights: SourceInsight[];
   feedbackSummary?: DashboardState["feedback_summary"];
   feedbackExport: FeedbackExportResult | null;
+  feedbackProfileSuggestions: FeedbackProfileSuggestionsResult | null;
+  aiSettingsStatus: DeskAiSettingsStatus | null;
+  aiSettingsError: string | null;
   exportFeedback: () => void;
+  generateFeedbackProfileSuggestions: () => void;
+  applyPendingProfileDrafts: () => void;
+  openProfileDrafts: () => void;
   clearFeedback: () => void;
   undoFeedbackDecision: (cardId: string) => void;
   runAgainWithLearning: () => void;
@@ -91,25 +108,29 @@ export function SettingsView({
   saveDeliveryTarget: (targetId: string, chatId: string, enabled: boolean) => Promise<void>;
   saveNotificationToken: (token: string) => Promise<void>;
   clearNotificationToken: () => Promise<void>;
+  saveAiApiKey: (provider: string, apiKey: string) => Promise<void>;
+  clearAiApiKey: (provider: string) => Promise<void>;
   testDeliveryTarget: (targetId: string, chatId: string) => Promise<void>;
   previewSourceImport: (sources: string, topic: string) => Promise<SourceImportResult>;
   importSources: (sources: string, topic: string) => Promise<SourceImportResult>;
   setSourceEnabled: (sourceId: string, enabled: boolean) => Promise<void>;
   setSourceTopics: (sourceId: string, topics: string[]) => Promise<void>;
   busy: boolean;
-  focusTarget?: "notifications" | null;
+  focusTarget?: SettingsTask | null;
   onFocusHandled?: () => void;
 }) {
   const notificationsPanelRef = useRef<HTMLDivElement | null>(null);
+  const aiPanelRef = useRef<HTMLDivElement | null>(null);
   const [activeTask, setActiveTask] = useState<SettingsTask>("sources");
 
   useEffect(() => {
-    if (focusTarget !== "notifications") {
+    if (!focusTarget) {
       return;
     }
-    setActiveTask("notifications");
-    const panel = notificationsPanelRef.current;
+    setActiveTask(focusTarget);
+    const panel = focusTarget === "notifications" ? notificationsPanelRef.current : focusTarget === "ai" ? aiPanelRef.current : null;
     if (!panel) {
+      onFocusHandled?.();
       return;
     }
     panel.scrollIntoView({ block: "start", behavior: "auto" });
@@ -123,8 +144,9 @@ export function SettingsView({
     <section className="settings-workbench" aria-label="Settings workspace">
       <SettingsTaskSwitch
         activeTask={activeTask}
-        feedbackCount={feedbackSummary?.exportable_count ?? 0}
+        feedbackCount={(feedbackSummary?.exportable_count ?? 0) + (feedbackSummary?.pending_profile_diff_count ?? 0)}
         evidenceCount={sourceStats.length}
+        aiCount={aiSettingsStatus?.configured_count ?? 0}
         notificationCount={targets.length}
         onSelect={setActiveTask}
         sourceCount={sourceLibrary?.source_count ?? sourceStats.length}
@@ -151,6 +173,21 @@ export function SettingsView({
             sourceStats={sourceStats}
           />
         </div>
+      </section>
+
+      <section
+        className="settings-section settings-section-ai"
+        aria-label="AI API settings"
+        data-active={activeTask === "ai" ? "true" : "false"}
+      >
+        <AiApiSettingsPanel
+          busy={busy}
+          clearAiApiKey={clearAiApiKey}
+          error={aiSettingsError}
+          saveAiApiKey={saveAiApiKey}
+          status={aiSettingsStatus}
+          panelRef={aiPanelRef}
+        />
       </section>
 
       <section
@@ -194,10 +231,14 @@ export function SettingsView({
         <LearningPanel
           busy={busy}
           clearFeedback={clearFeedback}
+          applyPendingProfileDrafts={applyPendingProfileDrafts}
           exportFeedback={exportFeedback}
           exportResult={feedbackExport}
+          generateProfileSuggestions={generateFeedbackProfileSuggestions}
+          openProfileDrafts={openProfileDrafts}
           runAgainWithLearning={runAgainWithLearning}
           summary={feedbackSummary}
+          suggestionResult={feedbackProfileSuggestions}
           undoFeedbackDecision={undoFeedbackDecision}
         />
       </section>
@@ -225,6 +266,7 @@ export function SettingsView({
 function SettingsTaskSwitch({
   activeTask,
   sourceCount,
+  aiCount,
   notificationCount,
   feedbackCount,
   evidenceCount,
@@ -232,6 +274,7 @@ function SettingsTaskSwitch({
 }: {
   activeTask: SettingsTask;
   sourceCount: number;
+  aiCount: number;
   notificationCount: number;
   feedbackCount: number;
   evidenceCount: number;
@@ -239,8 +282,14 @@ function SettingsTaskSwitch({
 }) {
   const tasks: Array<{ id: SettingsTask; label: string; count: number; detail: string }> = [
     { id: "sources", label: "Sources", count: sourceCount, detail: "Add or manage channels" },
+    { id: "ai", label: "AI API", count: aiCount, detail: "LLM and OCR keys" },
     { id: "notifications", label: "Alerts", count: notificationCount, detail: "Bot token and delivery" },
-    { id: "learning", label: "Notes", count: feedbackCount, detail: "Export review notes" },
+    {
+      id: "learning",
+      label: "Learning",
+      count: feedbackCount,
+      detail: feedbackCount > 0 ? "Profile tuning" : "Review cards to teach preferences",
+    },
     { id: "evidence", label: "Yield", count: evidenceCount, detail: "Which sources found posts" },
   ];
   return (
@@ -258,6 +307,128 @@ function SettingsTaskSwitch({
           <small>{task.detail}</small>
         </button>
       ))}
+    </div>
+  );
+}
+
+function AiApiSettingsPanel({
+  status,
+  error,
+  busy,
+  saveAiApiKey,
+  clearAiApiKey,
+  panelRef,
+}: {
+  status: DeskAiSettingsStatus | null;
+  error: string | null;
+  busy: boolean;
+  saveAiApiKey: (provider: string, apiKey: string) => Promise<void>;
+  clearAiApiKey: (provider: string) => Promise<void>;
+  panelRef: RefObject<HTMLDivElement | null>;
+}) {
+  const providers = status?.providers ?? [];
+  const firstProvider = providers[0]?.provider ?? "openai";
+  const [provider, setProvider] = useState(firstProvider);
+  const [apiKey, setApiKey] = useState("");
+  const apiKeyInputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    if (!providers.some((item) => item.provider === provider) && firstProvider) {
+      setProvider(firstProvider);
+    }
+  }, [firstProvider, provider, providers]);
+
+  const selected = providers.find((item) => item.provider === provider);
+  const selectedProviderKey = provider.toLowerCase();
+  const showOpenAiOAuth = selectedProviderKey === "openai";
+  const canSave = Boolean(selected?.can_save && apiKey.trim());
+  const canClear = Boolean(selected?.can_clear);
+  return (
+    <div className="table-section ai-api-panel" ref={panelRef} tabIndex={-1} aria-label="AI API keys">
+      <PanelHeader icon={<PlugZap size={18} />} title="AI API" count={status?.configured_count ?? 0} />
+      <div className="ai-provider-grid" aria-label="AI provider status">
+        {providers.length ? (
+          providers.map((item) => (
+            <button
+              aria-pressed={provider === item.provider}
+              className={item.configured ? "configured" : ""}
+              key={item.provider}
+              onClick={() => setProvider(item.provider)}
+              type="button"
+            >
+              <strong>{item.label}</strong>
+              <span>{item.configured ? (item.env_configured ? "ENV" : "Saved") : "Missing"}</span>
+            </button>
+          ))
+        ) : (
+          <InlineEmpty title="Loading AI API settings" />
+        )}
+      </div>
+      {selected?.detail && <p className="ai-api-note">{selected.detail}</p>}
+      {error && <p className="delivery-test-result failed">{error}</p>}
+      {showOpenAiOAuth && (
+        <div className="ai-oauth-card" aria-label="OpenAI subscription sign-in">
+          <div>
+            <strong>ChatGPT subscription sign-in</strong>
+            <span>OAuth needs a local OpenAI client before it can run. API key is the working path now.</span>
+          </div>
+          <button className="text-button secondary" onClick={() => apiKeyInputRef.current?.focus()} type="button">
+            <ShieldCheck size={15} />
+            <span>Use API key</span>
+          </button>
+        </div>
+      )}
+      <form
+        className="ai-api-form"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (!canSave) {
+            return;
+          }
+          void saveAiApiKey(provider, apiKey).then(() => setApiKey(""));
+        }}
+      >
+        <label className="delivery-field">
+          <span>Provider</span>
+          <select disabled={busy || !providers.length} onChange={(event) => setProvider(event.target.value)} value={provider}>
+            {providers.map((item) => (
+              <option key={item.provider} value={item.provider}>
+                {item.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="delivery-field">
+          <span>API key</span>
+          <input
+            autoComplete="new-password"
+            disabled={busy || selected?.can_save === false}
+            onChange={(event) => setApiKey(event.target.value)}
+            placeholder={selected?.configured ? "Paste a replacement key" : "Paste API key"}
+            ref={apiKeyInputRef}
+            type="password"
+            value={apiKey}
+          />
+        </label>
+        <div className="delivery-actions">
+          <button className="text-button" disabled={busy || !canSave} type="submit">
+            <Save size={15} />
+            <span>{busy ? "Saving" : "Save key"}</span>
+          </button>
+          <button
+            className="text-button secondary"
+            disabled={busy || !canClear}
+            onClick={() => void clearAiApiKey(provider)}
+            type="button"
+          >
+            <Trash2 size={15} />
+            <span>Clear saved key</span>
+          </button>
+        </div>
+      </form>
+      <p className="ai-api-note">
+        Keys are stored locally in Windows Credential Manager. Environment variables still win when both are present.
+      </p>
     </div>
   );
 }
@@ -311,7 +482,7 @@ function NotificationTokenPanel({
         />
       </label>
       <p className="delivery-note">
-        Token text is never shown again. Environment variables still take priority; dry-run tests do not send Telegram messages.
+        Token text is never shown again. Environment variables still take priority; test checks do not send Telegram messages.
       </p>
       {(status?.detail || error) && (
         <p className={error ? "delivery-token-warning" : "delivery-note"} role={error ? "alert" : undefined}>
