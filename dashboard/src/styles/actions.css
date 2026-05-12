@@ -422,6 +422,32 @@
   overflow-wrap: anywhere;
 }
 
+.journey-progress {
+  display: grid;
+  gap: 4px;
+  max-width: 46rem;
+  border-left: 3px solid var(--accent);
+  padding: 8px 10px;
+  background: color-mix(in oklch, var(--accent) 8%, transparent);
+}
+
+.journey-progress strong,
+.journey-progress span,
+.journey-progress em {
+  overflow-wrap: anywhere;
+}
+
+.journey-progress strong {
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.journey-progress span,
+.journey-progress em {
+  color: var(--ink-warm);
+  font-size: 12px;
+}
+
 .journey-controls {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);

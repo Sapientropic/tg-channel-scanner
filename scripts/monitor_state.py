@@ -2274,6 +2274,18 @@ def opportunity_next_action(
     doctor_profile = "jobs" if profile_id == "jobs-fast" else profile_id or "market-news"
     if int(diagnostics.get("failure_count") or 0) > 0 or status == "failed":
         detail = f"Top diagnostic: {top_code}" if top_code else "Open Runs for diagnostics before rerunning."
+        if top_code in {"llm_output_truncated", "semantic_json_invalid"}:
+            return {
+                "label": "Fix semantic extraction",
+                "detail": detail,
+                "command": "",
+            }
+        if top_code not in {"channel_failures", "no_messages_fetched", "source_access_failed"}:
+            return {
+                "label": "Inspect run failure",
+                "detail": detail,
+                "command": "",
+            }
         return {
             "label": "Fix source access",
             "detail": detail,

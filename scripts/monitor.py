@@ -43,7 +43,7 @@ DEFAULT_FAST_JOBS_SCAN_WINDOW_HOURS = 2
 DEFAULT_FAST_JOBS_INTERVAL_MINUTES = 15
 DEFAULT_FAST_JOBS_ALERT_MAX_AGE_MINUTES = 60
 DEFAULT_FAST_JOBS_SEMANTIC_MAX_MESSAGES = 20
-DEFAULT_FAST_JOBS_SEMANTIC_MAX_TOKENS = 2000
+DEFAULT_FAST_JOBS_SEMANTIC_MAX_TOKENS = 6000
 DEFAULT_FAST_JOBS_PREFILTER_KEYWORDS = [
     "hiring",
     "we're hiring",
@@ -601,6 +601,38 @@ def run_json_command(cmd: list[str | Path]) -> tuple[int, dict[str, Any] | None,
     return completed.returncode, parse_agent_stdout(completed), completed.stderr or ""
 
 
+def diagnostics_from_agent_error(payload: dict[str, Any] | None) -> list[dict[str, Any]]:
+    if not isinstance(payload, dict):
+        return []
+    error = payload.get("error") if isinstance(payload.get("error"), dict) else {}
+    details = error.get("details") if isinstance(error.get("details"), dict) else {}
+    diagnostics = details.get("diagnostics") if isinstance(details.get("diagnostics"), list) else []
+    return [item for item in diagnostics if isinstance(item, dict)]
+
+
+def llm_from_agent_error(payload: dict[str, Any] | None) -> dict[str, Any] | None:
+    if not isinstance(payload, dict):
+        return None
+    error = payload.get("error") if isinstance(payload.get("error"), dict) else {}
+    details = error.get("details") if isinstance(error.get("details"), dict) else {}
+    llm = details.get("llm") if isinstance(details.get("llm"), dict) else None
+    return llm
+
+
+def monitor_failure_next_step(diagnostics: list[dict[str, Any]]) -> str:
+    top_code = monitor_state.top_diagnostic_code(diagnostics)
+    if top_code in {"llm_output_truncated", "semantic_json_invalid"}:
+        return (
+            "Open Signal Desk Profiles and raise semantic_max_tokens, lower semantic_max_messages, "
+            "or narrow the source/prefilter before rerunning the practice scan."
+        )
+    if top_code in {"channel_failures", "no_messages_fetched", "source_access_failed"}:
+        return "Open Start > Check source access, then pause inaccessible sources or inspect scan.errors.log."
+    if top_code:
+        return f"Open Runs for diagnostic {top_code}, then rerun after fixing that stage."
+    return "Inspect the run manifest and rerun the failing scan/report command if needed."
+
+
 def report_command_for_scan_input(
     *,
     scan_input: Path,
@@ -687,6 +719,7 @@ def daily_report_command(
     profile_id: str,
     run_id: str,
     max_messages: int | None = None,
+    max_tokens: int | None = None,
 ) -> list[str | Path]:
     report_title = report_title_for_profile(profile_file, profile_id)
     report_output, _ = report_output_paths(
@@ -721,6 +754,8 @@ def daily_report_command(
         cmd.append("--allow-incomplete")
     if max_messages:
         cmd.extend(["--max-messages", str(max_messages)])
+    if max_tokens:
+        cmd.extend(["--max-tokens", str(max_tokens)])
     return cmd
 
 
@@ -1178,6 +1213,7 @@ def run_profile(args: argparse.Namespace) -> int:
                 profile_id=args.profile_id,
                 run_id=current_run_id,
                 max_messages=semantic_limit,
+                max_tokens=token_limit,
             )
             commands_executed.append(cmd)
             exit_code, payload, stderr = run_json_command(cmd)
@@ -1253,8 +1289,11 @@ def run_profile(args: argparse.Namespace) -> int:
 
     completed_at = utc_now()
     manifest_diagnostics = report_data.get("diagnostics") if isinstance(report_data.get("diagnostics"), list) else []
+    command_error_diagnostics = diagnostics_from_agent_error(payload) if exit_code != 0 else []
     if not manifest_diagnostics:
-        manifest_diagnostics = diagnostics_from_scan_meta(load_scan_meta(raw_scan_path or scan_path, run_dir))
+        manifest_diagnostics = command_error_diagnostics or diagnostics_from_scan_meta(
+            load_scan_meta(raw_scan_path or scan_path, run_dir)
+        )
     artifacts = []
     report_title = report_title_for_profile(profile_file, args.profile_id)
     if raw_scan_path and raw_scan_path.exists() and raw_scan_path != scan_path:
@@ -1275,6 +1314,7 @@ def run_profile(args: argparse.Namespace) -> int:
         artifacts.append(artifact(meta_path, "scan_meta", profile_id=args.profile_id, run_id=current_run_id))
     if errors_path.exists():
         artifacts.append(artifact(errors_path, "scan_errors", profile_id=args.profile_id, run_id=current_run_id))
+    llm_payload = report_data.get("llm") or llm_from_agent_error(payload)
     manifest = {
         "schema_version": RUN_MANIFEST_SCHEMA_VERSION,
         "run_id": current_run_id,
@@ -1305,7 +1345,7 @@ def run_profile(args: argparse.Namespace) -> int:
         "review_card_count": len(cards),
         "diagnostics": manifest_diagnostics,
         "error_summary": None if exit_code == 0 else {"exit_code": exit_code, "stderr": stderr[-2000:]},
-        "llm": report_data.get("llm"),
+        "llm": llm_payload,
         "delivery_attempts": [event["delivery_attempt"] for event in alert_events],
         "command": [str(part) for part in cmd],
         "commands": [[str(part) for part in command] for command in commands_executed],
@@ -1329,7 +1369,7 @@ def run_profile(args: argparse.Namespace) -> int:
         "prefilter": prefilter_context,
         "semantic": {"max_messages": semantic_limit, "max_tokens": token_limit},
         "diagnostics": manifest_diagnostics,
-        "llm": report_data.get("llm"),
+        "llm": llm_payload,
         "delivery_attempts": [event["delivery_attempt"] for event in alert_events],
         "extraction_request_path": report_data.get("extraction_request_path") or report_data.get("request_path"),
         "items_output_path": report_data.get("items_output_path"),
@@ -1343,7 +1383,7 @@ def run_profile(args: argparse.Namespace) -> int:
                     code="monitor_run_failed",
                     message=f"Monitor run failed with exit code {exit_code}.",
                     retryable=exit_code in {agent_cli.EXIT_RUNTIME, agent_cli.EXIT_INCOMPLETE},
-                    next_step="Inspect the run manifest and rerun the failing scan/report command if needed.",
+                    next_step=monitor_failure_next_step(manifest_diagnostics),
                     details=data,
                 )
             )
@@ -1429,7 +1469,7 @@ prefilter_enabled = true
 # Keep high-frequency alert batches bounded; use a separate backfill/audit lane
 # if you need exhaustive semantic extraction over a larger catch-up window.
 semantic_max_messages = 20
-semantic_max_tokens = 2000
+semantic_max_tokens = 6000
 prefilter_keywords = [
   "hiring",
   "we're hiring",

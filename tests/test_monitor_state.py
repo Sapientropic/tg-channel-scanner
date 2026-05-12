@@ -1492,6 +1492,45 @@ class MonitorStateTests(unittest.TestCase):
         self.assertIn("source_access_failed", summary["next_action"]["detail"])
         self.assertEqual(summary["next_action"]["command"], "tgcs doctor --profile jobs")
 
+    def test_dashboard_snapshot_marks_llm_failure_next_action(self):
+        conn = sqlite3.connect(":memory:")
+        conn.row_factory = sqlite3.Row
+        monitor_state.init_db(conn)
+        monitor_state.record_run(
+            conn,
+            {
+                "schema_version": "run_manifest_v1",
+                "run_id": "run-llm-failed",
+                "profile_id": "jobs-fast",
+                "status": "failed",
+                "started_at": "2026-05-09T03:00:00Z",
+                "completed_at": "2026-05-09T03:01:00Z",
+                "prefilter": {
+                    "raw_message_count": 120,
+                    "matched_count": 15,
+                    "semantic_stage": "report_failed",
+                },
+                "alert_count": 0,
+                "review_card_count": 0,
+                "diagnostics": [
+                    {
+                        "code": "llm_output_truncated",
+                        "severity": "failure",
+                        "message": "The LLM response ended before complete JSON.",
+                        "next_step": "Raise semantic_max_tokens or lower semantic_max_messages.",
+                    }
+                ],
+            },
+        )
+
+        snapshot = monitor_state.dashboard_snapshot(conn)
+        summary = snapshot["opportunity_summary"]
+
+        self.assertEqual(summary["next_action"]["label"], "Fix semantic extraction")
+        self.assertIn("llm_output_truncated", summary["next_action"]["detail"])
+        self.assertEqual(summary["next_action"]["command"], "")
+        self.assertNotEqual(snapshot["setup_status"]["stage"], "needs_source_access")
+
     def test_validation_summary_counts_recent_actions_without_note_bodies(self):
         conn = sqlite3.connect(":memory:")
         conn.row_factory = sqlite3.Row

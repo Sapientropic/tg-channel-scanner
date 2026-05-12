@@ -41,8 +41,9 @@ The app path is:
   uses the local Telegram session to run a bounded, no-message-text probe and
   stores a source-health summary in `.tgcs/source-access-health.json`.
 - After a source access check, Start can pause only inaccessible sources or keep
-  only sources with recent readable messages. Both repair actions require an
-  explicit confirmation and only disable sources; they never delete them.
+  only recently active sources. Quiet sources are readable but had no recent
+  messages in the probe window. Both repair actions require an explicit
+  confirmation and only disable sources; they never delete them.
 
 External AI planning is opt-in because source names can be private. The offline
 parser handles explicit Telegram handles and `t.me` links locally; when the user

@@ -35,6 +35,7 @@ export const emptyDashboardState: DashboardState = {
   profile_patch_suggestions: [],
   source_stats: [],
   source_insights: [],
+  active_actions: [],
   feedback_summary: undefined,
   opportunity_summary: undefined,
   validation_summary: undefined,
@@ -52,6 +53,7 @@ export function sanitizeDashboardState(value: unknown): DashboardState {
     profile_patch_suggestions: sanitizeProfilePatches(payload.profile_patch_suggestions),
     source_stats: sanitizeSourceStats(payload.source_stats),
     source_insights: sanitizeSourceInsights(payload.source_insights),
+    active_actions: sanitizeActiveActions(payload.active_actions),
     feedback_summary: sanitizeFeedbackSummary(payload.feedback_summary),
     opportunity_summary: sanitizeOpportunitySummary(payload.opportunity_summary),
     validation_summary: sanitizeValidationSummary(payload.validation_summary),
@@ -184,11 +186,36 @@ function sanitizeSourceAccessActionSummary(value: unknown): DeskActionResult["so
     inaccessible_count: nonNegativeIntegerOrDefault(value.inaccessible_count, 0),
     truncated_count: nonNegativeIntegerOrDefault(value.truncated_count, 0),
   };
+  assignOptionalNumbers(summary, value, ["probe_window_hours", "probe_window_hours_min", "probe_window_hours_max"]);
   const reasonCounts = sanitizeNumberRecord(value.reason_counts);
   if (reasonCounts) {
     summary.reason_counts = reasonCounts;
   }
   return summary;
+}
+
+function sanitizeActiveActions(value: unknown): NonNullable<DashboardState["active_actions"]> {
+  return sanitizeObjectArray(value, "active_actions").flatMap((record, index) => {
+    const actionId = optionalString(record.action_id);
+    const title = optionalString(record.title);
+    const status = optionalString(record.status);
+    const startedAt = optionalString(record.started_at);
+    if (!actionId || !title || !status || !startedAt) {
+      console.warn(`[tgcs dashboard schema] active_actions[${index}] missing required display field`, record);
+      return [];
+    }
+    const action: NonNullable<DashboardState["active_actions"]>[number] = {
+      schema_version: record.schema_version === "desk_active_action_v1" ? "desk_active_action_v1" : undefined,
+      action_id: actionId,
+      title,
+      status,
+      started_at: startedAt,
+      updated_at: optionalString(record.updated_at) ?? undefined,
+      detail: optionalString(record.detail) ?? undefined,
+    };
+    assignOptionalNumbers(action, record, ["elapsed_seconds", "checked_count", "total_count"]);
+    return [action];
+  });
 }
 
 export function sanitizeDeskSchedulerStatus(value: unknown): DeskSchedulerStatus | null {
@@ -1052,6 +1079,10 @@ function sanitizeSetupChecks(value: unknown): SetupCheck[] {
     }
     const check: SetupCheck = { check_id: checkId, label, status };
     assignOptionalStrings(check, record, ["detail", "command"]);
+    const sourceAccess = sanitizeSourceAccessActionSummary(record.source_access);
+    if (sourceAccess) {
+      check.source_access = sourceAccess;
+    }
     return [check];
   });
 }

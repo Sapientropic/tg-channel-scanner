@@ -460,7 +460,7 @@ def _write_default_profiles_config(path: Path, *, force: bool = False) -> None:
                 "dashboard_visible = true",
                 "prefilter_enabled = true",
                 "semantic_max_messages = 20",
-                "semantic_max_tokens = 2000",
+                "semantic_max_tokens = 6000",
                 "prefilter_keywords = [\"hiring\", \"we're hiring\", \"is hiring\", \"job opening\", \"open role\", \"remote\", \"apply\", \"frontend\", \"backend\", \"fullstack\", \"react\", \"typescript\", \"engineer\", \"developer\", \"招聘\", \"招人\", \"岗位\", \"职位\", \"远程\", \"简历\"]",
                 "",
                 "[[delivery]]",

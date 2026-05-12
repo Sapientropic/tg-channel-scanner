@@ -420,6 +420,9 @@ class DashboardServerGitTests(unittest.TestCase):
             "accessible_count": 2,
             "quiet_count": 1,
             "inaccessible_count": 1,
+            "probe_window_hours": 24,
+            "probe_window_hours_min": 24,
+            "probe_window_hours_max": 24,
             "reason_counts": {"cannot_resolve_entity": 1, "empty_recent_window": 1},
             "sources": [],
         }
@@ -430,10 +433,11 @@ class DashboardServerGitTests(unittest.TestCase):
 
         run_mock.assert_not_called()
         self.assertEqual(result["status"], "success")
-        self.assertIn("2 accessible", result["detail"])
+        self.assertIn("2 recently active", result["detail"])
         self.assertIn("cannot resolve 1", result["detail"])
         self.assertEqual(result["source_access"]["accessible_count"], 2)
         self.assertEqual(result["source_access"]["inaccessible_count"], 1)
+        self.assertEqual(result["source_access"]["probe_window_hours"], 24)
 
     def test_desk_action_blocks_duplicate_long_running_scan(self):
         lock = dashboard_server._desk_action_lock("monitor_jobs_dry_run")
@@ -447,6 +451,64 @@ class DashboardServerGitTests(unittest.TestCase):
         run_mock.assert_not_called()
         self.assertEqual(result["status"], "blocked")
         self.assertIn("already running", result["title"].lower())
+
+    def test_active_desk_action_state_exposes_progress_without_shell_commands(self):
+        dashboard_server._desk_mark_action_started("sources_probe_access", title="Check source access")
+        try:
+            dashboard_server._desk_update_action_progress(
+                "sources_probe_access",
+                checked_count=17,
+                total_count=68,
+                detail="Source access check running; checked 17/68 sources. Keep Signal Desk open.",
+            )
+            active = dashboard_server.desk_active_actions()
+        finally:
+            dashboard_server._desk_mark_action_finished("sources_probe_access")
+
+        self.assertEqual(active[0]["action_id"], "sources_probe_access")
+        self.assertEqual(active[0]["checked_count"], 17)
+        self.assertEqual(active[0]["total_count"], 68)
+        self.assertIn("checked 17/68", active[0]["detail"])
+
+    def test_dashboard_state_includes_structured_cached_source_access_health(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            health = {
+                "schema_version": dashboard_server.DESK_SOURCE_ACCESS_HEALTH_SCHEMA_VERSION,
+                "checked_at": datetime.now(UTC).isoformat(),
+                "source_count": 8,
+                "checked_count": 8,
+                "truncated_count": 0,
+                "accessible_count": 2,
+                "quiet_count": 1,
+                "inaccessible_count": 5,
+                "probe_window_hours": 24,
+                "probe_window_hours_min": 24,
+                "probe_window_hours_max": 24,
+                "reason_counts": {"cannot_resolve_entity": 5, "empty_recent_window": 1},
+                "sources": [],
+            }
+            snapshot = {
+                "setup_status": {
+                    "checks": [
+                        {
+                            "check_id": "source_access",
+                            "label": "Source access",
+                            "status": "blocked",
+                            "detail": "The latest run fetched no usable Telegram messages.",
+                        }
+                    ]
+                }
+            }
+            with patch.object(dashboard_server, "PROJECT_ROOT", root):
+                dashboard_server._write_source_access_health(health)
+                with patch.object(dashboard_server.monitor_state, "dashboard_snapshot", return_value=snapshot):
+                    payload = dashboard_server.dashboard_state_payload(object())
+
+        check = payload["setup_status"]["checks"][0]
+        self.assertIn("2 recently active", check["detail"])
+        self.assertEqual(check["source_access"]["quiet_count"], 1)
+        self.assertEqual(check["source_access"]["probe_window_hours"], 24)
 
     def test_source_access_repair_disables_cached_inaccessible_sources_only_after_confirm(self):
         with tempfile.TemporaryDirectory() as tmp:

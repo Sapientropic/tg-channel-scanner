@@ -31,7 +31,7 @@ class MonitorTests(unittest.TestCase):
         self.assertIn("接活", jobs["prefilter_keywords"])
         self.assertIn("预算", jobs["prefilter_keywords"])
         self.assertEqual(jobs["semantic_max_messages"], 20)
-        self.assertEqual(jobs["semantic_max_tokens"], 2000)
+        self.assertEqual(jobs["semantic_max_tokens"], 6000)
 
     def test_effective_scan_hours_uses_profile_window_unless_cli_overrides(self):
         self.assertEqual(
@@ -933,7 +933,7 @@ class MonitorTests(unittest.TestCase):
                 scan_input = Path(cmd[cmd.index("--input") + 1])
                 self.assertEqual(scan_input.name, "prefiltered-scan.jsonl")
                 self.assertEqual(cmd[cmd.index("--max-messages") + 1], "20")
-                self.assertEqual(cmd[cmd.index("--max-tokens") + 1], "2000")
+                self.assertEqual(cmd[cmd.index("--max-tokens") + 1], "6000")
                 report_path = output_dir / "runs" / "run-prefilter-hit" / "report.md"
                 html_path = output_dir / "runs" / "run-prefilter-hit" / "report.html"
                 report_path.write_text("# Report", encoding="utf-8")
@@ -991,6 +991,124 @@ class MonitorTests(unittest.TestCase):
         self.assertEqual(manifest["prefilter"]["matched_count"], 1)
         self.assertEqual(manifest["prefilter"]["semantic_stage"], "report_ran")
         self.assertEqual(len(manifest["commands"]), 2)
+
+    def test_prefilter_report_failure_records_llm_truncation_diagnostic(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "profiles" / "templates").mkdir(parents=True)
+            (root / "profiles" / "templates" / "jobs.md").write_text(
+                "# Profile\n\n## Search Rules\n1. Keep jobs.\n",
+                encoding="utf-8",
+            )
+            (root / ".tgcs").mkdir()
+            (root / ".tgcs" / "sources.json").write_text(
+                json.dumps(
+                    {
+                        "schema_version": "source_registry_v1",
+                        "sources": [
+                            {
+                                "source_id": "telegram:jobs",
+                                "username": "jobs",
+                                "topics": ["jobs"],
+                                "scan_window_hours": 24,
+                                "enabled": True,
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            output_dir = root / "output"
+            db_path = root / ".tgcs" / "tgcs.db"
+
+            def fake_run_json_command(cmd):
+                script = str(cmd[1])
+                if "scan.py" in script:
+                    output_path = Path(cmd[cmd.index("--output") + 1])
+                    output_path.parent.mkdir(parents=True, exist_ok=True)
+                    output_path.write_text(
+                        json.dumps(
+                            {
+                                "id": 1,
+                                "channel": "jobs",
+                                "date": "2026-05-08T08:30:00Z",
+                                "text": "We are hiring a TypeScript engineer.",
+                            }
+                        )
+                        + "\n",
+                        encoding="utf-8",
+                    )
+                    output_path.with_suffix(".meta.json").write_text(
+                        json.dumps({"total_messages_collected": 1, "source_health": []}),
+                        encoding="utf-8",
+                    )
+                    return (
+                        0,
+                        {
+                            "ok": True,
+                            "data": {
+                                "output_path": str(output_path),
+                                "message_count": 1,
+                                "source_health": [],
+                            },
+                        },
+                        "",
+                    )
+                diagnostic = {
+                    "code": "llm_output_truncated",
+                    "severity": "failure",
+                    "message": "The LLM response ended before complete JSON.",
+                    "next_step": "Raise semantic_max_tokens or lower semantic_max_messages.",
+                }
+                return (
+                    1,
+                    {
+                        "ok": False,
+                        "error": {
+                            "code": "llm_output_truncated",
+                            "message": "LLM response was not valid JSON",
+                            "retryable": True,
+                            "next_step": diagnostic["next_step"],
+                            "details": {
+                                "diagnostics": [diagnostic],
+                                "llm": {"provider": "deepseek", "max_tokens": 2000},
+                            },
+                        },
+                    },
+                    "Raw LLM response saved to report.llm-response.txt",
+                )
+
+            stdout = io.StringIO()
+            with patch.object(monitor, "PROJECT_ROOT", root):
+                with patch.object(monitor, "run_json_command", side_effect=fake_run_json_command):
+                    with patch("sys.stdout", stdout):
+                        exit_code = monitor.main(
+                            [
+                                "run",
+                                "--profile-id",
+                                "jobs-fast",
+                                "--run-id",
+                                "run-llm-truncated",
+                                "--output-dir",
+                                str(output_dir),
+                                "--db",
+                                str(db_path),
+                                "--format",
+                                "json",
+                            ]
+                        )
+
+            payload = json.loads(stdout.getvalue())
+            manifest = json.loads(
+                (output_dir / "runs" / "run-llm-truncated" / "run-manifest.json").read_text(encoding="utf-8")
+            )
+
+        self.assertEqual(exit_code, 1)
+        self.assertFalse(payload["ok"])
+        self.assertIn("semantic_max_tokens", payload["error"]["next_step"])
+        self.assertEqual(manifest["prefilter"]["semantic_stage"], "report_failed")
+        self.assertEqual(manifest["diagnostics"][0]["code"], "llm_output_truncated")
+        self.assertEqual(manifest["llm"]["provider"], "deepseek")
 
     def test_monitor_run_with_scan_input_writes_manifest_and_cards(self):
         with tempfile.TemporaryDirectory() as tmp:

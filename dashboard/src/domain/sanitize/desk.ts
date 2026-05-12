@@ -195,6 +195,7 @@ function sanitizeSourceAccessActionSummary(value: unknown): DeskActionResult["so
     inaccessible_count: nonNegativeIntegerOrDefault(value.inaccessible_count, 0),
     truncated_count: nonNegativeIntegerOrDefault(value.truncated_count, 0),
   };
+  assignOptionalNumbers(summary, value, ["probe_window_hours", "probe_window_hours_min", "probe_window_hours_max"]);
   const reasonCounts = sanitizeNumberRecord(value.reason_counts);
   if (reasonCounts) {
     summary.reason_counts = reasonCounts;
@@ -545,6 +546,16 @@ function numberOrDefault(value: unknown, fallback: number) {
 
 function nonNegativeIntegerOrDefault(value: unknown, fallback: number) {
   return typeof value === "number" && Number.isInteger(value) && value >= 0 ? value : fallback;
+}
+
+function assignOptionalNumbers<T extends object>(target: T, record: Record<string, unknown>, fields: string[]) {
+  const writable = target as Record<string, unknown>;
+  fields.forEach((field) => {
+    const value = record[field];
+    if (typeof value === "number" && Number.isFinite(value)) {
+      writable[field] = value;
+    }
+  });
 }
 
 function sanitizeNumberRecord(value: unknown): Record<string, number> | undefined {

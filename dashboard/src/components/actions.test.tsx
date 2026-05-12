@@ -152,7 +152,17 @@ describe("Signal Desk journey", () => {
             check_id: "source_access",
             label: "Source access",
             status: "blocked",
-            detail: "Access check: 2 accessible, 1 quiet, 5 inaccessible across 8 checked sources.",
+            detail: "Access check: 2 recently active, 1 quiet in the last 24h, 5 inaccessible across 8 checked sources.",
+            source_access: {
+              schema_version: "desk_source_access_health_v1",
+              source_count: 8,
+              checked_count: 8,
+              accessible_count: 2,
+              quiet_count: 1,
+              inaccessible_count: 5,
+              truncated_count: 0,
+              probe_window_hours: 24,
+            },
           },
         ],
       },
@@ -161,13 +171,13 @@ describe("Signal Desk journey", () => {
 
     const workspace = steps.find((step) => step.key === "workspace");
 
-    expect(workspace?.detail).toContain("2 accessible");
+    expect(workspace?.detail).toContain("2 recently active");
     expect(workspace?.buttons.map((button) => button.label)).toEqual([
       "Refresh files",
       "Repair source list",
       "Check source access",
       "Pause inaccessible",
-      "Keep accessible only",
+      "Keep recently active",
       "Check syntax",
     ]);
   });
@@ -198,7 +208,7 @@ describe("Signal Desk journey", () => {
 
     expect(workspace?.detail).toContain("2 inaccessible");
     expect(workspace?.buttons.map((button) => button.label)).toContain("Pause inaccessible");
-    expect(workspace?.buttons.map((button) => button.label)).toContain("Keep accessible only");
+    expect(workspace?.buttons.map((button) => button.label)).toContain("Keep recently active");
   });
 
   it("keeps commands as advanced fallback data instead of primary controls", () => {

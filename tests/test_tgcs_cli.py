@@ -115,7 +115,7 @@ class TgcsCliTests(unittest.TestCase):
         self.assertIn("state_dir", config_text)
         self.assertIn("profile_run_config_v1", profiles_config_text)
         self.assertIn("semantic_max_messages = 20", profiles_config_text)
-        self.assertIn("semantic_max_tokens = 2000", profiles_config_text)
+        self.assertIn("semantic_max_tokens = 6000", profiles_config_text)
         cmd = [str(part) for part in run_mock.call_args.args[0]]
         self.assertIn("source_registry.py", cmd[1])
         self.assertIn("import-list", cmd)

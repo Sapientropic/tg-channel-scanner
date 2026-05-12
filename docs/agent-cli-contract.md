@@ -348,7 +348,7 @@ alert_schedule_mode = "work_hours"
 delivery_targets = ["telegram-bot-default"]
 prefilter_enabled = true
 semantic_max_messages = 20
-semantic_max_tokens = 2000
+semantic_max_tokens = 6000
 prefilter_keywords = [
   "hiring",
   "we're hiring",
@@ -418,7 +418,7 @@ chat_id = ""
   },
   "semantic": {
     "max_messages": 20,
-    "max_tokens": 2000
+    "max_tokens": 6000
   },
   "llm": {
     "provider": "deepseek",
@@ -602,7 +602,7 @@ uses the same minimized projection for `selected_messages` so agent fallback
 work sees the same extraction surface as LLM mode.
 
 For the high-frequency `jobs-fast` lane, keep semantic batches bounded with
-`semantic_max_messages=20` and `semantic_max_tokens=2000`. Larger catch-up or
+`semantic_max_messages=20` and `semantic_max_tokens=6000`. Larger catch-up or
 exhaustive review should run as a backfill/audit lane so interrupt latency does
 not depend on a noisy channel burst.
 

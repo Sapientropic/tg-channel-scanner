@@ -352,6 +352,7 @@ export type DashboardState = {
   };
   opportunity_summary?: OpportunitySummary;
   validation_summary?: ValidationSummary;
+  active_actions?: DeskActiveAction[];
   setup_status?: {
     schema_version?: "dashboard_setup_status_v1";
     stage?: string;
@@ -427,6 +428,7 @@ export type SetupCheck = {
   status: "done" | "active" | "blocked" | "todo" | string;
   detail?: string;
   command?: string;
+  source_access?: DeskActionResult["source_access"];
 };
 
 export type DeskActionRunMode = "execute" | "confirm_execute" | "needs_human" | string;
@@ -464,8 +466,24 @@ export type DeskActionResult = {
     quiet_count: number;
     inaccessible_count: number;
     truncated_count: number;
+    probe_window_hours?: number;
+    probe_window_hours_min?: number;
+    probe_window_hours_max?: number;
     reason_counts?: Record<string, number>;
   };
+};
+
+export type DeskActiveAction = {
+  schema_version?: "desk_active_action_v1";
+  action_id: string;
+  title: string;
+  status: string;
+  started_at: string;
+  updated_at?: string;
+  elapsed_seconds?: number;
+  checked_count?: number;
+  total_count?: number;
+  detail?: string;
 };
 
 export type DeskSchedulerStatus = {

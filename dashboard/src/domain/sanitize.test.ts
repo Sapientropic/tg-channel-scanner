@@ -74,6 +74,74 @@ describe("dashboard state sanitizers", () => {
     expect(warn).toHaveBeenCalledWith("[tgcs dashboard schema] runs[0].status expected non-empty string", undefined);
   });
 
+  it("sanitizes active Desk action progress from dashboard state", () => {
+    const state = sanitizeDashboardState({
+      active_actions: [
+        {
+          schema_version: "desk_active_action_v1",
+          action_id: "sources_probe_access",
+          title: "Check source access",
+          status: "running",
+          started_at: "2026-05-12T15:00:00Z",
+          updated_at: "2026-05-12T15:01:00Z",
+          elapsed_seconds: 61,
+          checked_count: 17,
+          total_count: 68,
+          detail: "Source access check running; checked 17/68 sources.",
+        },
+        { action_id: "", title: "bad", status: "running", started_at: "" },
+      ],
+    });
+
+    expect(state.active_actions).toEqual([
+      {
+        schema_version: "desk_active_action_v1",
+        action_id: "sources_probe_access",
+        title: "Check source access",
+        status: "running",
+        started_at: "2026-05-12T15:00:00Z",
+        updated_at: "2026-05-12T15:01:00Z",
+        elapsed_seconds: 61,
+        checked_count: 17,
+        total_count: 68,
+        detail: "Source access check running; checked 17/68 sources.",
+      },
+    ]);
+  });
+
+  it("keeps structured source access summaries on setup checks", () => {
+    const state = sanitizeDashboardState({
+      setup_status: {
+        stage: "needs_source_access",
+        checks: [
+          {
+            check_id: "source_access",
+            label: "Source access",
+            status: "blocked",
+            detail: "Access check: 2 recently active.",
+            source_access: {
+              schema_version: "desk_source_access_health_v1",
+              source_count: 8,
+              checked_count: 8,
+              accessible_count: 2,
+              quiet_count: 1,
+              inaccessible_count: 5,
+              truncated_count: 0,
+              probe_window_hours: 24,
+            },
+          },
+        ],
+      },
+    });
+
+    expect(state.setup_status?.checks?.[0].source_access).toMatchObject({
+      accessible_count: 2,
+      quiet_count: 1,
+      inaccessible_count: 5,
+      probe_window_hours: 24,
+    });
+  });
+
   it("keeps safe source ref urls and drops unsafe ones", () => {
     expect(
       sanitizeInboxCards([
@@ -656,6 +724,9 @@ describe("dashboard state sanitizers", () => {
           quiet_count: 1,
           inaccessible_count: 2,
           truncated_count: 2,
+          probe_window_hours: 24,
+          probe_window_hours_min: 24,
+          probe_window_hours_max: 24,
           reason_counts: { cannot_resolve_entity: 2, bad: "ignored" },
         },
         stdout: "ignored",
@@ -680,6 +751,9 @@ describe("dashboard state sanitizers", () => {
         quiet_count: 1,
         inaccessible_count: 2,
         truncated_count: 2,
+        probe_window_hours: 24,
+        probe_window_hours_min: 24,
+        probe_window_hours_max: 24,
         reason_counts: { cannot_resolve_entity: 2 },
       },
     });

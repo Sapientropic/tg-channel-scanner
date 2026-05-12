@@ -61,6 +61,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--base-url")
     parser.add_argument("--model")
     parser.add_argument("--max-messages", type=int)
+    parser.add_argument("--max-tokens", type=int)
     parser.add_argument(
         "--extractor",
         choices=("auto", "llm", "agent"),
@@ -169,6 +170,8 @@ def main(argv: list[str] | None = None) -> int:
         report_cmd.extend(["--model", args.model])
     if args.max_messages:
         report_cmd.extend(["--max-messages", str(args.max_messages)])
+    if args.max_tokens:
+        report_cmd.extend(["--max-tokens", str(args.max_tokens)])
     if args.extractor:
         report_cmd.extend(["--extractor", args.extractor])
     if args.items_json:
@@ -201,12 +204,15 @@ def main(argv: list[str] | None = None) -> int:
         )
     except subprocess.CalledProcessError as exc:
         if json_mode:
+            report_payload = parse_agent_stdout(exc)
+            report_error = report_payload.get("error") if isinstance(report_payload, dict) and isinstance(report_payload.get("error"), dict) else {}
             agent_cli.emit_error(
                 args,
-                code="report_failed",
-                message=f"report.py failed with exit code {exc.returncode}.",
+                code=str(report_error.get("code") or "report_failed"),
+                message=str(report_error.get("message") or f"report.py failed with exit code {exc.returncode}."),
                 retryable=exc.returncode == agent_cli.EXIT_RUNTIME,
-                next_step="Inspect report.py JSON envelope or rerun report.py directly.",
+                next_step=str(report_error.get("next_step") or "Inspect report.py JSON envelope or rerun report.py directly."),
+                details=report_error.get("details") if isinstance(report_error.get("details"), dict) else None,
             )
         return exc.returncode or 1
 

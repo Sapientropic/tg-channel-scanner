@@ -422,6 +422,61 @@ fields:
         self.assertTrue(debug_exists)
         self.assertEqual(debug_text, "bad")
 
+    def test_invalid_llm_json_json_mode_surfaces_repairable_diagnostic(self):
+        report = load_report_module(self)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            input_path = root / "scan_20260506_080000.jsonl"
+            profile_path = root / "profile.md"
+            output_path = root / "job-scan-report.md"
+            input_path.write_text(
+                json.dumps(sample_messages()[0], ensure_ascii=False) + "\n",
+                encoding="utf-8",
+            )
+            profile_path.write_text("Senior Frontend Developer", encoding="utf-8")
+            stdout = io.StringIO()
+
+            diagnostic = {
+                "code": "llm_output_truncated",
+                "severity": "failure",
+                "message": "The LLM response ended before a complete JSON object could be parsed.",
+                "next_step": "Raise semantic_max_tokens, lower semantic_max_messages, or narrow the prefilter.",
+            }
+            with patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}, clear=True):
+                with patch.object(
+                    report,
+                    "extract_jobs_with_metadata",
+                    side_effect=report.ReportError(
+                        "LLM response was not valid JSON",
+                        '{"items": [',
+                        code="llm_output_truncated",
+                        next_step=diagnostic["next_step"],
+                        details={"diagnostics": [diagnostic], "llm": {"provider": "deepseek", "max_tokens": 2000}},
+                    ),
+                ):
+                    with patch("sys.stdout", stdout):
+                        exit_code = report.main(
+                            [
+                                "--input",
+                                str(input_path),
+                                "--profile",
+                                str(profile_path),
+                                "--output",
+                                str(output_path),
+                                "--format",
+                                "json",
+                            ]
+                        )
+
+            payload = json.loads(stdout.getvalue())
+
+        self.assertEqual(exit_code, 1)
+        self.assertFalse(payload["ok"])
+        self.assertEqual(payload["error"]["code"], "llm_output_truncated")
+        self.assertEqual(payload["error"]["details"]["diagnostics"][0]["code"], "llm_output_truncated")
+        self.assertIn("semantic_max_tokens", payload["error"]["next_step"])
+
     def test_html_report_does_not_link_unsafe_untrusted_urls(self):
         report = load_report_module(self)
         job = sample_extracted_jobs()[0] | {

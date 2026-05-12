@@ -128,6 +128,8 @@ _DESK_TELEGRAM_LOGIN_LOCK = Lock()
 _DESK_ACTION_LOCKS: dict[str, Lock] = {}
 _DESK_ACTION_LOCKS_GUARD = Lock()
 _DESK_LONG_RUNNING_ACTIONS = {"monitor_jobs_dry_run", "sources_probe_access"}
+_DESK_ACTIVE_ACTIONS: dict[str, dict] = {}
+_DESK_ACTIVE_ACTIONS_GUARD = Lock()
 REPORT_HTML_MOBILE_PATCH = """<style data-dashboard-report-mobile-patch>
 @media (max-width: 520px) {
   .report-title {
@@ -236,10 +238,10 @@ DESK_ACTIONS: tuple[dict, ...] = (
     {
         "action_id": "sources_keep_accessible",
         "group": "Sources",
-        "title": "Keep only accessible sources",
-        "detail": "Disable inaccessible and quiet sources from the latest access check, keeping only sources with recent readable messages.",
+        "title": "Keep only recently active sources",
+        "detail": "Disable inaccessible and quiet sources from the latest access check. Quiet sources are readable, but had no recent messages in the probe window.",
         "run_mode": "confirm_execute",
-        "display_command": "Signal Desk: keep accessible sources",
+        "display_command": "Signal Desk: keep recently active sources",
         "next_action": "Run a fresh practice scan after narrowing the source list.",
     },
     {
@@ -1721,15 +1723,25 @@ def _source_access_health_detail(payload: dict) -> str:
     inaccessible = int(payload.get("inaccessible_count") or 0)
     checked = int(payload.get("checked_count") or 0)
     truncated = int(payload.get("truncated_count") or 0)
+    window_min = int(payload.get("probe_window_hours_min") or payload.get("probe_window_hours") or 0)
+    window_max = int(payload.get("probe_window_hours_max") or payload.get("probe_window_hours") or 0)
+    window_text = ""
+    if window_min and window_max and window_min == window_max:
+        window_text = f" in the last {window_max}h"
+    elif window_min and window_max:
+        window_text = f" in each source window ({window_min}-{window_max}h)"
     reason_counts = payload.get("reason_counts") if isinstance(payload.get("reason_counts"), dict) else {}
     issue_parts = [
         f"{_source_access_reason_label(str(reason))} {int(count)}"
         for reason, count in sorted(reason_counts.items(), key=lambda item: (-int(item[1] or 0), str(item[0])))[:3]
         if int(count or 0) > 0
     ]
-    detail = f"Access check: {accessible} accessible, {quiet} quiet, {inaccessible} inaccessible across {checked} checked sources."
+    detail = (
+        f"Access check: {accessible} recently active, {quiet} quiet{window_text}, "
+        f"{inaccessible} inaccessible across {checked} checked sources."
+    )
     if issue_parts:
-        detail += f" Top issues: {', '.join(issue_parts)}."
+        detail += f" Notes: {', '.join(issue_parts)}."
     if truncated:
         detail += f" {truncated} additional enabled sources were not checked by the bounded probe."
     return detail
@@ -1737,7 +1749,9 @@ def _source_access_health_detail(payload: dict) -> str:
 
 def _source_access_action_summary(payload: dict) -> dict:
     reason_counts = payload.get("reason_counts") if isinstance(payload.get("reason_counts"), dict) else {}
-    return {
+    window_min = int(payload.get("probe_window_hours_min") or payload.get("probe_window_hours") or 0)
+    window_max = int(payload.get("probe_window_hours_max") or payload.get("probe_window_hours") or 0)
+    summary = {
         "schema_version": DESK_SOURCE_ACCESS_HEALTH_SCHEMA_VERSION,
         "checked_at": str(payload.get("checked_at") or ""),
         "source_count": int(payload.get("source_count") or 0),
@@ -1752,6 +1766,12 @@ def _source_access_action_summary(payload: dict) -> dict:
             if int(count or 0) > 0
         },
     }
+    if window_min and window_max:
+        summary["probe_window_hours_min"] = window_min
+        summary["probe_window_hours_max"] = window_max
+        if window_min == window_max:
+            summary["probe_window_hours"] = window_max
+    return summary
 
 
 def _source_access_record_base(source: dict) -> dict:
@@ -1871,7 +1891,12 @@ def _source_access_summary(records: list[dict], *, total_source_count: int, trun
         for record in records
         if str(record.get("status") or "") in {"inaccessible", "quiet"}
     )
-    return {
+    window_values = [
+        int(record.get("scan_window_hours") or 0)
+        for record in records
+        if int(record.get("scan_window_hours") or 0) > 0
+    ]
+    summary = {
         "schema_version": DESK_SOURCE_ACCESS_HEALTH_SCHEMA_VERSION,
         "checked_at": checked_at,
         "source_count": total_source_count,
@@ -1883,9 +1908,15 @@ def _source_access_summary(records: list[dict], *, total_source_count: int, trun
         "reason_counts": dict(sorted(reason_counts.items())),
         "sources": records,
     }
+    if window_values:
+        summary["probe_window_hours_min"] = min(window_values)
+        summary["probe_window_hours_max"] = max(window_values)
+        if min(window_values) == max(window_values):
+            summary["probe_window_hours"] = max(window_values)
+    return summary
 
 
-async def _probe_source_access_async() -> dict:
+async def _probe_source_access_async(progress_callback=None) -> dict:
     from telethon import TelegramClient
     from telethon.sessions import StringSession
 
@@ -1938,10 +1969,11 @@ async def _probe_source_access_async() -> dict:
                 "Telegram login is not authorized.",
                 next_action="Reconnect Telegram from Start, then check source access again.",
             )
-        records = [
-            await _probe_one_source_access(client, source, now=now)
-            for source in checked_sources
-        ]
+        records = []
+        for index, source in enumerate(checked_sources, start=1):
+            records.append(await _probe_one_source_access(client, source, now=now))
+            if progress_callback:
+                progress_callback(index, len(checked_sources))
     finally:
         await client.disconnect()
 
@@ -1955,8 +1987,8 @@ async def _probe_source_access_async() -> dict:
     return summary
 
 
-def probe_source_access() -> dict:
-    return asyncio.run(_probe_source_access_async())
+def probe_source_access(progress_callback=None) -> dict:
+    return asyncio.run(_probe_source_access_async(progress_callback=progress_callback))
 
 
 def _require_confirm_only(body: dict | None, *, action_label: str) -> None:
@@ -2037,8 +2069,11 @@ def apply_source_access_repair(action_id: str, *, body: dict | None = None) -> d
     target_ids = _source_access_target_ids(health, keep_only_accessible=keep_only_accessible)
     changed_count = _disable_sources_from_access_health(target_ids)
     if keep_only_accessible:
-        title = "Accessible sources kept"
-        detail = f"Signal Desk disabled {changed_count} inaccessible or quiet sources from the latest access check."
+        title = "Recently active sources kept"
+        detail = (
+            f"Signal Desk disabled {changed_count} inaccessible or quiet sources from the latest access check. "
+            "Quiet sources were readable, but had no recent messages in the probe window."
+        )
     else:
         title = "Inaccessible sources paused"
         detail = f"Signal Desk disabled {changed_count} inaccessible sources from the latest access check."
@@ -2508,7 +2543,7 @@ def create_profile_from_brief(conn, body: dict) -> dict:
         "dashboard_visible": True,
         "prefilter_enabled": True,
         "semantic_max_messages": 20,
-        "semantic_max_tokens": 2000,
+        "semantic_max_tokens": 6000,
         "prefilter_keywords": _profile_keywords_from_text(brief),
     }
     _append_profile_config(config)
@@ -3362,6 +3397,56 @@ def _desk_action_lock(action_id: str) -> Lock:
         return lock
 
 
+def _desk_mark_action_started(action_id: str, *, title: str) -> None:
+    now = _utc_now()
+    with _DESK_ACTIVE_ACTIONS_GUARD:
+        _DESK_ACTIVE_ACTIONS[action_id] = {
+            "schema_version": "desk_active_action_v1",
+            "action_id": action_id,
+            "title": title,
+            "status": "running",
+            "started_at": now,
+            "updated_at": now,
+            "detail": f"{title} is running. Keep Signal Desk open.",
+        }
+
+
+def _desk_update_action_progress(action_id: str, **updates: object) -> None:
+    with _DESK_ACTIVE_ACTIONS_GUARD:
+        current = _DESK_ACTIVE_ACTIONS.get(action_id)
+        if not current:
+            return
+        current.update(updates)
+        current["updated_at"] = _utc_now()
+
+
+def _desk_mark_action_finished(action_id: str) -> None:
+    with _DESK_ACTIVE_ACTIONS_GUARD:
+        _DESK_ACTIVE_ACTIONS.pop(action_id, None)
+
+
+def desk_active_actions() -> list[dict]:
+    now = datetime.now(UTC)
+    with _DESK_ACTIVE_ACTIONS_GUARD:
+        active = [dict(item) for item in _DESK_ACTIVE_ACTIONS.values()]
+    for item in active:
+        started_at = str(item.get("started_at") or "")
+        parsed = None
+        if started_at.endswith("Z"):
+            started_at = f"{started_at[:-1]}+00:00"
+        try:
+            parsed = datetime.fromisoformat(started_at) if started_at else None
+        except ValueError:
+            parsed = None
+        if parsed is not None:
+            if parsed.tzinfo is None:
+                parsed = parsed.replace(tzinfo=UTC)
+            item["elapsed_seconds"] = max(0, int((now - parsed.astimezone(UTC)).total_seconds()))
+        else:
+            item["elapsed_seconds"] = 0
+    return sorted(active, key=lambda value: str(value.get("started_at") or ""))
+
+
 def run_desk_action(action_id: str, *, body: dict | None = None) -> dict:
     action = DESK_ACTION_BY_ID.get(action_id)
     if not action:
@@ -3369,25 +3454,38 @@ def run_desk_action(action_id: str, *, body: dict | None = None) -> dict:
 
     lock = _desk_action_lock(action_id) if action_id in _DESK_LONG_RUNNING_ACTIONS else None
     if lock is not None and not lock.acquire(blocking=False):
+        active = next((item for item in desk_active_actions() if item.get("action_id") == action_id), None)
         return _desk_action_result(
             action_id,
             status="blocked",
             title="Action already running",
-            detail=f"{action['title']} is still running. Wait for the current run to finish before starting another.",
+            detail=str(active.get("detail") if active else "") or f"{action['title']} is still running. Wait for the current run to finish before starting another.",
             next_action="Wait for the current action to finish, then refresh Signal Desk.",
+            extra={"active_action": active} if active else None,
         )
 
     try:
+        if lock is not None:
+            _desk_mark_action_started(action_id, title=str(action["title"]))
         return _run_desk_action_unlocked(action_id, action=action, body=body)
     finally:
         if lock is not None:
+            _desk_mark_action_finished(action_id)
             lock.release()
 
 
 def _run_desk_action_unlocked(action_id: str, *, action: dict, body: dict | None = None) -> dict:
     if action_id == "sources_probe_access":
         try:
-            health = probe_source_access()
+            def progress(checked: int, total: int) -> None:
+                _desk_update_action_progress(
+                    action_id,
+                    checked_count=checked,
+                    total_count=total,
+                    detail=f"Source access check running; checked {checked}/{total} sources. Keep Signal Desk open.",
+                )
+
+            health = probe_source_access(progress_callback=progress)
         except SourceAccessProbeError as exc:
             return _desk_action_result(
                 action_id,
@@ -3410,8 +3508,10 @@ def _run_desk_action_unlocked(action_id: str, *, action: dict, body: dict | None
             title="Source access checked",
             detail=_source_access_health_detail(health),
             next_action=(
-                "Pause inaccessible sources, keep only accessible sources, or run a fresh practice scan."
-                if int(health.get("inaccessible_count") or 0) or int(health.get("quiet_count") or 0)
+                "Pause inaccessible sources, narrow to recently active sources, or run a fresh practice scan."
+                if int(health.get("inaccessible_count") or 0)
+                else "Quiet sources are readable. Keep them, narrow to recently active sources, or run a fresh practice scan."
+                if int(health.get("quiet_count") or 0)
                 else "Run a fresh practice scan."
             ),
             extra={"source_access": _source_access_action_summary(health)},
@@ -3442,6 +3542,11 @@ def _run_desk_action_unlocked(action_id: str, *, action: dict, body: dict | None
     # argv allowlist so Signal Desk cannot become a localhost shell proxy.
     _ = body
     cmd = [sys.executable, str(PROJECT_ROOT / "scripts" / "tgcs.py"), *action["argv"]]
+    if action_id == "monitor_jobs_dry_run":
+        _desk_update_action_progress(
+            action_id,
+            detail="Practice scan running; scanning sources, prefiltering, and generating the local report. Keep Signal Desk open.",
+        )
     try:
         completed = subprocess.run(
             cmd,
@@ -3492,6 +3597,7 @@ def _run_desk_action_unlocked(action_id: str, *, action: dict, body: dict | None
 
 def dashboard_state_payload(conn) -> dict:
     snapshot = monitor_state.dashboard_snapshot(conn)
+    snapshot["active_actions"] = desk_active_actions()
     health = _source_access_health_loaded()
     if not health:
         return snapshot
@@ -3505,7 +3611,7 @@ def dashboard_state_payload(conn) -> dict:
     updated_checks: list[dict] = []
     for check in checks:
         if isinstance(check, dict) and check.get("check_id") == "source_access":
-            updated_checks.append({**check, "detail": detail})
+            updated_checks.append({**check, "detail": detail, "source_access": _source_access_action_summary(health)})
         else:
             updated_checks.append(check)
     snapshot["setup_status"] = {**setup, "checks": updated_checks}

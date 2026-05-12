@@ -66,9 +66,22 @@ _DEFAULT_ACTIONS = {"high": "Apply", "medium": "Inspect", "low": "Skip unless cr
 
 
 class ReportError(Exception):
-    def __init__(self, message: str, raw_response: str | None = None):
+    def __init__(
+        self,
+        message: str,
+        raw_response: str | None = None,
+        *,
+        code: str = "llm_provider_error",
+        next_step: str = "",
+        retryable: bool = True,
+        details: dict[str, Any] | None = None,
+    ):
         super().__init__(message)
         self.raw_response = raw_response
+        self.code = code
+        self.next_step = next_step
+        self.retryable = retryable
+        self.details = details or {}
 
 
 def _default_labels():
@@ -1280,6 +1293,50 @@ def parse_extraction_response(text: str, top_level_key: str = "jobs") -> list[di
     return [item for item in items if isinstance(item, dict)]
 
 
+def llm_json_failure_code(raw_response: str, *, finish_reason: str = "") -> str:
+    if finish_reason.lower() == "length":
+        return "llm_output_truncated"
+    raw = strip_json_fence(raw_response)
+    if not raw:
+        return "semantic_json_invalid"
+    opens = raw.count("{") + raw.count("[")
+    closes = raw.count("}") + raw.count("]")
+    if opens > closes or raw.rstrip().endswith((",", ":", "{", "[", '"')):
+        return "llm_output_truncated"
+    return "semantic_json_invalid"
+
+
+def llm_json_failure_diagnostic(
+    *,
+    code: str,
+    provider: str,
+    model: str,
+    finish_reason: str,
+    max_messages: int,
+    max_tokens: int,
+) -> dict[str, str]:
+    if code == "llm_output_truncated":
+        token_hint = f" Current semantic_max_tokens is {max_tokens}." if max_tokens else ""
+        return {
+            "code": "llm_output_truncated",
+            "severity": "failure",
+            "message": "The LLM response ended before a complete JSON object could be parsed.",
+            "next_step": (
+                "Raise semantic_max_tokens, lower semantic_max_messages, or narrow the prefilter before rerunning."
+                + token_hint
+            ),
+        }
+    return {
+        "code": "semantic_json_invalid",
+        "severity": "failure",
+        "message": "The LLM returned text that did not match the required semantic JSON contract.",
+        "next_step": (
+            f"Retry once with the same profile. If it repeats, lower semantic_max_messages from {max_messages}, "
+            "raise semantic_max_tokens, or switch provider/model."
+        ),
+    }
+
+
 def llm_key_available() -> bool:
     return bool(
         ai_secret("OPENAI_API_KEY")
@@ -1606,9 +1663,42 @@ def extract_jobs_with_metadata(
         raise ReportError(f"API error: {exc}") from exc
     latency_ms = int((perf_counter() - started) * 1000)
 
-    raw_response = response.choices[0].message.content or ""
+    choice = response.choices[0]
+    raw_response = choice.message.content or ""
+    finish_reason = str(getattr(choice, "finish_reason", "") or "")
     top_key = profile_config.mode.top_level_key if profile_config else "jobs"
-    items = parse_extraction_response(raw_response, top_key)
+    try:
+        items = parse_extraction_response(raw_response, top_key)
+    except ReportError as exc:
+        code = llm_json_failure_code(raw_response, finish_reason=finish_reason)
+        diagnostic = llm_json_failure_diagnostic(
+            code=code,
+            provider=provider,
+            model=model,
+            finish_reason=finish_reason,
+            max_messages=max_messages,
+            max_tokens=max_tokens,
+        )
+        # Preserve the raw response only in the local debug file path. The
+        # machine-readable envelope carries bounded diagnostics so Signal Desk
+        # can route the user without exposing Telegram message text.
+        raise ReportError(
+            str(exc),
+            raw_response,
+            code=code,
+            next_step=str(diagnostic["next_step"]),
+            retryable=True,
+            details={
+                "diagnostics": [diagnostic],
+                "llm": {
+                    "provider": provider,
+                    "model": model,
+                    "finish_reason": finish_reason,
+                    "max_messages": max_messages,
+                    "max_tokens": max_tokens,
+                },
+            },
+        ) from exc
     usage = normalized_usage(getattr(response, "usage", None))
     return ExtractionResult(
         items=items,
@@ -1918,10 +2008,11 @@ def main(argv: list[str] | None = None, *, extract_jobs_override=None) -> int:
                 return agent_cli.EXIT_VALIDATION
             agent_cli.emit_error(
                 args,
-                code="llm_provider_error",
+                code=exc.code or "llm_provider_error",
                 message=str(exc),
-                retryable=True,
-                next_step="Check API key, base URL, model, and optional dependencies.",
+                retryable=exc.retryable,
+                next_step=exc.next_step or "Check API key, base URL, model, and optional dependencies.",
+                details=exc.details,
             )
             if exc.raw_response is not None:
                 debug_path = debug_response_path(args.output, args.input)

@@ -15,7 +15,7 @@ import {
 import { useState, type ReactNode } from "react";
 
 import { CopyableCommand, InlineEmpty } from "./common";
-import type { DashboardState, DeliveryTarget, DeskAction, DeskActionResult, DeskSchedulerStatus, DeskTelegramStatus } from "../domain/types";
+import type { DashboardState, DeliveryTarget, DeskAction, DeskActionResult, DeskActiveAction, DeskSchedulerStatus, DeskTelegramStatus } from "../domain/types";
 
 type JourneyState = "done" | "active" | "ready" | "blocked" | "manual";
 
@@ -71,6 +71,7 @@ const SETUP_STAGE_LABELS: Record<string, string> = {
 
 export function ActionsView({
   actions,
+  activeActions = [],
   results,
   busyActionId,
   loadError,
@@ -86,6 +87,7 @@ export function ActionsView({
   onRun,
 }: {
   actions: DeskAction[];
+  activeActions?: DeskActiveAction[];
   results: Record<string, DeskActionResult>;
   busyActionId: string;
   loadError: string;
@@ -184,6 +186,7 @@ export function ActionsView({
         <StartPrimaryActionCard
           action={primaryReadyAction}
           anyBusy={Boolean(busyActionId)}
+          activeActions={activeActions}
           busyActionId={busyActionId}
           onOpenReview={onOpenReview}
           onRun={onRun}
@@ -220,6 +223,7 @@ export function ActionsView({
               <JourneyStepCard
                 actionMap={actionMap}
                 anyBusy={Boolean(busyActionId)}
+                activeActions={activeActions}
                 busyActionId={busyActionId}
                 index={index + 1}
                 key={step.key}
@@ -239,6 +243,7 @@ export function ActionsView({
             <JourneyStepCard
               actionMap={actionMap}
               anyBusy={Boolean(busyActionId)}
+              activeActions={activeActions}
               busyActionId={busyActionId}
               index={index + 1}
               key={step.key}
@@ -266,6 +271,7 @@ export function ActionsView({
                     <JourneyStepCard
                       actionMap={actionMap}
                       anyBusy={Boolean(busyActionId)}
+                      activeActions={activeActions}
                       busyActionId={busyActionId}
                       index={index + 1}
                       key={step.key}
@@ -286,6 +292,7 @@ export function ActionsView({
                     <JourneyStepCard
                       actionMap={actionMap}
                       anyBusy={Boolean(busyActionId)}
+                      activeActions={activeActions}
                       busyActionId={busyActionId}
                       index={index + 1}
                       key={step.key}
@@ -311,6 +318,7 @@ export function ActionsView({
                   <JourneyStepCard
                     actionMap={actionMap}
                     anyBusy={Boolean(busyActionId)}
+                    activeActions={activeActions}
                     busyActionId={busyActionId}
                     index={index + 1}
                     key={step.key}
@@ -331,6 +339,7 @@ export function ActionsView({
                   <JourneyStepCard
                     actionMap={actionMap}
                     anyBusy={Boolean(busyActionId)}
+                    activeActions={activeActions}
                     busyActionId={busyActionId}
                     index={index + 1}
                     key={step.key}
@@ -464,10 +473,11 @@ export function buildJourneySteps(
   const sourceAttention = stage === "needs_source_access";
   const firstRunReady = stage === "needs_first_run";
   const ready = stage === "ready";
-  const sourceAccessDetail = setupCheckDetail(setupStatus, "source_access");
-  const sourceAccessResult = results.sources_probe_access?.source_access;
-  const sourceAccessNeedsRepair = sourceAttention
-    || Boolean(sourceAccessResult && (sourceAccessResult.inaccessible_count > 0 || sourceAccessResult.quiet_count > 0));
+  const sourceAccessCheck = setupCheckById(setupStatus, "source_access");
+  const sourceAccessDetail = sourceAccessCheck?.detail || "";
+  const sourceAccessResult = results.sources_probe_access?.source_access || sourceAccessCheck?.source_access;
+  const sourceAccessHasInaccessible = Boolean(sourceAccessResult && sourceAccessResult.inaccessible_count > 0);
+  const sourceAccessHasQuiet = Boolean(sourceAccessResult && sourceAccessResult.quiet_count > 0);
   const sourceStepDetail = results.sources_probe_access?.detail || sourceAccessDetail;
 
   const hasSuccess = (actionId: string) => results[actionId]?.status === "success";
@@ -525,11 +535,11 @@ export function buildJourneySteps(
         { actionId: "init_jobs", label: workspaceDone ? "Refresh files" : "Prepare files", variant: workspaceDone ? "secondary" : "primary" },
         { actionId: "sources_import_jobs", label: "Repair source list", variant: sourceAttention ? "primary" : "secondary" },
         { actionId: "sources_probe_access", label: "Check source access", variant: sourceAttention ? "primary" : "secondary" },
-        ...(sourceAccessNeedsRepair
-          ? [
-              { actionId: "sources_pause_inaccessible", label: "Pause inaccessible", variant: "secondary" as const },
-              { actionId: "sources_keep_accessible", label: "Keep accessible only", variant: "secondary" as const },
-            ]
+        ...(sourceAccessHasInaccessible
+          ? [{ actionId: "sources_pause_inaccessible", label: "Pause inaccessible", variant: "secondary" as const }]
+          : []),
+        ...(sourceAccessHasQuiet
+          ? [{ actionId: "sources_keep_accessible", label: "Keep recently active", variant: "secondary" as const }]
           : []),
         { actionId: "sources_validate", label: "Check syntax", variant: "secondary" },
       ]),
@@ -649,24 +659,28 @@ function buildPrimaryReadyAction(step: JourneyStep | undefined, reviewCount: num
 
 function StartPrimaryActionCard({
   action,
+  activeActions,
   anyBusy,
   busyActionId,
   onOpenReview,
   onRun,
 }: {
   action: PrimaryReadyAction;
+  activeActions: DeskActiveAction[];
   anyBusy: boolean;
   busyActionId: string;
   onOpenReview?: () => void;
   onRun: (actionId: string) => Promise<void>;
 }) {
   const busy = Boolean(action.actionId && busyActionId === action.actionId);
+  const activeAction = action.actionId ? activeActions.find((item) => item.action_id === action.actionId) : undefined;
   return (
     <article className={`start-next-card is-${action.kind}`} aria-label="Recommended next action">
       <div>
         <span className="status new">Next</span>
         <h3>{action.title}</h3>
         <p>{action.detail}</p>
+        {activeAction && <ActiveActionProgress action={activeAction} />}
       </div>
       <button
         className="journey-button"
@@ -711,8 +725,11 @@ export function notificationReadiness(targets: DeliveryTarget[]): NotificationRe
 }
 
 function setupCheckDetail(setupStatus: DashboardState["setup_status"] | undefined, checkId: string) {
-  const check = setupStatus?.checks?.find((item) => item.check_id === checkId);
-  return check?.detail || "";
+  return setupCheckById(setupStatus, checkId)?.detail || "";
+}
+
+function setupCheckById(setupStatus: DashboardState["setup_status"] | undefined, checkId: string) {
+  return setupStatus?.checks?.find((item) => item.check_id === checkId);
 }
 
 function workspaceState(stage: string, workspaceDone: boolean, sourceAttention: boolean): JourneyState {
@@ -792,6 +809,7 @@ function firstRunBlocked(stage: string, workspaceDone: boolean, sourceAttention:
 }
 
 function JourneyStepCard({
+  activeActions,
   actionMap,
   anyBusy,
   busyActionId,
@@ -801,6 +819,7 @@ function JourneyStepCard({
   step,
   telegram,
 }: {
+  activeActions: DeskActiveAction[];
   actionMap: Map<string, DeskAction>;
   anyBusy: boolean;
   busyActionId: string;
@@ -813,6 +832,9 @@ function JourneyStepCard({
   const disabled = step.state === "blocked";
   const visibleButtons = step.buttons.filter((button) => actionMap.has(button.actionId));
   const visibleAdvanced = step.advancedActionIds.map((actionId) => actionMap.get(actionId)).filter(Boolean) as DeskAction[];
+  const activeAction = step.advancedActionIds
+    .map((actionId) => activeActions.find((item) => item.action_id === actionId))
+    .find(Boolean);
   const hasProblemResult = step.advancedActionIds.some((actionId) => {
     const status = results[actionId]?.status;
     return status === "failed" || status === "blocked";
@@ -829,6 +851,7 @@ function JourneyStepCard({
           <h3>{step.title}</h3>
         </div>
         <p>{step.detail}</p>
+        {activeAction && <ActiveActionProgress action={activeAction} />}
         <JourneyResults actionIds={step.advancedActionIds} results={results} />
         {step.key === "telegram" && <TelegramLoginPanel telegram={telegram} />}
         {showAdvancedReference && (
@@ -868,6 +891,29 @@ function JourneyStepCard({
       </aside>
     </article>
   );
+}
+
+function ActiveActionProgress({ action }: { action: DeskActiveAction }) {
+  const total = typeof action.total_count === "number" ? action.total_count : 0;
+  const checked = typeof action.checked_count === "number" ? action.checked_count : 0;
+  const elapsed = typeof action.elapsed_seconds === "number" ? formatElapsed(action.elapsed_seconds) : "";
+  const progress = total > 0 ? `Checked ${checked}/${total}.` : "";
+  return (
+    <div className="journey-progress" role="status">
+      <strong>{action.title}</strong>
+      <span>{action.detail || "Running locally. Keep Signal Desk open."}</span>
+      {(progress || elapsed) && <em>{[progress, elapsed].filter(Boolean).join(" ")}</em>}
+    </div>
+  );
+}
+
+function formatElapsed(seconds: number) {
+  if (seconds < 60) {
+    return `${seconds}s elapsed`;
+  }
+  const minutes = Math.floor(seconds / 60);
+  const remainder = seconds % 60;
+  return remainder ? `${minutes}m ${remainder}s elapsed` : `${minutes}m elapsed`;
 }
 
 function TelegramLoginPanel({ telegram }: { telegram: TelegramControls }) {

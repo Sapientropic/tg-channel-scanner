@@ -801,6 +801,12 @@ function App() {
     if (actionId === "sources_pause_inaccessible" || actionId === "sources_keep_accessible") {
       body.confirm = true;
     }
+    let progressTimer: number | undefined;
+    if (actionId === "sources_probe_access" || actionId === "monitor_jobs_dry_run") {
+      progressTimer = window.setInterval(() => {
+        void refresh().catch(() => undefined);
+      }, 5000);
+    }
     try {
       const result = await runAction(actionId, body);
       if (actionId === "schedule_install_dry_run" || actionId === "schedule_remove_dry_run") {
@@ -814,6 +820,10 @@ function App() {
       setNotice({ tone: result.status === "needs_human" ? "success" : "error", text: result.title });
     } catch (error) {
       setNotice({ tone: "error", text: errorMessage(error) });
+    } finally {
+      if (progressTimer !== undefined) {
+        window.clearInterval(progressTimer);
+      }
     }
   }
 
@@ -896,6 +906,7 @@ function App() {
             {activeTab === "actions" && (
               <ActionsView
                 actions={deskActions}
+                activeActions={state.active_actions ?? []}
                 results={deskActionResults}
                 busyActionId={busyActionId}
                 loadError={deskActionsLoadError || deskActionRunError || deskSchedulerError || ""}
@@ -1040,9 +1051,9 @@ function deskActionConfirmation(actionId: string): DeskActionConfirmation | null
   if (actionId === "sources_keep_accessible") {
     return {
       actionId,
-      title: "Keep only accessible sources?",
-      detail: "Signal Desk will disable inaccessible and quiet sources from the latest access check, leaving only sources with recent readable messages enabled.",
-      confirmLabel: "Keep accessible only",
+      title: "Keep only recently active sources?",
+      detail: "Signal Desk will disable inaccessible sources and quiet sources from the latest access check. Quiet sources are readable; they just had no recent messages in the probe window.",
+      confirmLabel: "Keep recently active",
     };
   }
   return null;
