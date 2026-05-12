@@ -291,3 +291,39 @@ Next:
 
 - Commit this artifact hardening checkpoint, then continue with feedback export
   path hardening and broader verification.
+
+## Slice 7: Feedback Export Path Hardening
+
+Status: in progress.
+
+Actions:
+
+- Added a dashboard-only feedback export target resolver that keeps export
+  writes inside the project root before recording or returning the path.
+- Tightened feedback export sanitizers to reject absolute paths, traversal,
+  URL-shaped paths, and control characters while keeping existing relative
+  output paths compatible.
+- Delegated the legacy dashboard feedback export sanitizer to the canonical
+  Desk sanitizer so both entrypoints share the same path contract.
+
+Verification:
+
+- `python -m pytest tests/test_dashboard_server.py::DashboardServerGitTests::test_write_feedback_export_writes_note_free_dashboard_jsonl tests/test_dashboard_server.py::DashboardServerGitTests::test_write_feedback_export_defaults_to_grouped_feedback_file tests/test_dashboard_server.py::DashboardServerGitTests::test_write_feedback_export_rejects_path_outside_project`
+  passed: `3 passed`.
+- `npm test -- sanitize` passed: `1` file, `27` tests.
+- `npm run typecheck` passed.
+
+Reviewer Gate:
+
+- Addresses the dashboard feedback export path leakage concern without changing
+  the normal `output/feedback/review-feedback.jsonl` workflow.
+
+Residual Risk:
+
+- CLI `tgcs feedback export --output ...` still permits explicit paths because
+  it is a local CLI operation. This slice only hardens the dashboard surface.
+
+Next:
+
+- Commit this checkpoint, then run a wider backend/frontend verification pass
+  before choosing the next high-risk v0.5 hardening target.

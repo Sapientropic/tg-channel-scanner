@@ -648,8 +648,20 @@ def dashboard_relative_path(path: Path) -> str:
         return str(path)
 
 
-def write_feedback_export(conn, *, output_path: Path | None = None) -> dict:
+def dashboard_feedback_export_target(output_path: Path | None = None) -> Path:
     target = output_path or PROJECT_ROOT / "output" / "feedback" / "review-feedback.jsonl"
+    if not target.is_absolute():
+        target = PROJECT_ROOT / target
+    resolved = target.resolve()
+    try:
+        resolved.relative_to(PROJECT_ROOT.resolve())
+    except ValueError as exc:
+        raise ValueError("feedback_export_path_outside_project") from exc
+    return resolved
+
+
+def write_feedback_export(conn, *, output_path: Path | None = None) -> dict:
+    target = dashboard_feedback_export_target(output_path)
     entries = monitor_state.export_feedback_entries(conn)
     target.parent.mkdir(parents=True, exist_ok=True)
     lines = [json.dumps(entry, ensure_ascii=False) for entry in entries]

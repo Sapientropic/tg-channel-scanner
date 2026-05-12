@@ -16,8 +16,14 @@ import {
   sanitizeInboxCards,
   sanitizeSourceImportResult,
 } from "./sanitize";
-import { sanitizeSourceImportResult as sanitizeDashboardModuleSourceImportResult } from "./sanitize/dashboard";
-import { sanitizeSourceImportResult as sanitizeDeskModuleSourceImportResult } from "./sanitize/desk";
+import {
+  sanitizeFeedbackExportResult as sanitizeDashboardModuleFeedbackExportResult,
+  sanitizeSourceImportResult as sanitizeDashboardModuleSourceImportResult,
+} from "./sanitize/dashboard";
+import {
+  sanitizeFeedbackExportResult as sanitizeDeskModuleFeedbackExportResult,
+  sanitizeSourceImportResult as sanitizeDeskModuleSourceImportResult,
+} from "./sanitize/desk";
 import sourceImportFixture from "../../../tests/fixtures/contracts/desk_source_import_result_v1.json";
 
 const validCard = {
@@ -694,6 +700,28 @@ describe("dashboard state sanitizers", () => {
     expect(sanitizeFeedbackExportResult({ feedback_count: -1, output_path: "output/feedback/review-feedback.jsonl" })).toBeNull();
     expect(sanitizeFeedbackExportResult({ feedback_count: 1.5, output_path: "output/feedback/review-feedback.jsonl" })).toBeNull();
     expect(sanitizeFeedbackExportResult({ feedback_count: 1, output_path: "   " })).toBeNull();
+    for (const output_path of [
+      "C:/Users/Administrator/private/review-feedback.jsonl",
+      "C:\\Users\\Administrator\\private\\review-feedback.jsonl",
+      "../private/review-feedback.jsonl",
+      "output/feedback/../private.jsonl",
+      "file:///tmp/review-feedback.jsonl",
+      "output/feedback/review\nfeedback.jsonl",
+    ]) {
+      expect(sanitizeFeedbackExportResult({ feedback_count: 1, output_path })).toBeNull();
+      expect(sanitizeDeskModuleFeedbackExportResult({ feedback_count: 1, output_path })).toBeNull();
+      expect(sanitizeDashboardModuleFeedbackExportResult({ feedback_count: 1, output_path })).toBeNull();
+    }
+    expect(
+      sanitizeDashboardModuleFeedbackExportResult({
+        feedback_count: 2,
+        output_path: " output\\feedback\\review-feedback.jsonl ",
+      }),
+    ).toEqual({
+      schema_version: "feedback_export_result_v1",
+      feedback_count: 2,
+      output_path: "output/feedback/review-feedback.jsonl",
+    });
     expect(
       sanitizeFeedbackProfileSuggestionsResult({
         created_count: 1,

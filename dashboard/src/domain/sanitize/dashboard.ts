@@ -26,7 +26,10 @@ import type {
   SourceStat,
   ValidationSummary,
 } from "../types";
-import { sanitizeSourceImportResult as sanitizeDeskSourceImportResult } from "./desk";
+import {
+  sanitizeFeedbackExportResult as sanitizeDeskFeedbackExportResult,
+  sanitizeSourceImportResult as sanitizeDeskSourceImportResult,
+} from "./desk";
 
 export const emptyDashboardState: DashboardState = {
   profiles: [],
@@ -90,27 +93,7 @@ export function sanitizeGitUpdateStatus(value: unknown): GitUpdateStatus | null 
 }
 
 export function sanitizeFeedbackExportResult(value: unknown): FeedbackExportResult | null {
-  if (!isRecord(value) || typeof value.output_path !== "string" || !value.output_path.trim()) {
-    return null;
-  }
-  const outputPath = value.output_path.trim();
-  const feedbackCount = value.feedback_count;
-  if (typeof feedbackCount !== "number" || !Number.isInteger(feedbackCount) || feedbackCount < 0) {
-    return null;
-  }
-  const result: FeedbackExportResult = {
-    schema_version: "feedback_export_result_v1",
-    feedback_count: feedbackCount,
-    output_path: outputPath,
-  };
-  if (typeof value.changed_since_last_export === "boolean") {
-    result.changed_since_last_export = value.changed_since_last_export;
-  }
-  const exportedAt = optionalString(value.exported_at);
-  if (exportedAt) {
-    result.exported_at = exportedAt;
-  }
-  return result;
+  return sanitizeDeskFeedbackExportResult(value);
 }
 
 export function sanitizeDeskActions(value: unknown): DeskAction[] {

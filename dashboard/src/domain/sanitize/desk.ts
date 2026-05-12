@@ -48,6 +48,10 @@ export function sanitizeFeedbackExportResult(value: unknown): FeedbackExportResu
   if (!isRecord(value) || typeof value.output_path !== "string" || !value.output_path.trim()) {
     return null;
   }
+  const outputPath = sanitizeLocalRelativePath(value.output_path);
+  if (!outputPath) {
+    return null;
+  }
   const feedbackCount = value.feedback_count;
   if (typeof feedbackCount !== "number" || !Number.isInteger(feedbackCount) || feedbackCount < 0) {
     return null;
@@ -55,7 +59,7 @@ export function sanitizeFeedbackExportResult(value: unknown): FeedbackExportResu
   const result: FeedbackExportResult = {
     schema_version: "feedback_export_result_v1",
     feedback_count: feedbackCount,
-    output_path: value.output_path.trim(),
+    output_path: outputPath,
   };
   if (typeof value.changed_since_last_export === "boolean") {
     result.changed_since_last_export = value.changed_since_last_export;
@@ -65,6 +69,24 @@ export function sanitizeFeedbackExportResult(value: unknown): FeedbackExportResu
     result.exported_at = exportedAt;
   }
   return result;
+}
+
+function sanitizeLocalRelativePath(value: string): string | null {
+  const cleaned = value.trim().replace(/\\/g, "/");
+  if (
+    !cleaned ||
+    cleaned.startsWith("/") ||
+    /^[A-Za-z]:/.test(cleaned) ||
+    /^[a-z][a-z0-9+.-]*:\/\//i.test(cleaned) ||
+    /[\u0000-\u001F\u007F]/.test(cleaned)
+  ) {
+    return null;
+  }
+  const parts = cleaned.split("/").filter(Boolean);
+  if (!parts.length || parts.includes("..")) {
+    return null;
+  }
+  return cleaned;
 }
 
 export function sanitizeFeedbackProfileSuggestionsResult(value: unknown): FeedbackProfileSuggestionsResult | null {

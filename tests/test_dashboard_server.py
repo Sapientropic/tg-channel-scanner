@@ -2616,7 +2616,8 @@ class DashboardServerGitTests(unittest.TestCase):
                 )
                 monitor_state.set_card_action(conn, card_id=cards[0]["card_id"], action="keep", note="private")
 
-                result = dashboard_server.write_feedback_export(conn, output_path=output_path)
+                with patch.object(dashboard_server, "PROJECT_ROOT", root):
+                    result = dashboard_server.write_feedback_export(conn, output_path=output_path)
             finally:
                 conn.close()
 
@@ -2642,6 +2643,24 @@ class DashboardServerGitTests(unittest.TestCase):
 
         self.assertEqual(result["output_path"], "output/feedback/review-feedback.jsonl")
         self.assertTrue(output_exists)
+
+    def test_write_feedback_export_rejects_path_outside_project(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "repo"
+            db_path = root / ".tgcs" / "tgcs.db"
+            outside_path = Path(tmp) / "private" / "review-feedback.jsonl"
+            conn = monitor_state.connect(db_path)
+            try:
+                with patch.object(dashboard_server, "PROJECT_ROOT", root):
+                    with self.assertRaises(ValueError) as raised:
+                        dashboard_server.write_feedback_export(conn, output_path=outside_path)
+                    latest = monitor_state.latest_feedback_export(conn)
+            finally:
+                conn.close()
+
+        self.assertEqual(str(raised.exception), "feedback_export_path_outside_project")
+        self.assertFalse(outside_path.exists())
+        self.assertIsNone(latest)
 
     def test_serve_artifact_rejects_raw_scan_over_http_handler(self):
         class FakeHandler:
