@@ -27,6 +27,7 @@ import type {
   ValidationSummary,
 } from "../types";
 import {
+  sanitizeDeskActionResult as sanitizeDeskModuleActionResult,
   sanitizeFeedbackExportResult as sanitizeDeskFeedbackExportResult,
   sanitizeSourceImportResult as sanitizeDeskSourceImportResult,
 } from "./desk";
@@ -126,34 +127,7 @@ export function sanitizeDeskActions(value: unknown): DeskAction[] {
 }
 
 export function sanitizeDeskActionResult(value: unknown): DeskActionResult | null {
-  if (!isRecord(value)) {
-    return null;
-  }
-  const actionId = optionalString(value.action_id);
-  const status = optionalString(value.status);
-  const title = optionalString(value.title);
-  const displayCommand = optionalString(value.display_command);
-  if (!actionId || !status || !title || !displayCommand) {
-    return null;
-  }
-  const exitCode = typeof value.exit_code === "number" && Number.isInteger(value.exit_code) ? value.exit_code : null;
-  const result: DeskActionResult = {
-    schema_version: "desk_action_result_v1",
-    action_id: actionId,
-    status,
-    title,
-    detail: optionalString(value.detail) ?? "",
-    display_command: displayCommand,
-    exit_code: exitCode,
-    artifact_path: optionalString(value.artifact_path) ?? "",
-    next_action: optionalString(value.next_action) ?? "",
-    finished_at: optionalString(value.finished_at) ?? "",
-  };
-  const sourceAccess = sanitizeSourceAccessActionSummary(value.source_access);
-  if (sourceAccess) {
-    result.source_access = sourceAccess;
-  }
-  return result;
+  return sanitizeDeskModuleActionResult(value);
 }
 
 function sanitizeSourceAccessActionSummary(value: unknown): DeskActionResult["source_access"] {

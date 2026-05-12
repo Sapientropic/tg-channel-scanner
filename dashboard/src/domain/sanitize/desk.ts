@@ -192,7 +192,7 @@ export function sanitizeDeskActionResult(value: unknown): DeskActionResult | nul
     detail: optionalString(value.detail) ?? "",
     display_command: displayCommand,
     exit_code: exitCode,
-    artifact_path: optionalString(value.artifact_path) ?? "",
+    artifact_path: sanitizeOpenableArtifactPath(value.artifact_path),
     next_action: optionalString(value.next_action) ?? "",
     finished_at: optionalString(value.finished_at) ?? "",
   };
@@ -201,6 +201,40 @@ export function sanitizeDeskActionResult(value: unknown): DeskActionResult | nul
     result.source_access = sourceAccess;
   }
   return result;
+}
+
+function sanitizeOpenableArtifactPath(value: unknown): string {
+  if (typeof value !== "string") {
+    return "";
+  }
+  const cleaned = sanitizeLocalRelativePath(value);
+  if (!cleaned) {
+    return "";
+  }
+  const parts = cleaned.split("/").filter(Boolean);
+  const fileName = parts[parts.length - 1] ?? "";
+  if (!isDashboardReportArtifactName(fileName)) {
+    return "";
+  }
+  const runIndex = parts.indexOf("runs");
+  if (runIndex >= 0) {
+    return runIndex < parts.length - 2 ? cleaned : "";
+  }
+  return parts[0] === "output" && parts.length >= 2 ? cleaned : "";
+}
+
+function isDashboardReportArtifactName(value: string): boolean {
+  const lower = value.trim().toLowerCase();
+  if (lower === "report.html" || lower === "report.md") {
+    return true;
+  }
+  const dotIndex = lower.lastIndexOf(".");
+  if (dotIndex < 0) {
+    return false;
+  }
+  const stem = lower.slice(0, dotIndex);
+  const suffix = lower.slice(dotIndex);
+  return (suffix === ".html" || suffix === ".md") && stem.split("-").some((token) => token === "report" || token === "brief");
 }
 
 function sanitizeSourceAccessActionSummary(value: unknown): DeskActionResult["source_access"] {

@@ -327,3 +327,41 @@ Next:
 
 - Commit this checkpoint, then run a wider backend/frontend verification pass
   before choosing the next high-risk v0.5 hardening target.
+
+## Slice 8: Desk Action Artifact Contract
+
+Status: in progress.
+
+Actions:
+
+- Added a dashboard artifact resolver that still supports run report artifacts
+  and restores safe `output/demo-report.html` serving for the offline demo.
+- Tightened Desk action artifact projection so action results only expose
+  openable report HTML/Markdown paths, not feedback JSONL, traversal, absolute
+  local paths, or URLs.
+- Delegated the legacy dashboard Desk action result sanitizer to the canonical
+  Desk sanitizer so artifact-link semantics cannot drift between entrypoints.
+
+Verification:
+
+- `python -m pytest tests/test_dashboard_server.py::DashboardServerGitTests::test_run_desk_action_ignores_arbitrary_command_payload_and_uses_fixed_entry tests/test_dashboard_server.py::DashboardServerGitTests::test_run_desk_action_only_returns_openable_report_artifacts tests/test_dashboard_server.py::DashboardServerGitTests::test_serve_markdown_artifact_over_http_as_rendered_html tests/test_dashboard_server.py::DashboardServerGitTests::test_serve_html_report_artifact_injects_mobile_patch tests/test_dashboard_server.py::DashboardServerGitTests::test_serve_artifact_allows_demo_report_html tests/test_dashboard_server.py::DashboardServerGitTests::test_serve_artifact_rejects_raw_scan_over_http_handler`
+  passed: `6 passed`.
+- `npm test -- sanitize` passed: `1` file, `27` tests.
+- `npm run typecheck` passed.
+
+Reviewer Gate:
+
+- Fixes the mismatch introduced by stricter `/artifacts/*` serving: JSONL paths
+  are no longer rendered as "Open result" links, while demo/report HTML remains
+  openable.
+
+Residual Risk:
+
+- This still intentionally treats artifact serving as report-only. Raw exports
+  remain local file paths for CLI/manual workflows rather than browser-opened
+  artifacts.
+
+Next:
+
+- Commit this checkpoint, then run wider regression before selecting the next
+  v0.5 hardening target.

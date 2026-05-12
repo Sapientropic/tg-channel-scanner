@@ -17,10 +17,12 @@ import {
   sanitizeSourceImportResult,
 } from "./sanitize";
 import {
+  sanitizeDeskActionResult as sanitizeDashboardModuleDeskActionResult,
   sanitizeFeedbackExportResult as sanitizeDashboardModuleFeedbackExportResult,
   sanitizeSourceImportResult as sanitizeDashboardModuleSourceImportResult,
 } from "./sanitize/dashboard";
 import {
+  sanitizeDeskActionResult as sanitizeDeskModuleDeskActionResult,
   sanitizeFeedbackExportResult as sanitizeDeskModuleFeedbackExportResult,
   sanitizeSourceImportResult as sanitizeDeskModuleSourceImportResult,
 } from "./sanitize/desk";
@@ -806,14 +808,14 @@ describe("dashboard state sanitizers", () => {
     expect(
       sanitizeDeskActionResult({
         schema_version: "desk_action_result_v1",
-        action_id: "feedback_export",
+        action_id: "monitor_jobs_dry_run",
         status: " success ",
-        title: " Feedback exported ",
-        detail: "2 records ready.",
-        display_command: " tgcs feedback export ",
+        title: " Practice scan complete ",
+        detail: "Report ready.",
+        display_command: " tgcs monitor run ",
         exit_code: 0,
-        artifact_path: " output/feedback/review-feedback.jsonl ",
-        next_action: "Share the export.",
+        artifact_path: " output\\runs\\run-1\\report.html ",
+        next_action: "Open the report.",
         finished_at: " 2026-05-10T16:30:00+08:00 ",
         source_access: {
           schema_version: "desk_source_access_health_v1",
@@ -832,14 +834,14 @@ describe("dashboard state sanitizers", () => {
       }),
     ).toEqual({
       schema_version: "desk_action_result_v1",
-      action_id: "feedback_export",
+      action_id: "monitor_jobs_dry_run",
       status: "success",
-      title: "Feedback exported",
-      detail: "2 records ready.",
-      display_command: "tgcs feedback export",
+      title: "Practice scan complete",
+      detail: "Report ready.",
+      display_command: "tgcs monitor run",
       exit_code: 0,
-      artifact_path: "output/feedback/review-feedback.jsonl",
-      next_action: "Share the export.",
+      artifact_path: "output/runs/run-1/report.html",
+      next_action: "Open the report.",
       finished_at: "2026-05-10T16:30:00+08:00",
       source_access: {
         schema_version: "desk_source_access_health_v1",
@@ -873,6 +875,23 @@ describe("dashboard state sanitizers", () => {
     });
     expect(sanitizeDeskActionResult({ status: "success", title: "Missing id" })).toBeNull();
     expect(sanitizeDeskActionResult({ action_id: "feedback_export", status: " ", title: "Bad status" })).toBeNull();
+    for (const artifact_path of [
+      "output/feedback/review-feedback.jsonl",
+      "C:/Users/Administrator/private/report.html",
+      "output/runs/run-1/../secret-report.html",
+      "https://example.com/report.html",
+    ]) {
+      const payload = {
+        action_id: "monitor_jobs_dry_run",
+        status: "success",
+        title: "Report ready",
+        display_command: "tgcs monitor run",
+        artifact_path,
+      };
+      expect(sanitizeDeskActionResult(payload)?.artifact_path).toBe("");
+      expect(sanitizeDeskModuleDeskActionResult(payload)?.artifact_path).toBe("");
+      expect(sanitizeDashboardModuleDeskActionResult(payload)?.artifact_path).toBe("");
+    }
   });
 
   it("sanitizes Desk scheduler status without trusting command output", () => {

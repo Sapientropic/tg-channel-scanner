@@ -641,6 +641,47 @@ def resolve_run_artifact_path(requested_path: str, *, artifact_root: Path | None
     return candidate
 
 
+def is_dashboard_openable_artifact_path(path: str) -> bool:
+    cleaned = str(path or "").strip().replace("\\", "/")
+    if (
+        not cleaned
+        or cleaned.startswith("/")
+        or re.match(r"^[A-Za-z]:", cleaned)
+        or re.match(r"^[a-z][a-z0-9+.-]*://", cleaned, flags=re.IGNORECASE)
+        or re.search(r"[\x00-\x1f\x7f]", cleaned)
+    ):
+        return False
+    parts = PurePosixPath(cleaned).parts
+    if not parts or ".." in parts or not is_dashboard_report_artifact_name(parts[-1]):
+        return False
+    if "runs" in parts:
+        run_index = parts.index("runs")
+        return run_index < len(parts) - 2
+    return parts[0] == "output" and len(parts) >= 2
+
+
+def resolve_dashboard_artifact_path(requested_path: str, *, artifact_root: Path | None = None) -> Path:
+    decoded = unquote(requested_path).replace("\\", "/").lstrip("/")
+    parts = PurePosixPath(decoded).parts
+    if not is_dashboard_openable_artifact_path(decoded):
+        raise DashboardArtifactError("artifact_type_not_report")
+    if "runs" in parts:
+        return resolve_run_artifact_path(decoded, artifact_root=artifact_root)
+
+    root = (artifact_root or PROJECT_ROOT.joinpath(parts[0])).resolve()
+    relative = "/".join(parts[1:])
+    if not relative:
+        raise DashboardArtifactError("artifact_path_missing")
+    candidate = (root / relative).resolve()
+    try:
+        candidate.relative_to(root)
+    except ValueError as exc:
+        raise DashboardArtifactError("artifact_path_outside_output") from exc
+    if not candidate.exists() or not candidate.is_file():
+        raise DashboardArtifactError("artifact_not_found")
+    return candidate
+
+
 def dashboard_relative_path(path: Path) -> str:
     try:
         return str(path.resolve().relative_to(PROJECT_ROOT.resolve())).replace("\\", "/")
@@ -2828,11 +2869,12 @@ def _desk_display_path(value: object) -> str:
     normalized = value.strip().replace("\\", "/")
     path = Path(value.strip())
     if not path.is_absolute():
-        return normalized
+        return normalized if is_dashboard_openable_artifact_path(normalized) else ""
     try:
-        return str(path.resolve().relative_to(PROJECT_ROOT.resolve())).replace("\\", "/")
+        relative = str(path.resolve().relative_to(PROJECT_ROOT.resolve())).replace("\\", "/")
     except ValueError:
-        return path.name
+        return ""
+    return relative if is_dashboard_openable_artifact_path(relative) else ""
 
 
 def _desk_payload_from_stdout(stdout: str) -> dict | None:
@@ -4162,7 +4204,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
 
     def _serve_artifact(self, encoded_path: str) -> None:
         try:
-            candidate = resolve_run_artifact_path(encoded_path)
+            candidate = resolve_dashboard_artifact_path(encoded_path)
         except DashboardArtifactError as exc:
             self._json(HTTPStatus.NOT_FOUND, {"ok": False, "error": str(exc)})
             return

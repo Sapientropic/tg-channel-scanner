@@ -424,6 +424,27 @@ class DashboardServerGitTests(unittest.TestCase):
         self.assertEqual(result["artifact_path"], "output/runs/run-1/report.html")
         self.assertEqual(result["next_action"], "Open dashboard.")
 
+    def test_run_desk_action_only_returns_openable_report_artifacts(self):
+        cases = [
+            ("demo_render", {"html_path": "output/demo-report.html"}, "output/demo-report.html"),
+            ("feedback_export", {"output_path": "output/feedback/review-feedback.jsonl"}, ""),
+            ("monitor_jobs_dry_run", {"html_path": "output/runs/run-1/../secret-report.html"}, ""),
+            ("monitor_jobs_dry_run", {"html_path": "C:/Users/Administrator/private/report.html"}, ""),
+        ]
+        for action_id, data, expected_artifact in cases:
+            with self.subTest(action_id=action_id, artifact=data):
+                completed = subprocess.CompletedProcess(
+                    ["python"],
+                    0,
+                    stdout=json.dumps({"ok": True, "data": {"status": "complete", **data}, "error": None}),
+                    stderr="",
+                )
+                with patch.object(dashboard_server.subprocess, "run", return_value=completed):
+                    result = dashboard_server.run_desk_action(action_id)
+
+                self.assertEqual(result["status"], "success")
+                self.assertEqual(result["artifact_path"], expected_artifact)
+
     def test_run_desk_action_returns_needs_human_without_subprocess_for_human_takeover(self):
         with patch.object(dashboard_server.subprocess, "run") as run_mock:
             results = {
@@ -2594,6 +2615,39 @@ class DashboardServerGitTests(unittest.TestCase):
         self.assertEqual(handler.status, HTTPStatus.OK.value)
         self.assertEqual(handler.headers["Content-Type"], "text/html; charset=utf-8")
         self.assertIn(b"data-dashboard-report-mobile-patch", handler.wfile.getvalue())
+
+    def test_serve_artifact_allows_demo_report_html(self):
+        class FakeHandler:
+            status = None
+            headers = {}
+            wfile = BytesIO()
+
+            def send_response(self, status):
+                self.status = status
+
+            def send_header(self, key, value):
+                self.headers[key] = value
+
+            def end_headers(self):
+                pass
+
+            def _json(self, status, payload):
+                self.status = status
+                self.payload = payload
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            report = root / "output" / "demo-report.html"
+            report.parent.mkdir(parents=True)
+            report.write_text("<html><body><h1>Demo Report</h1></body></html>", encoding="utf-8")
+
+            with patch.object(dashboard_server, "PROJECT_ROOT", root):
+                handler = FakeHandler()
+                dashboard_server.DashboardHandler._serve_artifact(handler, "output/demo-report.html")
+
+        self.assertEqual(handler.status, HTTPStatus.OK.value)
+        self.assertEqual(handler.headers["Content-Type"], "text/html; charset=utf-8")
+        self.assertIn(b"Demo Report", handler.wfile.getvalue())
 
     def test_write_feedback_export_writes_note_free_dashboard_jsonl(self):
         with tempfile.TemporaryDirectory() as tmp:
