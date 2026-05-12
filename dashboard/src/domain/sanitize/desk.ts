@@ -421,7 +421,7 @@ function sanitizeDeskAiProviders(value: unknown): DeskAiProviderStatus[] {
 }
 
 export function sanitizeDeliveryTestResult(value: unknown): DeliveryTestResult | null {
-  if (!isRecord(value)) {
+  if (!isRecord(value) || value.schema_version !== "desk_delivery_test_result_v1") {
     return null;
   }
   const targetId = optionalString(value.target_id);
@@ -445,7 +445,7 @@ export function sanitizeDeliveryTestResult(value: unknown): DeliveryTestResult |
 }
 
 export function sanitizeDeliveryChatDetectionResult(value: unknown): DeliveryChatDetectionResult | null {
-  if (!isRecord(value)) {
+  if (!isRecord(value) || value.schema_version !== "desk_delivery_chat_detection_v1") {
     return null;
   }
   const targetId = optionalString(value.target_id);
@@ -456,7 +456,7 @@ export function sanitizeDeliveryChatDetectionResult(value: unknown): DeliveryCha
     return null;
   }
   return {
-    schema_version: value.schema_version === "desk_delivery_chat_detection_v1" ? value.schema_version : undefined,
+    schema_version: "desk_delivery_chat_detection_v1",
     target_id: targetId,
     target_type: targetType,
     ok: value.ok === true,

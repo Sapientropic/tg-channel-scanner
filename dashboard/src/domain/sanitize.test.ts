@@ -8,6 +8,7 @@ import {
   sanitizeDeskSchedulerStatus,
   sanitizeDeskSourcesResult,
   sanitizeDeskTelegramStatus,
+  sanitizeDeliveryChatDetectionResult,
   sanitizeDeliveryTestResult,
   sanitizeDashboardState,
   sanitizeFeedbackExportResult,
@@ -461,6 +462,46 @@ describe("dashboard state sanitizers", () => {
       detail: "Checked",
     });
     expect(sanitizeDeliveryTestResult({ target_id: "telegram-bot-default", target_type: "telegram_bot" })).toBeNull();
+    expect(
+      sanitizeDeliveryTestResult({
+        target_id: "telegram-bot-default",
+        target_type: "telegram_bot",
+        ok: true,
+        status: "dry_run",
+      }),
+    ).toBeNull();
+    expect(
+      sanitizeDeliveryChatDetectionResult({
+        schema_version: "desk_delivery_chat_detection_v1",
+        target_id: "telegram-bot-default",
+        target_type: "telegram_bot",
+        ok: true,
+        status: "detected",
+        source: "updates",
+        chat_id: "123456",
+        chat_type: "private",
+        title: "Detected chat",
+      }),
+    ).toEqual({
+      schema_version: "desk_delivery_chat_detection_v1",
+      target_id: "telegram-bot-default",
+      target_type: "telegram_bot",
+      ok: true,
+      status: "detected",
+      source: "updates",
+      chat_id: "123456",
+      chat_type: "private",
+      title: "Detected chat",
+    });
+    expect(
+      sanitizeDeliveryChatDetectionResult({
+        target_id: "telegram-bot-default",
+        target_type: "telegram_bot",
+        ok: true,
+        status: "detected",
+        source: "updates",
+      }),
+    ).toBeNull();
   });
 
   it("sanitizes source import result envelopes without trusting backend-only fields", () => {

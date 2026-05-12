@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   errorMessage,
+  detectDeskDeliveryChatId,
   loadDashboardState,
   loadDeskActions,
   loadDeskAiSettingsStatus,
@@ -10,6 +11,7 @@ import {
   previewSourceAssistant,
   runDeskAction,
   saveDeskDeliveryTarget,
+  testDeskDeliveryTarget,
 } from "./client";
 
 function mockJsonResponse(payload: unknown) {
@@ -149,5 +151,69 @@ describe("dashboard API contract validation", () => {
     });
 
     await expect(runDeskAction("monitor_jobs_dry_run")).rejects.toThrow("Invalid Desk action response");
+  });
+
+  it("throws on schema-less delivery test results", async () => {
+    mockJsonResponse({
+      result: {
+        target_id: "telegram-bot-default",
+        target_type: "telegram_bot",
+        ok: true,
+        status: "dry_run",
+      },
+    });
+
+    await expect(testDeskDeliveryTarget("telegram-bot-default", "123456")).rejects.toThrow(
+      "Invalid notification test response",
+    );
+  });
+
+  it("throws when a delivery test result belongs to another target", async () => {
+    mockJsonResponse({
+      result: {
+        schema_version: "desk_delivery_test_result_v1",
+        target_id: "other-target",
+        target_type: "telegram_bot",
+        ok: true,
+        status: "dry_run",
+      },
+    });
+
+    await expect(testDeskDeliveryTarget("telegram-bot-default", "123456")).rejects.toThrow(
+      "Invalid notification test response",
+    );
+  });
+
+  it("throws on schema-less chat detection results", async () => {
+    mockJsonResponse({
+      result: {
+        target_id: "telegram-bot-default",
+        target_type: "telegram_bot",
+        ok: true,
+        status: "detected",
+        source: "updates",
+      },
+    });
+
+    await expect(detectDeskDeliveryChatId("telegram-bot-default")).rejects.toThrow(
+      "Invalid notification chat detection response",
+    );
+  });
+
+  it("throws when a chat detection result belongs to another target", async () => {
+    mockJsonResponse({
+      result: {
+        schema_version: "desk_delivery_chat_detection_v1",
+        target_id: "other-target",
+        target_type: "telegram_bot",
+        ok: true,
+        status: "detected",
+        source: "updates",
+      },
+    });
+
+    await expect(detectDeskDeliveryChatId("telegram-bot-default")).rejects.toThrow(
+      "Invalid notification chat detection response",
+    );
   });
 });

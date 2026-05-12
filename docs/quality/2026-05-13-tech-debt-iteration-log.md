@@ -760,3 +760,38 @@ Residual Risk:
 Next:
 
 - Commit this checkpoint, then continue with delivery test/chat-detection gates.
+
+## Slice 20: Delivery Result Schema Gates
+
+Status: completed.
+
+Actions:
+
+- Required `desk_delivery_test_result_v1` for notification dry-run test results.
+- Required `desk_delivery_chat_detection_v1` for chat-id detection results.
+- Changed delivery test and chat detection client functions to reject nested
+  results whose `target_id` does not match the requested target.
+- Synchronized the legacy dashboard sanitizer entrypoint for delivery test
+  results with the canonical Desk sanitizer.
+- Added sanitizer/client tests for schema-less and wrong-target delivery result
+  payloads.
+
+Verification:
+
+- `npm test -- sanitize client settings` passed: `4` files, `55` tests.
+- `npm run typecheck` passed.
+
+Reviewer Gate:
+
+- Completes Bernoulli's delivery result gate finding for notification
+  test/detect flows.
+
+Residual Risk:
+
+- Git, feedback, profile creation, scheduler, Telegram, and notification token
+  result families still have softer schema gates and remain candidates for
+  later slices.
+
+Next:
+
+- Commit this checkpoint, then continue with remaining mutation result gates.

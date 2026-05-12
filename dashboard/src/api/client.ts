@@ -343,7 +343,7 @@ export async function saveDeskDeliveryTarget(
 export async function testDeskDeliveryTarget(targetId: string, chatId: string): Promise<DeliveryTestResult> {
   const payload = await postJson(`/api/desk/delivery-targets/${encodeURIComponent(targetId)}/test`, { chat_id: chatId });
   const result = sanitizeDeliveryTestResult(payload.result);
-  if (!result) {
+  if (!result || result.target_id !== targetId) {
     throw new Error("Invalid notification test response");
   }
   return result;
@@ -352,7 +352,7 @@ export async function testDeskDeliveryTarget(targetId: string, chatId: string): 
 export async function detectDeskDeliveryChatId(targetId: string): Promise<DeliveryChatDetectionResult> {
   const payload = await postJson(`/api/desk/delivery-targets/${encodeURIComponent(targetId)}/detect-chat-id`, {});
   const result = sanitizeDeliveryChatDetectionResult(payload.result);
-  if (!result) {
+  if (!result || result.target_id !== targetId) {
     throw new Error("Invalid notification chat detection response");
   }
   return result;

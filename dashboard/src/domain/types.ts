@@ -278,7 +278,7 @@ export type DeliveryTarget = {
 };
 
 export type DeliveryTestResult = {
-  schema_version?: "desk_delivery_test_result_v1";
+  schema_version: "desk_delivery_test_result_v1";
   target_id: string;
   target_type: string;
   mode: "dry-run";
@@ -291,7 +291,7 @@ export type DeliveryTestResult = {
 };
 
 export type DeliveryChatDetectionResult = {
-  schema_version?: "desk_delivery_chat_detection_v1";
+  schema_version: "desk_delivery_chat_detection_v1";
   target_id: string;
   target_type: string;
   ok: boolean;
