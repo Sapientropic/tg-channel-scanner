@@ -36,6 +36,10 @@ find_python() {
     return 1
 }
 
+is_wsl() {
+    grep -qiE "(microsoft|wsl)" /proc/version 2>/dev/null
+}
+
 if [ "$SKIP_INSTALL" = "1" ]; then
     echo "Skipping dependency installation because TG_SCANNER_SETUP_SKIP_INSTALL=1."
 else
@@ -72,25 +76,35 @@ else
         exit 1
     fi
 
-    if ! python -m pip --version >/dev/null 2>&1; then
+    if [ -x ".venv/bin/python" ]; then
+        VENV_PYTHON=".venv/bin/python"
+    elif [ -x ".venv/Scripts/python.exe" ] && ! is_wsl; then
+        # Windows venv Python cannot reliably open POSIX /mnt/... paths under WSL.
+        VENV_PYTHON=".venv/Scripts/python.exe"
+    else
+        echo "Error: virtual environment Python not found." >&2
+        exit 1
+    fi
+
+    if ! "$VENV_PYTHON" -m pip --version >/dev/null 2>&1; then
         echo "pip not found in venv; bootstrapping with ensurepip..."
-        python -m ensurepip --upgrade >/dev/null
+        "$VENV_PYTHON" -m ensurepip --upgrade >/dev/null
     fi
 
     # --- Install dependencies ---
     echo "Installing pinned core dependencies..."
-    python -m pip install --upgrade pip --quiet
-    python -m pip install -r requirements.txt --quiet
+    "$VENV_PYTHON" -m pip install --upgrade pip --quiet
+    "$VENV_PYTHON" -m pip install -r requirements.txt --quiet
 
     echo "Installing optional pinned LLM dependencies (openai for summarize.py)..."
-    python -m pip install -r requirements-llm.txt --quiet 2>/dev/null || echo "  (openai not installed; summarize.py will need it later)"
+    "$VENV_PYTHON" -m pip install -r requirements-llm.txt --quiet 2>/dev/null || echo "  (openai not installed; summarize.py will need it later)"
 
     if [ -f requirements-desktop.txt ]; then
         echo "Installing optional desktop integration dependencies..."
-        python -m pip install -r requirements-desktop.txt --quiet 2>/dev/null || echo "  (desktop keyring extras not installed; environment variables still work)"
+        "$VENV_PYTHON" -m pip install -r requirements-desktop.txt --quiet 2>/dev/null || echo "  (desktop keyring extras not installed; environment variables still work)"
     fi
 
-    TELETHON_VERSION="$(python -c "import telethon; print(telethon.__version__)" 2>/dev/null || true)"
+    TELETHON_VERSION="$("$VENV_PYTHON" -c "import telethon; print(telethon.__version__)" 2>/dev/null || true)"
     if [ -z "$TELETHON_VERSION" ]; then
         echo "Error: telethon not importable. Check requirements.txt and venv." >&2
         exit 1

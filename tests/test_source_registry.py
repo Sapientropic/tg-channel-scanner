@@ -286,6 +286,19 @@ class SourceRegistryTests(unittest.TestCase):
         self.assertEqual(result["topics"], ["jobs", "remote-work"])
         self.assertEqual(result["sources"][0]["source_id"], "telegram:remote_jobs")
 
+    def test_remove_sources_deletes_only_requested_source_ids(self):
+        source_registry = load_registry_module(self)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            registry_path = Path(tmp) / "sources.json"
+            source_registry.import_channels(["remote_jobs", "market_news"], registry_path, topics=["jobs"])
+            result = source_registry.remove_sources(registry_path, source_ids=["telegram:remote_jobs"])
+            listed = source_registry.registry_sources(registry_path)
+
+        self.assertEqual(result["removed_count"], 1)
+        self.assertEqual(listed["source_count"], 1)
+        self.assertEqual(listed["sources"][0]["source_id"], "telegram:market_news")
+
     def test_update_source_topics_rejects_invalid_tags_before_writing(self):
         source_registry = load_registry_module(self)
 

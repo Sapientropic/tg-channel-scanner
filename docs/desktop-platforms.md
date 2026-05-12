@@ -18,10 +18,31 @@ Windows.
 ## Requirements
 
 - Python 3.12+ is required.
-- Node.js is optional for already-built dashboard assets, but local dashboard
-  builds require Node.js 20.19+ or 22.12+.
+- Node.js is optional when `dashboard/dist` is already present. A fresh source
+  checkout needs Node.js 20.19+ or 22.12+ so Signal Desk can build its local UI.
 - `setup.sh` can use `uv` to provision a managed Python when the system Python
   is too old.
+
+If the dashboard needs a local build and Node/npm is missing or too old,
+`./signal-desk` now stops with a direct install hint instead of surfacing a raw
+launcher traceback.
+
+## First-Run Sources
+
+Signal Desk should not require a normal user to create source files by hand.
+The app path is:
+
+- `Use starter set` installs the packaged Developer Opportunity starter into
+  `.tgcs/sources.json`.
+- `Source assistant` accepts short instructions such as `add @remote_jobs` or
+  `remove @old_jobs` and previews the local registry change before applying it.
+- Saved sources can be paused, resumed, retagged, or removed from Settings.
+
+External AI planning is opt-in because source names can be private. The offline
+parser handles explicit Telegram handles and `t.me` links locally; when the user
+enables AI planning, Signal Desk sends only saved source ids, labels, channels,
+topics, and enabled state to the configured provider, then validates the returned
+plan against the existing registry before applying anything.
 
 ## Local Secret Storage
 

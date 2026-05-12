@@ -128,10 +128,13 @@ def _placeholder_import_next_step(sources: list[dict]) -> str:
         command = f"{command} --topic {topic}"
     if topic == "jobs":
         return (
-            "Run `tgcs init --starter jobs --force` to replace placeholder sources, "
-            f"or import real Telegram channels with `{command}`, then rerun tgcs doctor."
+            "Open Signal Desk Settings > Sources and use Source assistant to add or remove real Telegram channels, "
+            f"or run `tgcs init --starter jobs --force` / `{command}`, then rerun tgcs doctor."
         )
-    return f"Import real Telegram channels with `{command}`, then rerun tgcs doctor."
+    return (
+        "Open Signal Desk Settings > Sources and use Source assistant to add or remove real Telegram channels, "
+        f"or import with `{command}`, then rerun tgcs doctor."
+    )
 
 
 def check_python_runtime() -> CheckResult:
@@ -330,18 +333,33 @@ def check_profile(path: Path) -> CheckResult:
     )
 
 
+def _llm_secret_source(env_name: str) -> str:
+    if os.environ.get(env_name, "").strip():
+        return "environment"
+    if report.ai_secret(env_name):
+        return "local_store"
+    return ""
+
+
 def check_llm_provider() -> CheckResult:
     providers = []
-    if os.environ.get("OPENAI_API_KEY"):
-        providers.append("openai")
-    if os.environ.get("DEEPSEEK_API_KEY"):
-        providers.append("deepseek")
-    if os.environ.get("MINIMAX_TOKEN_PLAN_KEY") or os.environ.get("MINIMAX_API_KEY"):
+    provider_sources = {}
+    for provider, env_name in (
+        ("openai", "OPENAI_API_KEY"),
+        ("deepseek", "DEEPSEEK_API_KEY"),
+        ("minimax", "MINIMAX_TOKEN_PLAN_KEY"),
+    ):
+        source = _llm_secret_source(env_name)
+        if source:
+            providers.append(provider)
+            provider_sources[provider] = source
+    if "minimax" not in provider_sources and os.environ.get("MINIMAX_API_KEY", "").strip():
         providers.append("minimax")
+        provider_sources["minimax"] = "environment"
     if providers:
-        details = {"providers": providers}
+        details = {"providers": providers, "provider_sources": provider_sources}
         if "minimax" in providers:
-            details["minimax_key_type"] = "token_plan" if os.environ.get("MINIMAX_TOKEN_PLAN_KEY") else "platform"
+            details["minimax_key_type"] = "token_plan" if report.ai_secret("MINIMAX_TOKEN_PLAN_KEY") else "platform"
             details["minimax_base_url"] = os.environ.get("MINIMAX_BASE_URL") or report.default_minimax_base_url()
         return _pass(
             "llm_provider",
@@ -351,7 +369,7 @@ def check_llm_provider() -> CheckResult:
     return _warn(
         "llm_provider",
         "No LLM API key found.",
-        "Set OPENAI_API_KEY, DEEPSEEK_API_KEY, MINIMAX_TOKEN_PLAN_KEY, or MINIMAX_API_KEY before running report generation.",
+        "Save an AI API key in Signal Desk Settings, or set OPENAI_API_KEY, DEEPSEEK_API_KEY, MINIMAX_TOKEN_PLAN_KEY, or MINIMAX_API_KEY before running report generation.",
     )
 
 

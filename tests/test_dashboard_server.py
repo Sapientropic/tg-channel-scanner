@@ -1134,6 +1134,44 @@ class DashboardServerGitTests(unittest.TestCase):
             finally:
                 conn.close()
 
+    def test_delivery_chat_id_detection_uses_bot_updates_without_echoing_token(self):
+        payload = {
+            "ok": True,
+            "result": [
+                {"message": {"chat": {"id": 123456, "type": "private"}}},
+            ],
+        }
+
+        class FakeResponse:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+            def read(self):
+                return json.dumps(payload).encode("utf-8")
+
+        token = dashboard_server.delivery.TelegramBotToken(token="123456:secret_token", source="keyring")
+        with patch.object(dashboard_server.delivery, "resolve_telegram_bot_token", return_value=token):
+            with patch.object(dashboard_server, "urlopen", return_value=FakeResponse()) as open_mock:
+                result = dashboard_server.detect_desk_delivery_chat_id("telegram-bot-default", {})
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["chat_id"], "123456")
+        self.assertEqual(result["source"], "telegram_bot_updates")
+        self.assertNotIn("secret_token", json.dumps(result, ensure_ascii=False))
+        self.assertIn("getUpdates", open_mock.call_args.args[0])
+
+    def test_delivery_chat_id_detection_falls_back_to_telegram_session(self):
+        with patch.object(dashboard_server, "_detect_chat_id_from_bot_updates", return_value=None):
+            with patch.object(dashboard_server, "_telegram_current_user_chat_id", return_value="456789"):
+                result = dashboard_server.detect_desk_delivery_chat_id("telegram-bot-default", {})
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["chat_id"], "456789")
+        self.assertEqual(result["source"], "telegram_session")
+
     def test_notification_token_status_prefers_env_without_echoing_token(self):
         stored = dashboard_server.local_credentials.StoredSecret(
             secret="local-token",
@@ -1362,6 +1400,24 @@ class DashboardServerGitTests(unittest.TestCase):
         self.assertEqual(payload["sources"][0]["topics"], ["jobs"])
         self.assertNotIn("tgcs sources import", json.dumps(payload, ensure_ascii=False))
 
+    def test_import_starter_sources_uses_packaged_jobs_list_without_browser_paths(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            starter = root / "channel_lists" / "jobs.txt"
+            starter.parent.mkdir(parents=True)
+            starter.write_text("remote_jobs\nfrontend_jobs\n", encoding="utf-8")
+            with patch.object(dashboard_server, "PROJECT_ROOT", root):
+                with self.assertRaises(ValueError):
+                    dashboard_server.import_starter_sources({"topic": "jobs", "path": "private.txt"})
+                result = dashboard_server.import_starter_sources({"topic": "jobs"})
+
+            registry = root / ".tgcs" / "sources.json"
+            payload = json.loads(registry.read_text(encoding="utf-8"))
+
+        self.assertTrue(result["written"])
+        self.assertEqual(result["added_count"], 2)
+        self.assertEqual(payload["sources"][0]["topics"], ["jobs"])
+
     def test_desk_source_import_rejects_non_telegram_like_identifiers(self):
         with self.assertRaises(ValueError):
             dashboard_server.preview_desk_source_import(
@@ -1427,6 +1483,80 @@ class DashboardServerGitTests(unittest.TestCase):
         self.assertEqual(updated["enabled_count"], 0)
         self.assertFalse(updated["sources"][0]["enabled"])
         self.assertNotIn(str(root), json.dumps(updated, ensure_ascii=False))
+
+    def test_desk_source_remove_requires_confirmation_and_fixed_source_id(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            with patch.object(dashboard_server, "PROJECT_ROOT", root):
+                dashboard_server.import_desk_sources({"sources": "remote_jobs", "topic": "jobs"})
+                with self.assertRaises(ValueError):
+                    dashboard_server.remove_desk_source("telegram:remote_jobs", {})
+                updated = dashboard_server.remove_desk_source("telegram:remote_jobs", {"confirm": True})
+
+        self.assertEqual(updated["source_count"], 0)
+
+    def test_source_assistant_previews_and_applies_add_remove_without_commands(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            with patch.object(dashboard_server, "PROJECT_ROOT", root):
+                dashboard_server.import_desk_sources({"sources": "old_jobs", "topic": "jobs"})
+                with self.assertRaises(ValueError):
+                    dashboard_server.run_source_assistant({"instruction": "add @remote_jobs", "command": "rm -rf ."})
+                preview = dashboard_server.run_source_assistant(
+                    {"instruction": "add @remote_jobs; remove @old_jobs", "topic": "jobs", "dry_run": True}
+                )
+                applied = dashboard_server.run_source_assistant(
+                    {"instruction": "add @remote_jobs; remove @old_jobs", "topic": "jobs", "dry_run": False}
+                )
+                listed = dashboard_server.desk_sources()
+
+        self.assertTrue(preview["dry_run"])
+        self.assertEqual(preview["added_count"], 1)
+        self.assertEqual(preview["removed_count"], 1)
+        self.assertTrue(applied["written"])
+        self.assertEqual(listed["source_count"], 1)
+        self.assertEqual(listed["sources"][0]["channel"], "remote_jobs")
+
+    def test_source_assistant_uses_ai_only_after_explicit_confirmation(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            with patch.object(dashboard_server, "PROJECT_ROOT", root):
+                dashboard_server.import_desk_sources({"sources": "old_jobs\nweb3_jobs", "topic": "jobs"})
+                with patch.object(
+                    dashboard_server,
+                    "_source_assistant_llm_plan",
+                    return_value={"remove": ["telegram:old_jobs"], "disable": ["telegram:web3_jobs"], "enable": []},
+                ) as planner:
+                    local_preview = dashboard_server.run_source_assistant(
+                        {"instruction": "remove stale sources and pause web3", "topic": "jobs", "dry_run": True}
+                    )
+                    planner.assert_not_called()
+                    ai_preview = dashboard_server.run_source_assistant(
+                        {
+                            "instruction": "remove stale sources and pause web3",
+                            "topic": "jobs",
+                            "dry_run": True,
+                            "confirm_external_ai": True,
+                        }
+                    )
+                    applied = dashboard_server.run_source_assistant(
+                        {
+                            "instruction": "remove stale sources and pause web3",
+                            "topic": "jobs",
+                            "dry_run": False,
+                            "confirm_external_ai": True,
+                        }
+                    )
+                listed = dashboard_server.desk_sources()
+
+        self.assertFalse(local_preview["llm_used"])
+        self.assertEqual(local_preview["removed_count"], 0)
+        self.assertTrue(ai_preview["llm_used"])
+        self.assertEqual(ai_preview["removed_count"], 1)
+        self.assertEqual(ai_preview["disabled_count"], 1)
+        self.assertTrue(applied["written"])
+        self.assertEqual(listed["source_count"], 1)
+        self.assertFalse(listed["sources"][0]["enabled"])
 
     def test_desk_source_topics_updates_default_registry_without_accepting_paths_or_commands(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -2016,10 +2146,14 @@ class DashboardServerGitTests(unittest.TestCase):
             "/api/desk/telegram-login/cancel": "telegram_cancel_login",
             "/api/desk/delivery-targets/telegram-bot-default": "save_desk_delivery_target",
             "/api/desk/delivery-targets/telegram-bot-default/test": "test_desk_delivery_target",
+            "/api/desk/delivery-targets/telegram-bot-default/detect-chat-id": "detect_desk_delivery_chat_id",
             "/api/desk/sources/preview": "preview_desk_source_import",
             "/api/desk/sources/import": "import_desk_sources",
+            "/api/desk/sources/starter": "import_starter_sources",
+            "/api/desk/sources/assistant": "run_source_assistant",
             "/api/desk/sources/telegram%3Aremote_jobs/enabled": "set_desk_source_enabled",
             "/api/desk/sources/telegram%3Aremote_jobs/topics": "set_desk_source_topics",
+            "/api/desk/sources/telegram%3Aremote_jobs/remove": "remove_desk_source",
             "/api/profiles/jobs-fast/enabled": "update_profile_enabled",
             "/api/profiles/jobs-fast/runtime-settings": "update_profile_runtime_settings",
             "/api/profiles/jobs-fast/alert-mode": "update_profile_alert_mode",

@@ -13,21 +13,26 @@ import {
   clearFeedbackDecisions as clearFeedbackDecisionsRequest,
   clearDeskAiApiKey as clearDeskAiApiKeyRequest,
   clearDeskNotificationToken as clearDeskNotificationTokenRequest,
+  applySourceAssistant as applySourceAssistantRequest,
   createProfileFromBrief as createProfileFromBriefRequest,
   createProfileDraftNote as createProfileDraftNoteRequest,
   createProfileMatchingPreferencesDraft as createProfileMatchingPreferencesDraftRequest,
+  detectDeskDeliveryChatId,
   errorMessage,
   exportFeedback as exportFeedbackRequest,
   generateFeedbackProfileSuggestions as generateFeedbackProfileSuggestionsRequest,
   importDeskSources,
+  importStarterSources as importStarterSourcesRequest,
   loadDeskNotificationTokenStatus,
   loadDeskAiSettingsStatus,
   loadDeskSources,
   loadDeskSchedulerStatus,
   postReviewCardAction,
   previewDeskSourceImport,
+  previewSourceAssistant as previewSourceAssistantRequest,
   pullLatestGit,
   revertProfilePatch,
+  removeDeskSource as removeDeskSourceRequest,
   saveDeskDeliveryTarget,
   saveDeskAiApiKey as saveDeskAiApiKeyRequest,
   saveDeskNotificationToken as saveDeskNotificationTokenRequest,
@@ -59,6 +64,7 @@ import { useDashboardState } from "./hooks/use-dashboard-state";
 import { useDeskActions } from "./hooks/use-desk-actions";
 import { useDeskTelegram } from "./hooks/use-desk-telegram";
 import type {
+  DeliveryChatDetectionResult,
   DeliveryTestResult,
   DeskNotificationTokenStatus,
   DeskAiSettingsStatus,
@@ -108,6 +114,7 @@ function App() {
   const [feedbackProfileSuggestions, setFeedbackProfileSuggestions] = useState<FeedbackProfileSuggestionsResult | null>(null);
   const [profileCreateResult, setProfileCreateResult] = useState<ProfileCreateResult | null>(null);
   const [deliveryTest, setDeliveryTest] = useState<DeliveryTestResult | null>(null);
+  const [deliveryChatDetection, setDeliveryChatDetection] = useState<DeliveryChatDetectionResult | null>(null);
   const [notificationTokenStatus, setNotificationTokenStatus] = useState<DeskNotificationTokenStatus | null>(null);
   const [notificationTokenError, setNotificationTokenError] = useState<string | null>(null);
   const [aiSettingsStatus, setAiSettingsStatus] = useState<DeskAiSettingsStatus | null>(null);
@@ -525,6 +532,22 @@ function App() {
     }
   }
 
+  async function detectDeliveryChatId(targetId: string) {
+    setBusy(true);
+    setNotice(null);
+    try {
+      const result = await detectDeskDeliveryChatId(targetId);
+      setDeliveryChatDetection(result);
+      setNotice({ tone: result.ok ? "success" : "error", text: result.detail || result.status });
+      return result;
+    } catch (error) {
+      setNotice({ tone: "error", text: errorMessage(error) });
+      throw error;
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function saveNotificationToken(token: string) {
     setBusy(true);
     setNotice(null);
@@ -629,6 +652,76 @@ function App() {
       return result;
     } catch (error) {
       setNotice({ tone: "error", text: errorMessage(error) });
+      throw error;
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function importStarterSources(topic: string) {
+    setBusy(true);
+    setNotice(null);
+    try {
+      const result = await importStarterSourcesRequest(topic);
+      setSourceImportResult(result);
+      await refresh();
+      await refreshDeskSources();
+      setNotice({ tone: "success", text: result.detail || result.title || "Starter sources installed" });
+      return result;
+    } catch (error) {
+      setNotice({ tone: "error", text: errorMessage(error) });
+      throw error;
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function previewSourceAssistant(instruction: string, topic: string, confirmExternalAi = false) {
+    setBusy(true);
+    setNotice(null);
+    try {
+      const result = await previewSourceAssistantRequest(instruction, topic, confirmExternalAi);
+      setSourceImportResult(result);
+      setNotice({ tone: "success", text: result.detail || result.title || "Source plan ready" });
+      return result;
+    } catch (error) {
+      setNotice({ tone: "error", text: errorMessage(error) });
+      throw error;
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function applySourceAssistant(instruction: string, topic: string, confirmExternalAi = false) {
+    setBusy(true);
+    setNotice(null);
+    try {
+      const result = await applySourceAssistantRequest(instruction, topic, confirmExternalAi);
+      setSourceImportResult(result);
+      await refresh();
+      await refreshDeskSources();
+      setNotice({ tone: "success", text: result.detail || result.title || "Source plan applied" });
+      return result;
+    } catch (error) {
+      setNotice({ tone: "error", text: errorMessage(error) });
+      throw error;
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function removeSource(sourceId: string) {
+    setBusy(true);
+    setNotice(null);
+    try {
+      const sources = await removeDeskSourceRequest(sourceId);
+      setDeskSources(sources);
+      await refresh();
+      setNotice({ tone: "success", text: "Source removed" });
+    } catch (error) {
+      const message = errorMessage(error);
+      setDeskSourcesError(message);
+      setNotice({ tone: "error", text: message });
       throw error;
     } finally {
       setBusy(false);
@@ -862,12 +955,14 @@ function App() {
                   undoFeedbackDecision={undoFeedbackDecision}
                   runAgainWithLearning={() => void runDeskAction("monitor_jobs_dry_run")}
                   deliveryTest={deliveryTest}
+                  deliveryChatDetection={deliveryChatDetection}
                   notificationTokenStatus={notificationTokenStatus}
                   notificationTokenError={notificationTokenError}
                   sourceLibrary={deskSources}
                   sourceLibraryError={deskSourcesError}
                   sourceImportResult={sourceImportResult}
                   saveDeliveryTarget={saveDeliveryTarget}
+                  detectDeliveryChatId={detectDeliveryChatId}
                   saveNotificationToken={saveNotificationToken}
                   clearNotificationToken={clearNotificationToken}
                   saveAiApiKey={saveAiApiKey}
@@ -875,7 +970,11 @@ function App() {
                   testDeliveryTarget={testDeliveryTarget}
                   previewSourceImport={previewSourceImport}
                   importSources={importSources}
+                  importStarterSources={importStarterSources}
+                  previewSourceAssistant={previewSourceAssistant}
+                  applySourceAssistant={applySourceAssistant}
                   setSourceEnabled={setSourceEnabled}
+                  removeSource={removeSource}
                   setSourceTopics={setSourceTopics}
                   busy={busy}
                   focusTarget={settingsFocusTarget}

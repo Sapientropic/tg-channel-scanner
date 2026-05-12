@@ -124,7 +124,8 @@ class TgcsCliTests(unittest.TestCase):
         self.assertIn("market-news", output)
         self.assertIn("jobs-fast", output)
         self.assertIn("tgcs doctor", output)
-        self.assertIn("tgcs sources import channel_lists/jobs.txt --topic jobs", output)
+        self.assertIn("Settings > Sources", output)
+        self.assertIn("Source assistant", output)
         self.assertIn("tgcs schedule print --profile-id jobs-fast", output)
         self.assertIn("tgcs dashboard", output)
 
@@ -388,20 +389,21 @@ class TgcsCliTests(unittest.TestCase):
             (root / "dashboard").mkdir()
             calls = []
 
-            def fake_run(cmd, check=False, cwd=None):
+            def fake_run(cmd, check=False, cwd=None, **kwargs):
                 calls.append((cmd, cwd))
-                return subprocess.CompletedProcess(cmd, 0)
+                stdout = "v22.12.0\n" if cmd[:2] == ["node", "--version"] else ""
+                return subprocess.CompletedProcess(cmd, 0, stdout=stdout)
 
             with patch.object(tgcs, "PROJECT_ROOT", root):
                 with patch.object(tgcs.subprocess, "run", side_effect=fake_run):
                     exit_code = tgcs.main(["dashboard"])
 
         self.assertEqual(exit_code, 0)
-        self.assertEqual([call[0][0] for call in calls], ["npm", "npm", str(tgcs._python())])
-        self.assertEqual(calls[0][0][1:], ["ci"])
-        self.assertEqual(calls[1][0][1:], ["run", "build"])
-        self.assertEqual(calls[0][1], root / "dashboard")
+        self.assertEqual([call[0][0] for call in calls], ["node", "npm", "npm", str(tgcs._python())])
+        self.assertEqual(calls[1][0][1:], ["ci"])
+        self.assertEqual(calls[2][0][1:], ["run", "build"])
         self.assertEqual(calls[1][1], root / "dashboard")
+        self.assertEqual(calls[2][1], root / "dashboard")
 
     def test_dashboard_no_build_skips_missing_static_asset_build(self):
         tgcs = load_tgcs_module(self)

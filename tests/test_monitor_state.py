@@ -870,12 +870,13 @@ class MonitorStateTests(unittest.TestCase):
         snapshot = monitor_state.dashboard_snapshot(conn)
 
         self.assertEqual(snapshot["setup_status"]["stage"], "needs_source_access")
-        self.assertIn("tgcs sources import channel_lists/jobs.txt --topic jobs", snapshot["setup_status"]["next_step"])
+        self.assertIn("Settings > Sources", snapshot["setup_status"]["next_step"])
+        self.assertIn("Source assistant", snapshot["setup_status"]["next_step"])
         self.assertTrue(snapshot["setup_status"]["has_runs"])
         checks = {item["check_id"]: item for item in snapshot["setup_status"]["checks"]}
         self.assertEqual(checks["source_access"]["status"], "blocked")
         self.assertEqual(checks["first_run"]["status"], "blocked")
-        self.assertIn("tgcs sources import channel_lists/jobs.txt --topic jobs", checks["source_access"]["command"])
+        self.assertNotIn("command", checks["source_access"])
 
     def test_dashboard_runs_include_prefilter_and_llm_quality_summary(self):
         conn = sqlite3.connect(":memory:")
@@ -1181,7 +1182,7 @@ class MonitorStateTests(unittest.TestCase):
         quality = snapshot["runs"][0]["quality"]
         self.assertEqual(quality["top_diagnostic_code"], "channel_failures")
         self.assertEqual(snapshot["setup_status"]["stage"], "needs_source_access")
-        self.assertIn("tgcs sources import channel_lists/jobs.txt --topic jobs", snapshot["setup_status"]["next_step"])
+        self.assertIn("Settings > Sources", snapshot["setup_status"]["next_step"])
 
     def test_dashboard_snapshot_includes_opportunity_summary_top_items(self):
         conn = sqlite3.connect(":memory:")

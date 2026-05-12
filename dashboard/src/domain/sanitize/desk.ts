@@ -8,6 +8,7 @@ import type {
   DeskSource,
   DeskSourcesResult,
   DeskTelegramStatus,
+  DeliveryChatDetectionResult,
   DeliveryTestResult,
   FeedbackExportResult,
   FeedbackProfileSuggestionsResult,
@@ -355,6 +356,32 @@ export function sanitizeDeliveryTestResult(value: unknown): DeliveryTestResult |
   };
 }
 
+export function sanitizeDeliveryChatDetectionResult(value: unknown): DeliveryChatDetectionResult | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+  const targetId = optionalString(value.target_id);
+  const targetType = optionalString(value.target_type);
+  const status = optionalString(value.status);
+  const source = optionalString(value.source);
+  if (!targetId || !targetType || !status || !source) {
+    return null;
+  }
+  return {
+    schema_version: value.schema_version === "desk_delivery_chat_detection_v1" ? value.schema_version : undefined,
+    target_id: targetId,
+    target_type: targetType,
+    ok: value.ok === true,
+    status,
+    source,
+    chat_id: optionalString(value.chat_id) ?? "",
+    chat_type: optionalString(value.chat_type) ?? "",
+    title: optionalString(value.title),
+    detail: optionalString(value.detail),
+    finished_at: optionalString(value.finished_at),
+  };
+}
+
 export function sanitizeSourceImportResult(value: unknown): SourceImportResult | null {
   if (!isRecord(value)) {
     return null;
@@ -372,10 +399,15 @@ export function sanitizeSourceImportResult(value: unknown): SourceImportResult |
     added_count: nonNegativeIntegerOrDefault(value.added_count, 0),
     updated_count: nonNegativeIntegerOrDefault(value.updated_count, 0),
     unchanged_count: nonNegativeIntegerOrDefault(value.unchanged_count, 0),
+    removed_count: nonNegativeIntegerOrDefault(value.removed_count, 0),
+    enabled_count: nonNegativeIntegerOrDefault(value.enabled_count, 0),
+    disabled_count: nonNegativeIntegerOrDefault(value.disabled_count, 0),
     source_count: nonNegativeIntegerOrDefault(value.source_count, 0),
     registry_path: registryPath,
     preview_sources: sanitizeSourceImportPreviewSources(value.preview_sources),
     preview_truncated_count: nonNegativeIntegerOrDefault(value.preview_truncated_count, 0),
+    action: optionalString(value.action),
+    llm_used: value.llm_used === true,
     title: optionalString(value.title),
     detail: optionalString(value.detail),
     next_action: optionalString(value.next_action),

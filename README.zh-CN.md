@@ -65,7 +65,7 @@ TOML、复制 JSON 或背 CLI 命令开始。
 | `Review` | 优先处理最新/最高优先级卡片，用 Keep / Skip / Wrong match / Tune profile 训练后续匹配。 |
 | `Profiles` | 用自然语言或文件新建 profile，编辑匹配规则，调整扫描窗口和读取数量。 |
 | `Runs` | 看最近扫描是否健康，打开本地报告 artifact。 |
-| `Settings` | 添加来源、配置 AI/OCR key、设置通知、管理学习结果、检查仓库状态。 |
+| `Settings` | 用 starter / Source assistant 增删来源，配置 AI/OCR key、通知、学习结果和仓库状态。 |
 
 Signal Desk 保持 local-first：dashboard 状态不会保存 Telegram 原文、session、
 API key 或 bot token。
@@ -108,7 +108,7 @@ chmod +x setup.sh tgcs signal-desk "Signal Desk.command"
 1. 在 `Start` 创建离线 demo 报告；这一步不需要 Telegram 登录，也不需要 LLM key。
 2. 用 [my.telegram.org/apps](https://my.telegram.org/apps) 的 `api_id` / `api_hash`
    连接 Telegram。
-3. 在 `Settings -> Sources` 粘贴频道链接或 handle。
+3. 在 `Settings -> Sources` 用 starter、粘贴 handle，或让 Source assistant 预览并应用来源变更。
 4. 从 `Start` 跑一次 dry scan，不发送真实通知。
 5. 在 `Review` 处理卡片；如果结果太宽或太窄，再去 `Profiles` 调整匹配规则。
 6. 如果扫描失败，打开 `Runs`，它会先给出修复路径，再让你重新扫描。

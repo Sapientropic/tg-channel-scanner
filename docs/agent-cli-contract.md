@@ -119,8 +119,9 @@ example sources. If `.tgcs/sources.json` already exists, the jobs starter keeps
 the existing registry and non-destructively merges `channel_lists/jobs.txt` with
 the `jobs` topic tag.
 `tgcs quickstart jobs` is read-only and prints one current next action for the
-Developer Opportunity starter: init, doctor, login, first dry-run, or dashboard.
-It never starts login, scanning, delivery, or scheduler installation.
+Developer Opportunity starter: init, Settings > Sources, doctor, login, first
+dry-run, or dashboard. It never starts login, scanning, delivery, or scheduler
+installation.
 `tgcs run` defaults to `.tgcs/sources.json` when present, the local
 `.tgcs/config.toml` profile when initialized, HTML output, `output/`, and v0.4
 decision memory at `.tgcs/state`. Without local config the built-in fallback
@@ -191,6 +192,16 @@ action API for human-friendly wrappers around fixed local commands:
   `/api/desk/sources/preview` validates and previews the default
   `.tgcs/sources.json` import, while `/api/desk/sources/import` writes to that
   fixed registry only.
+- `POST /api/desk/sources/starter` installs the fixed packaged starter list
+  into `.tgcs/sources.json`. It accepts only an optional `topic`.
+- `POST /api/desk/sources/assistant` accepts a bounded natural-language
+  instruction plus optional topic and `dry_run`; it extracts explicit Telegram
+  handles/links locally, previews add/pause/resume/remove operations, then
+  applies the same fixed registry mutations when `dry_run=false`. It does not
+  accept paths, commands, argv, raw credentials, or arbitrary model output.
+  `confirm_external_ai:true` may use the configured OpenAI-compatible provider
+  only to classify already-saved source ids for pause/resume/remove; returned ids
+  are validated against `.tgcs/sources.json` before any write.
 - Dedicated saved-source endpoints let Signal Desk display and pause/resume the
   fixed workspace registry without accepting browser-supplied paths or commands:
   `GET /api/desk/sources` returns `desk_sources_v1`, and
@@ -200,6 +211,8 @@ action API for human-friendly wrappers around fixed local commands:
   list, validates short topic tags, writes the fixed `.tgcs/sources.json`
   registry, and returns the refreshed source list. It does not accept registry
   paths, commands, argv, tokens, or raw Telegram message data.
+- `POST /api/desk/sources/<source_id>/remove` removes one validated source id
+  after `{confirm:true}` and returns the refreshed source list.
 - Live delivery, session access, raw Telegram message operations, and unsupported
   scheduler installation return guarded preview / `needs_human` or remain
   outside the action API. Non-systemd Linux remains a manual cron-preview path;
@@ -260,9 +273,10 @@ so the human can replace them with usernames, numeric ids, or Telegram folder
 import before the first real scan. Source-registry checks warn when all enabled
 sources are `example_*` placeholders, because those examples are documentation
 fixtures and will not resolve as real Telegram channels. For jobs-style
-placeholder registries, the next step also points to `tgcs init --starter jobs
---force` as an explicit reset path, alongside the non-reset
-`tgcs sources import channel_lists/jobs.txt --topic jobs` option. The
+placeholder registries, the next step points first to Signal Desk Settings >
+Sources and keeps `tgcs init --starter jobs --force` as an explicit reset path,
+alongside the non-reset `tgcs sources import channel_lists/jobs.txt --topic jobs`
+option. The
 `llm_provider` check treats `OPENAI_API_KEY`, `DEEPSEEK_API_KEY`,
 `MINIMAX_TOKEN_PLAN_KEY`, and `MINIMAX_API_KEY` as valid provider credentials,
 without echoing key values. For MiniMax, it reports the non-secret key type and
@@ -611,16 +625,21 @@ before writing targets back to SQLite, so a saved Desk target is not overwritten
 by `.tgcs/profiles.toml` defaults. Signal Desk may save or clear the bot token
 only through the local credential store API and never echoes token text in
 responses, SQLite, manifests, reports, or docs.
+Signal Desk may detect the default private chat id from Telegram Bot
+`getUpdates` after the user has messaged the bot, or from the existing local
+Telegram session user id. High-level summaries must continue to avoid rendering
+raw chat ids.
 
-Signal Desk `Settings` can also import sources from pasted text. The browser
-body is limited to `sources` and `topic`; source registry paths are fixed to
-`.tgcs/sources.json`, preview is no-write, and import reuses
-`source_registry.py` normalization, topic merge, duplicate handling, and
-validation. The same Settings view can list saved sources, filter them by topic,
-toggle only their `enabled` state, and retag sources through the topic-only
-endpoint. It validates source ids server-side, writes only the fixed
-workspace-local registry, and never accepts command strings, argv, registry
-paths, raw Telegram text, or tokens from the browser.
+Signal Desk `Settings` can also install starter sources, import pasted sources,
+and apply bounded source assistant plans. The browser body is limited to the
+documented fields; source registry paths are fixed to `.tgcs/sources.json`,
+preview is no-write, and import reuses `source_registry.py` normalization, topic
+merge, duplicate handling, and validation. The same Settings view can list saved
+sources, filter them by topic, toggle only their `enabled` state, retag sources,
+and remove validated source ids. External AI source planning is opt-in and can
+only return existing source ids to pause/resume/remove. Signal Desk writes only
+the fixed workspace-local registry and never accepts command strings, argv,
+registry paths, raw Telegram message data, or tokens from the browser.
 
 ## Human Login Boundary
 

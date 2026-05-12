@@ -3,9 +3,14 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
+is_wsl() {
+  grep -qiE "(microsoft|wsl)" /proc/version 2>/dev/null
+}
+
 if [ -x "$ROOT_DIR/.venv/bin/python" ]; then
   PYTHON="$ROOT_DIR/.venv/bin/python"
-elif [ -x "$ROOT_DIR/.venv/Scripts/python.exe" ]; then
+elif [ -x "$ROOT_DIR/.venv/Scripts/python.exe" ] && ! is_wsl; then
+  # Windows venv Python cannot reliably open POSIX /mnt/... paths under WSL.
   PYTHON="$ROOT_DIR/.venv/Scripts/python.exe"
 elif command -v python3 >/dev/null 2>&1; then
   PYTHON="python3"

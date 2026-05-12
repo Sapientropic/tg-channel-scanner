@@ -29,16 +29,16 @@ from pathlib import Path
 from pathlib import PurePosixPath
 from threading import Lock
 from urllib import error as urllib_error
-from urllib.parse import unquote, urlparse
+from urllib.parse import quote, unquote, urlencode, urlparse
 from urllib.request import urlopen
 
 try:
-    from scripts import agent_cli, delivery, local_credentials, monitor_state, source_registry
+    from scripts import agent_cli, delivery, local_credentials, monitor_state, report, source_registry
 except ModuleNotFoundError:
     _PROJECT_ROOT = str(Path(__file__).resolve().parent.parent)
     if _PROJECT_ROOT not in sys.path:
         sys.path.insert(0, _PROJECT_ROOT)
-    from scripts import agent_cli, delivery, local_credentials, monitor_state, source_registry
+    from scripts import agent_cli, delivery, local_credentials, monitor_state, report, source_registry
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -57,12 +57,16 @@ TELEGRAM_CONFIG_DIR = Path(
 TELEGRAM_CONFIG_PATH = TELEGRAM_CONFIG_DIR / "config.toml"
 TELEGRAM_SESSION_PATH = TELEGRAM_CONFIG_DIR / "session"
 TELEGRAM_LOGIN_CODE_TTL_SECONDS = 300
+TELEGRAM_BOT_UPDATES_TIMEOUT_SECONDS = 8
 DESK_DELIVERY_TARGET_ID = "telegram-bot-default"
 DESK_DELIVERY_ALLOWED_FIELDS = {"chat_id", "enabled"}
 DESK_DELIVERY_TEST_ALLOWED_FIELDS = {"chat_id"}
+DESK_DELIVERY_DETECT_ALLOWED_FIELDS: set[str] = set()
 DESK_NOTIFICATION_TOKEN_ALLOWED_FIELDS = {"token", "clear"}
 DESK_AI_SETTINGS_ALLOWED_FIELDS = {"provider", "api_key", "clear"}
 DESK_SOURCE_IMPORT_ALLOWED_FIELDS = {"sources", "topic"}
+DESK_SOURCE_STARTER_ALLOWED_FIELDS = {"topic"}
+DESK_SOURCE_ASSISTANT_ALLOWED_FIELDS = {"instruction", "topic", "dry_run", "confirm_external_ai"}
 DESK_SOURCE_UPDATE_ALLOWED_FIELDS = {"enabled"}
 DESK_SOURCE_TOPIC_ALLOWED_FIELDS = {"topics"}
 PROFILE_ENABLED_ALLOWED_FIELDS = {"enabled"}
@@ -348,6 +352,7 @@ def desk_health(*, host: str, port: int) -> dict:
             "desk_notification_token_v1",
             "desk_ai_settings_v1",
             "desk_sources_v1",
+            "desk_source_assistant_v1",
             "desk_scheduler_v1",
             "dashboard_state_v1",
         ],
@@ -1003,6 +1008,161 @@ def test_desk_delivery_target(conn, target_id: str, body: dict) -> dict:
     }
 
 
+def _chat_candidate_from_update(update: dict) -> dict[str, str] | None:
+    chat: object = None
+    for key in ("message", "edited_message", "channel_post", "my_chat_member"):
+        event = update.get(key)
+        if not isinstance(event, dict):
+            continue
+        if key == "my_chat_member":
+            chat = event.get("chat")
+        else:
+            chat = event.get("chat")
+        if isinstance(chat, dict):
+            break
+    if not isinstance(chat, dict):
+        return None
+    raw_chat_id = chat.get("id")
+    if raw_chat_id is None:
+        return None
+    chat_id = _clean_delivery_chat_id(str(raw_chat_id))
+    if not chat_id:
+        return None
+    chat_type = str(chat.get("type") or "chat").strip() or "chat"
+    return {
+        "chat_id": chat_id,
+        "chat_type": chat_type,
+    }
+
+
+def _chat_candidate_from_bot_updates(payload: object) -> dict[str, str] | None:
+    if not isinstance(payload, dict) or payload.get("ok") is not True:
+        return None
+    updates = payload.get("result")
+    if not isinstance(updates, list):
+        return None
+    fallback: dict[str, str] | None = None
+    for update in reversed(updates):
+        if not isinstance(update, dict):
+            continue
+        candidate = _chat_candidate_from_update(update)
+        if not candidate:
+            continue
+        if candidate.get("chat_type") == "private":
+            return candidate
+        fallback = fallback or candidate
+    return fallback
+
+
+def _detect_chat_id_from_bot_updates() -> dict[str, str] | None:
+    token = delivery.resolve_telegram_bot_token()
+    if not token.token:
+        return None
+    query = urlencode({"limit": "20", "timeout": "0"})
+    url = f"https://api.telegram.org/bot{quote(token.token, safe=':')}/getUpdates?{query}"
+    try:
+        with urlopen(url, timeout=TELEGRAM_BOT_UPDATES_TIMEOUT_SECONDS) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except (OSError, TimeoutError, urllib_error.URLError, json.JSONDecodeError, ValueError):
+        return None
+    candidate = _chat_candidate_from_bot_updates(payload)
+    if not candidate:
+        return None
+    return {
+        **candidate,
+        "source": "telegram_bot_updates",
+    }
+
+
+async def _telegram_current_user_chat_id_async(
+    *,
+    config_path: Path = TELEGRAM_CONFIG_PATH,
+    session_path: Path = TELEGRAM_SESSION_PATH,
+) -> str | None:
+    from telethon import TelegramClient
+    from telethon.sessions import StringSession
+
+    api_id, api_hash = _load_telegram_credentials(config_path=config_path)
+    session_string = session_path.read_text(encoding="utf-8").strip() if session_path.exists() else ""
+    if not session_string:
+        return None
+    client = TelegramClient(StringSession(session_string), api_id, api_hash)
+    await client.connect()
+    try:
+        if not await client.is_user_authorized():
+            return None
+        me = await client.get_me()
+        user_id = getattr(me, "id", None)
+        return _clean_delivery_chat_id(str(user_id)) if user_id is not None else None
+    finally:
+        await client.disconnect()
+
+
+def _telegram_current_user_chat_id(
+    *,
+    config_path: Path = TELEGRAM_CONFIG_PATH,
+    session_path: Path = TELEGRAM_SESSION_PATH,
+) -> str | None:
+    try:
+        return asyncio.run(_telegram_current_user_chat_id_async(config_path=config_path, session_path=session_path))
+    except Exception:
+        return None
+
+
+def detect_desk_delivery_chat_id(target_id: str, body: dict) -> dict:
+    clean_target_id = _validate_desk_delivery_target_id(target_id)
+    _reject_unexpected_delivery_fields(body, allowed=DESK_DELIVERY_DETECT_ALLOWED_FIELDS)
+    candidate = _detect_chat_id_from_bot_updates()
+    if candidate:
+        chat_type = candidate.get("chat_type") or "chat"
+        return {
+            "schema_version": "desk_delivery_chat_detection_v1",
+            "target_id": clean_target_id,
+            "target_type": "telegram_bot",
+            "ok": True,
+            "status": "detected_from_bot_updates",
+            "source": "telegram_bot_updates",
+            "chat_id": candidate["chat_id"],
+            "chat_type": chat_type,
+            "title": "Chat ID detected",
+            "detail": f"Detected the latest {chat_type} that messaged this bot. Review it, then save notifications.",
+            "finished_at": _utc_now(),
+        }
+    current_user_id = _telegram_current_user_chat_id()
+    if current_user_id:
+        return {
+            "schema_version": "desk_delivery_chat_detection_v1",
+            "target_id": clean_target_id,
+            "target_type": "telegram_bot",
+            "ok": True,
+            "status": "detected_from_telegram_session",
+            "source": "telegram_session",
+            "chat_id": current_user_id,
+            "chat_type": "private",
+            "title": "Private chat ID detected",
+            "detail": "Detected your Telegram user ID from the local login. Send a message to the bot before live alerts, then save notifications.",
+            "finished_at": _utc_now(),
+        }
+    token = delivery.resolve_telegram_bot_token()
+    if token.token:
+        detail = "Send any message to the bot, then retry detection. Telegram has not returned a chat for this bot yet."
+    else:
+        detail = "Save a Telegram bot token, send the bot a message, then retry detection. If you use Telegram login, finish Start login first."
+    return {
+        "schema_version": "desk_delivery_chat_detection_v1",
+        "target_id": clean_target_id,
+        "target_type": "telegram_bot",
+        "ok": False,
+        "status": "needs_bot_message",
+        "source": "none",
+        "chat_id": "",
+        "chat_type": "",
+        "title": "Chat ID not found",
+        "detail": detail,
+        "finished_at": _utc_now(),
+    }
+
+
 def _local_notification_token() -> local_credentials.StoredSecret | None:
     if not local_credentials.is_supported():
         return None
@@ -1241,6 +1401,18 @@ def _reject_unexpected_source_fields(body: dict) -> None:
         raise ValueError(f"Unsupported source import field: {', '.join(unexpected)}")
 
 
+def _reject_unexpected_source_starter_fields(body: dict) -> None:
+    unexpected = sorted(str(key) for key in body.keys() if key not in DESK_SOURCE_STARTER_ALLOWED_FIELDS)
+    if unexpected:
+        raise ValueError(f"Unsupported starter source field: {', '.join(unexpected)}")
+
+
+def _reject_unexpected_source_assistant_fields(body: dict) -> None:
+    unexpected = sorted(str(key) for key in body.keys() if key not in DESK_SOURCE_ASSISTANT_ALLOWED_FIELDS)
+    if unexpected:
+        raise ValueError(f"Unsupported source assistant field: {', '.join(unexpected)}")
+
+
 def _clean_source_topic(value: object) -> str:
     topic = str(value or "jobs").strip().casefold()
     if not topic:
@@ -1283,6 +1455,46 @@ def _source_import_payload(result: dict, *, topic: str, written: bool) -> dict:
             if written
             else "Review the preview, then import when it looks right."
         ),
+        "next_action": "Run source checks, then run a scan from Start.",
+        "finished_at": _utc_now(),
+    }
+
+
+def _source_operation_payload(
+    *,
+    action: str,
+    topic: str,
+    dry_run: bool,
+    added_count: int = 0,
+    updated_count: int = 0,
+    unchanged_count: int = 0,
+    removed_count: int = 0,
+    enabled_count: int = 0,
+    disabled_count: int = 0,
+    preview_sources: list[dict] | None = None,
+    title: str,
+    detail: str,
+    llm_used: bool = False,
+) -> dict:
+    return {
+        "schema_version": "desk_source_import_result_v1",
+        "dry_run": dry_run,
+        "written": not dry_run,
+        "action": action,
+        "topic": topic,
+        "added_count": added_count,
+        "updated_count": updated_count,
+        "unchanged_count": unchanged_count,
+        "removed_count": removed_count,
+        "enabled_count": enabled_count,
+        "disabled_count": disabled_count,
+        "source_count": desk_sources()["source_count"],
+        "registry_path": ".tgcs/sources.json",
+        "preview_sources": preview_sources or [],
+        "preview_truncated_count": 0,
+        "llm_used": llm_used,
+        "title": title,
+        "detail": detail,
         "next_action": "Run source checks, then run a scan from Start.",
         "finished_at": _utc_now(),
     }
@@ -1377,6 +1589,17 @@ def set_desk_source_topics(source_id: str, body: dict) -> dict:
     return desk_sources()
 
 
+def remove_desk_source(source_id: str, body: dict) -> dict:
+    unexpected = sorted(str(key) for key in body.keys() if key not in {"confirm"})
+    if unexpected:
+        raise ValueError(f"Unsupported source remove field: {', '.join(unexpected)}")
+    if body.get("confirm") is not True:
+        raise ValueError("Source removal requires confirmation.")
+    registry_path = PROJECT_ROOT / ".tgcs" / "sources.json"
+    source_registry.remove_sources(registry_path, source_ids=[_validate_desk_source_id(source_id)])
+    return desk_sources()
+
+
 def _desk_sources_from_body(body: dict) -> tuple[list[str], str]:
     _reject_unexpected_source_fields(body)
     text = str(body.get("sources") or "")
@@ -1396,6 +1619,29 @@ def _desk_sources_from_body(body: dict) -> tuple[list[str], str]:
         raise ValueError("Source import only accepts Telegram channel handles or numeric chat IDs.")
     topic = _clean_source_topic(body.get("topic"))
     return channels, topic
+
+
+def import_starter_sources(body: dict) -> dict:
+    _reject_unexpected_source_starter_fields(body)
+    topic = _clean_source_topic(body.get("topic"))
+    starter_path = PROJECT_ROOT / "channel_lists" / "jobs.txt"
+    if not starter_path.exists():
+        starter_path = PROJECT_ROOT / "channel_lists" / "example.txt"
+    if not starter_path.exists():
+        raise ValueError("Starter source list is missing from this checkout.")
+    channels = source_registry.load_channel_list(starter_path)
+    registry_path = PROJECT_ROOT / ".tgcs" / "sources.json"
+    result = source_registry.import_channels(
+        channels,
+        registry_path,
+        dry_run=False,
+        topics=[topic],
+        input_path="packaged starter sources",
+    )
+    payload = _source_import_payload(result, topic=topic, written=True)
+    payload["title"] = "Starter sources installed"
+    payload["detail"] = "Signal Desk added the packaged starter source set. Replace or prune it from Settings as you learn what works."
+    return payload
 
 
 def preview_desk_source_import(body: dict) -> dict:
@@ -1422,6 +1668,260 @@ def import_desk_sources(body: dict) -> dict:
         input_path="pasted sources",
     )
     return _source_import_payload(result, topic=topic, written=True)
+
+
+def _extract_source_channels_from_text(text: str) -> list[str]:
+    channels: list[str] = []
+    for match in re.finditer(r"(?:https?://)?t\.me/(?:s/)?([A-Za-z0-9_]{5,64}|-?[0-9]{5,20})", text, re.IGNORECASE):
+        channels.append(match.group(1))
+    for match in re.finditer(r"@([A-Za-z0-9_]{5,64})", text):
+        channels.append(match.group(1))
+    for line in text.splitlines():
+        clean = source_registry.normalize_channel_name(line)
+        if re.fullmatch(r"(?:[A-Za-z0-9_]{5,64}|-?[0-9]{5,20})", clean):
+            channels.append(clean)
+    deduped: list[str] = []
+    seen: set[str] = set()
+    for channel in channels:
+        key = channel.casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(channel)
+    return deduped
+
+
+def _source_id_from_channel(channel: str) -> str:
+    source = source_registry.source_from_channel(channel)
+    return str(source["source_id"])
+
+
+def _source_assistant_action(text: str) -> str:
+    lowered = text.casefold()
+    if any(word in lowered for word in ("delete", "remove", "prune", "drop", "删", "删除", "移除", "清掉", "去掉")):
+        return "remove"
+    if any(word in lowered for word in ("pause", "disable", "mute", "stop", "暂停", "停用", "禁用")):
+        return "disable"
+    if any(word in lowered for word in ("enable", "resume", "use", "restore", "启用", "恢复", "使用")):
+        return "enable"
+    return "add"
+
+
+def _source_assistant_plan(instruction: str) -> dict[str, list[str]]:
+    plan = {"add": [], "remove": [], "disable": [], "enable": []}
+    segments = [segment.strip() for segment in re.split(r"[\n;；。]+", instruction) if segment.strip()]
+    for segment in segments or [instruction]:
+        action = _source_assistant_action(segment)
+        channels = _extract_source_channels_from_text(segment)
+        if not channels:
+            continue
+        plan[action].extend(channels)
+    for key, values in plan.items():
+        deduped: list[str] = []
+        seen: set[str] = set()
+        for value in values:
+            normalized = source_registry.normalize_channel_name(value)
+            marker = normalized.casefold()
+            if marker in seen:
+                continue
+            seen.add(marker)
+            deduped.append(normalized)
+        plan[key] = deduped
+    return plan
+
+
+def _source_assistant_has_plan(plan: dict[str, list[str]]) -> bool:
+    return any(bool(values) for values in plan.values())
+
+
+def _dedupe_source_ids(source_ids: list[str]) -> list[str]:
+    deduped: list[str] = []
+    seen: set[str] = set()
+    for source_id in source_ids:
+        clean = _validate_desk_source_id(source_id)
+        marker = clean.casefold()
+        if marker in seen:
+            continue
+        seen.add(marker)
+        deduped.append(clean)
+    return deduped
+
+
+def _source_assistant_llm_plan(instruction: str, topic: str, existing: dict[str, dict]) -> dict[str, list[str]]:
+    if not report.llm_key_available():
+        raise ValueError("Save an AI API key in Settings before using AI source planning.")
+    try:
+        from openai import OpenAI
+    except ImportError as exc:
+        raise ValueError("Install optional LLM dependencies before using AI source planning.") from exc
+
+    base_url, model = report.resolve_llm_settings(None, report.DEFAULT_MODEL)
+    provider = report.llm_provider(base_url, model)
+    api_key = report.api_key_for_provider(provider)
+    if not api_key:
+        raise ValueError("Save an AI API key in Settings before using AI source planning.")
+
+    sources = [
+        {
+            "source_id": source_id,
+            "label": str(source.get("label") or ""),
+            "channel": source_registry.channel_value(source),
+            "topics": source_registry.normalize_topics(source.get("topics") or []),
+            "enabled": bool(source.get("enabled", True)),
+        }
+        for source_id, source in sorted(existing.items())
+    ][:300]
+    system_prompt = (
+        "You plan local Telegram source registry changes. Return JSON only with keys "
+        "remove, disable, enable. Each value must be a list of source_id strings copied "
+        "from the provided sources. Do not invent source ids, commands, paths, argv, tokens, "
+        "or new Telegram channels. If the instruction asks to add unknown sources, return empty lists."
+    )
+    user_prompt = json.dumps(
+        {
+            "instruction": instruction,
+            "topic": topic,
+            "sources": sources,
+            "output_schema": {"remove": ["telegram:..."], "disable": ["telegram:..."], "enable": ["telegram:..."]},
+        },
+        ensure_ascii=False,
+    )
+    create_kwargs = {
+        "model": model,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+        "temperature": report.llm_temperature(provider),
+    }
+    if provider in {"deepseek", "openai"}:
+        create_kwargs["response_format"] = {"type": "json_object"}
+    thinking_extra = report.minimax_thinking_extra(provider) or report.deepseek_thinking_extra(provider, model)
+    if thinking_extra:
+        create_kwargs["extra_body"] = thinking_extra
+    report.add_token_limit(create_kwargs, provider=provider, max_tokens=700)
+
+    try:
+        response = OpenAI(api_key=api_key, base_url=base_url).chat.completions.create(**create_kwargs)
+    except Exception as exc:
+        raise ValueError(f"AI source planning failed: {exc}") from exc
+    raw = response.choices[0].message.content or ""
+    try:
+        payload = json.loads(report.strip_json_fence(raw))
+    except json.JSONDecodeError as exc:
+        raise ValueError("AI source planning did not return valid JSON.") from exc
+    if not isinstance(payload, dict):
+        raise ValueError("AI source planning must return a JSON object.")
+
+    existing_ids = set(existing)
+    plan: dict[str, list[str]] = {"remove": [], "disable": [], "enable": []}
+    for action in plan:
+        values = payload.get(action) or []
+        if not isinstance(values, list):
+            raise ValueError("AI source planning returned an invalid action list.")
+        for value in values:
+            source_id = _validate_desk_source_id(str(value))
+            if source_id in existing_ids:
+                plan[action].append(source_id)
+    return {action: _dedupe_source_ids(values) for action, values in plan.items()}
+
+
+def run_source_assistant(body: dict) -> dict:
+    _reject_unexpected_source_assistant_fields(body)
+    instruction = str(body.get("instruction") or "").strip()
+    if len(instruction) > 4000:
+        raise ValueError("Source instruction is too long.")
+    if not instruction:
+        raise ValueError("Describe what to add, pause, or remove.")
+    topic = _clean_source_topic(body.get("topic"))
+    dry_run = body.get("dry_run") is not False
+    confirm_external_ai = body.get("confirm_external_ai", False)
+    if not isinstance(confirm_external_ai, bool):
+        raise ValueError("AI source planning confirmation must be true or false.")
+    plan = _source_assistant_plan(instruction)
+    registry_path = PROJECT_ROOT / ".tgcs" / "sources.json"
+    preview_sources: list[dict] = []
+    added_count = updated_count = unchanged_count = removed_count = enabled_count = disabled_count = 0
+    llm_used = False
+
+    if plan["add"]:
+        result = source_registry.import_channels(
+            plan["add"],
+            registry_path,
+            dry_run=dry_run,
+            topics=[topic],
+            input_path="source assistant",
+        )
+        added_count += int(result.get("added_count") or 0)
+        updated_count += int(result.get("updated_count") or 0)
+        unchanged_count += int(result.get("unchanged_count") or 0)
+        for source in (result.get("sources") or []) + (result.get("updated_sources") or []) + (result.get("unchanged_sources") or []):
+            if isinstance(source, dict):
+                preview_sources.append(_desk_source_record(source))
+
+    payload = source_registry.load_registry(registry_path, missing_ok=True)
+    existing = {str(source.get("source_id")): source for source in payload.get("sources", []) if isinstance(source, dict)}
+    llm_plan = {"remove": [], "disable": [], "enable": []}
+    if not _source_assistant_has_plan(plan) and confirm_external_ai:
+        llm_plan = _source_assistant_llm_plan(instruction, topic, existing)
+        llm_used = True
+
+    def source_ids(values: list[str]) -> list[str]:
+        return [_source_id_from_channel(value) for value in values]
+
+    for source_id in _dedupe_source_ids(source_ids(plan["disable"]) + llm_plan["disable"]):
+        source = existing.get(source_id)
+        if not source:
+            continue
+        disabled_count += 1
+        preview_sources.append(_desk_source_record({**source, "enabled": False}))
+        if not dry_run:
+            source_registry.update_source_enabled(registry_path, source_id=source_id, enabled=False)
+    for source_id in _dedupe_source_ids(source_ids(plan["enable"]) + llm_plan["enable"]):
+        source = existing.get(source_id)
+        if not source:
+            continue
+        enabled_count += 1
+        preview_sources.append(_desk_source_record({**source, "enabled": True}))
+        if not dry_run:
+            source_registry.update_source_enabled(registry_path, source_id=source_id, enabled=True)
+    remove_ids = [source_id for source_id in _dedupe_source_ids(source_ids(plan["remove"]) + llm_plan["remove"]) if source_id in existing]
+    removed_count += len(remove_ids)
+    for source_id in remove_ids:
+        preview_sources.append(_desk_source_record(existing[source_id]))
+    if remove_ids and not dry_run:
+        source_registry.remove_sources(registry_path, source_ids=remove_ids)
+
+    operation_count = added_count + updated_count + unchanged_count + removed_count + enabled_count + disabled_count
+    if operation_count == 0:
+        ai_hint = (
+            " AI keys are configured, but Signal Desk will not send private source lists to an external model without a dedicated confirmation flow."
+            if report.llm_key_available()
+            else ""
+        )
+        return _source_operation_payload(
+            action="assistant",
+            topic=topic,
+            dry_run=True,
+            title="No source changes found",
+            detail=f"Include Telegram handles, t.me links, numeric chat IDs, or enable AI source planning. For example: add @remote_jobs; remove @old_jobs.{ai_hint}",
+            llm_used=llm_used,
+        )
+    return _source_operation_payload(
+        action="assistant",
+        topic=topic,
+        dry_run=dry_run,
+        added_count=added_count,
+        updated_count=updated_count,
+        unchanged_count=unchanged_count,
+        removed_count=removed_count,
+        enabled_count=enabled_count,
+        disabled_count=disabled_count,
+        preview_sources=preview_sources[:12],
+        title="Source plan ready" if dry_run else "Source plan applied",
+        detail="Review the plan, then apply it." if dry_run else "Signal Desk updated the local source registry.",
+        llm_used=llm_used,
+    )
 
 
 def create_profile_from_brief(conn, body: dict) -> dict:
@@ -2648,6 +3148,10 @@ class DashboardHandler(BaseHTTPRequestHandler):
                         result = test_desk_delivery_target(conn, parts[3], body)
                     self._json(HTTPStatus.OK, {"ok": True, "result": result})
                     return
+                if len(parts) == 5 and parts[4] == "detect-chat-id":
+                    result = detect_desk_delivery_chat_id(parts[3], body)
+                    self._json(HTTPStatus.OK, {"ok": True, "result": result})
+                    return
                 raise ValueError("Unsupported notification settings path.")
             if parsed.path == "/api/desk/sources/preview":
                 DashboardHandler._require_loopback_access(self, "Source import")
@@ -2656,6 +3160,14 @@ class DashboardHandler(BaseHTTPRequestHandler):
             if parsed.path == "/api/desk/sources/import":
                 DashboardHandler._require_loopback_access(self, "Source import")
                 self._json(HTTPStatus.OK, {"ok": True, "result": import_desk_sources(body)})
+                return
+            if parsed.path == "/api/desk/sources/starter":
+                DashboardHandler._require_loopback_access(self, "Starter source import")
+                self._json(HTTPStatus.OK, {"ok": True, "result": import_starter_sources(body)})
+                return
+            if parsed.path == "/api/desk/sources/assistant":
+                DashboardHandler._require_loopback_access(self, "Source assistant")
+                self._json(HTTPStatus.OK, {"ok": True, "result": run_source_assistant(body)})
                 return
             if parsed.path.startswith("/api/desk/sources/") and parsed.path.endswith("/enabled"):
                 DashboardHandler._require_loopback_access(self, "Source library")
@@ -2666,6 +3178,11 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 DashboardHandler._require_loopback_access(self, "Source library")
                 source_id = unquote(parsed.path.removeprefix("/api/desk/sources/").removesuffix("/topics").strip("/"))
                 self._json(HTTPStatus.OK, {"ok": True, "sources": set_desk_source_topics(source_id, body)})
+                return
+            if parsed.path.startswith("/api/desk/sources/") and parsed.path.endswith("/remove"):
+                DashboardHandler._require_loopback_access(self, "Source library")
+                source_id = unquote(parsed.path.removeprefix("/api/desk/sources/").removesuffix("/remove").strip("/"))
+                self._json(HTTPStatus.OK, {"ok": True, "sources": remove_desk_source(source_id, body)})
                 return
             if parsed.path == "/api/git/check-updates":
                 self._json(HTTPStatus.OK, {"ok": True, "git": _git_update_status(fetch=True)})

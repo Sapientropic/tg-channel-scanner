@@ -410,6 +410,31 @@ def update_source_topics(registry_path: Path, *, source_id: str, topics: list[st
     raise RegistryError(f"Source not found: {source_id}")
 
 
+def remove_sources(registry_path: Path, *, source_ids: list[str]) -> dict:
+    payload = load_registry(registry_path)
+    issues = validate_registry(payload)
+    if issues:
+        raise RegistryError(validation_message(issues))
+    requested = set(source_ids)
+    if not requested:
+        raise RegistryError("Select at least one source to remove")
+    before = len(payload.get("sources", []))
+    payload["sources"] = [
+        source
+        for source in payload.get("sources", [])
+        if not isinstance(source, dict) or source.get("source_id") not in requested
+    ]
+    removed_count = before - len(payload.get("sources", []))
+    if removed_count == 0:
+        raise RegistryError("No matching sources were removed")
+    save_registry(registry_path, payload)
+    return {
+        "registry_path": str(registry_path),
+        "removed_count": removed_count,
+        "source_count": len(payload.get("sources", [])),
+    }
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Maintain a private T-Sense source registry.")
     subparsers = parser.add_subparsers(dest="command", required=True)

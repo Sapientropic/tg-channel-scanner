@@ -32,6 +32,7 @@ import type {
   DeskNotificationTokenStatus,
   DeskSource,
   DeskSourcesResult,
+  DeliveryChatDetectionResult,
   DeliveryTestResult,
   DeliveryTarget,
   FeedbackExportResult,
@@ -65,12 +66,14 @@ export function SettingsView({
   undoFeedbackDecision,
   runAgainWithLearning,
   deliveryTest,
+  deliveryChatDetection,
   notificationTokenStatus,
   notificationTokenError,
   sourceLibrary,
   sourceLibraryError,
   sourceImportResult,
   saveDeliveryTarget,
+  detectDeliveryChatId,
   saveNotificationToken,
   clearNotificationToken,
   saveAiApiKey,
@@ -78,7 +81,11 @@ export function SettingsView({
   testDeliveryTarget,
   previewSourceImport,
   importSources,
+  importStarterSources,
+  previewSourceAssistant,
+  applySourceAssistant,
   setSourceEnabled,
+  removeSource,
   setSourceTopics,
   busy,
   focusTarget,
@@ -100,12 +107,14 @@ export function SettingsView({
   undoFeedbackDecision: (cardId: string) => void;
   runAgainWithLearning: () => void;
   deliveryTest: DeliveryTestResult | null;
+  deliveryChatDetection: DeliveryChatDetectionResult | null;
   notificationTokenStatus: DeskNotificationTokenStatus | null;
   notificationTokenError: string | null;
   sourceLibrary: DeskSourcesResult | null;
   sourceLibraryError: string | null;
   sourceImportResult: SourceImportResult | null;
   saveDeliveryTarget: (targetId: string, chatId: string, enabled: boolean) => Promise<void>;
+  detectDeliveryChatId: (targetId: string) => Promise<DeliveryChatDetectionResult>;
   saveNotificationToken: (token: string) => Promise<void>;
   clearNotificationToken: () => Promise<void>;
   saveAiApiKey: (provider: string, apiKey: string) => Promise<void>;
@@ -113,7 +122,11 @@ export function SettingsView({
   testDeliveryTarget: (targetId: string, chatId: string) => Promise<void>;
   previewSourceImport: (sources: string, topic: string) => Promise<SourceImportResult>;
   importSources: (sources: string, topic: string) => Promise<SourceImportResult>;
+  importStarterSources: (topic: string) => Promise<SourceImportResult>;
+  previewSourceAssistant: (instruction: string, topic: string, confirmExternalAi?: boolean) => Promise<SourceImportResult>;
+  applySourceAssistant: (instruction: string, topic: string, confirmExternalAi?: boolean) => Promise<SourceImportResult>;
   setSourceEnabled: (sourceId: string, enabled: boolean) => Promise<void>;
+  removeSource: (sourceId: string) => Promise<void>;
   setSourceTopics: (sourceId: string, topics: string[]) => Promise<void>;
   busy: boolean;
   focusTarget?: SettingsTask | null;
@@ -161,6 +174,9 @@ export function SettingsView({
             busy={busy}
             hasSavedSources={Boolean(sourceLibrary?.source_count)}
             importSources={importSources}
+            importStarterSources={importStarterSources}
+            previewSourceAssistant={previewSourceAssistant}
+            applySourceAssistant={applySourceAssistant}
             previewSourceImport={previewSourceImport}
             result={sourceImportResult}
           />
@@ -168,6 +184,7 @@ export function SettingsView({
             busy={busy}
             error={sourceLibraryError}
             library={sourceLibrary}
+            removeSource={removeSource}
             setSourceEnabled={setSourceEnabled}
             setSourceTopics={setSourceTopics}
             sourceStats={sourceStats}
@@ -209,6 +226,8 @@ export function SettingsView({
               {targets.map((target) => (
                 <DeliveryTargetEditor
                   busy={busy}
+                  detectionResult={deliveryChatDetection?.target_id === target.target_id ? deliveryChatDetection : null}
+                  detectDeliveryChatId={detectDeliveryChatId}
                   key={target.target_id}
                   saveDeliveryTarget={saveDeliveryTarget}
                   target={target}
@@ -526,6 +545,7 @@ function SourceLibraryPanel({
   library,
   error,
   busy,
+  removeSource,
   setSourceEnabled,
   setSourceTopics,
   sourceStats,
@@ -533,6 +553,7 @@ function SourceLibraryPanel({
   library: DeskSourcesResult | null;
   error: string | null;
   busy: boolean;
+  removeSource: (sourceId: string) => Promise<void>;
   setSourceEnabled: (sourceId: string, enabled: boolean) => Promise<void>;
   setSourceTopics: (sourceId: string, topics: string[]) => Promise<void>;
   sourceStats: SourceStat[];
@@ -676,6 +697,7 @@ function SourceLibraryPanel({
               <SourceLibraryRow
                 busy={busy}
                 key={source.source_id}
+                removeSource={removeSource}
                 setSourceEnabled={setSourceEnabled}
                 setSourceTopics={setSourceTopics}
                 source={source}
@@ -762,11 +784,13 @@ export function sourceLibraryActivityLabel(sources: SourceStat[]) {
 function SourceLibraryRow({
   source,
   busy,
+  removeSource,
   setSourceEnabled,
   setSourceTopics,
 }: {
   source: DeskSource;
   busy: boolean;
+  removeSource: (sourceId: string) => Promise<void>;
   setSourceEnabled: (sourceId: string, enabled: boolean) => Promise<void>;
   setSourceTopics: (sourceId: string, topics: string[]) => Promise<void>;
 }) {
@@ -831,6 +855,16 @@ function SourceLibraryRow({
           type="button"
         >
           <span>{editingTopics ? "Hide editor" : "Edit topics"}</span>
+        </button>
+        <button
+          aria-label={`${source.label}: Remove source`}
+          className="text-button secondary danger"
+          disabled={busy}
+          onClick={() => void removeSource(source.source_id).catch(() => undefined)}
+          type="button"
+        >
+          <Trash2 size={15} />
+          <span>Remove</span>
         </button>
       </div>
       {editingTopics && (
@@ -925,21 +959,33 @@ function SourceImportPanel({
   result,
   previewSourceImport,
   importSources,
+  importStarterSources,
+  previewSourceAssistant,
+  applySourceAssistant,
   busy,
   hasSavedSources,
 }: {
   result: SourceImportResult | null;
   previewSourceImport: (sources: string, topic: string) => Promise<SourceImportResult>;
   importSources: (sources: string, topic: string) => Promise<SourceImportResult>;
+  importStarterSources: (topic: string) => Promise<SourceImportResult>;
+  previewSourceAssistant: (instruction: string, topic: string, confirmExternalAi?: boolean) => Promise<SourceImportResult>;
+  applySourceAssistant: (instruction: string, topic: string, confirmExternalAi?: boolean) => Promise<SourceImportResult>;
   busy: boolean;
   hasSavedSources: boolean;
 }) {
   const [sources, setSources] = useState("");
   const [topic, setTopic] = useState("jobs");
+  const [assistantText, setAssistantText] = useState("");
+  const [assistantExternalAi, setAssistantExternalAi] = useState(false);
+  const [assistantPreviewKey, setAssistantPreviewKey] = useState("");
   const [previewKey, setPreviewKey] = useState("");
   const currentKey = `${sources.trim()}\n${topic.trim().toLowerCase() || "jobs"}`;
+  const assistantKey = `${assistantText.trim()}\n${topic.trim().toLowerCase() || "jobs"}\n${assistantExternalAi ? "ai" : "local"}`;
   const canPreview = sources.trim().length > 0;
   const canImport = canPreview && previewKey === currentKey && result?.dry_run === true;
+  const canAssistantPreview = assistantText.trim().length > 0;
+  const canAssistantApply = canAssistantPreview && assistantPreviewKey === assistantKey && result?.dry_run === true && result.action === "assistant";
   const previewSources = result?.preview_sources ?? [];
   return (
     <details className="table-section source-import-panel source-import-details" open={!hasSavedSources}>
@@ -950,6 +996,72 @@ function SourceImportPanel({
         </span>
         {hasSavedSources && <small>Open when adding new channels</small>}
       </summary>
+      <div className="source-quick-actions" aria-label="One-click source setup">
+        <button
+          className="text-button"
+          disabled={busy}
+          onClick={() => void importStarterSources(topic).catch(() => undefined)}
+          type="button"
+        >
+          <Database size={15} />
+          <span>Use starter set</span>
+        </button>
+      </div>
+      <form
+        className="source-import-form source-assistant-form"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (!canAssistantPreview) {
+            return;
+          }
+          void previewSourceAssistant(assistantText, topic, assistantExternalAi)
+            .then((next) => {
+              if (next.dry_run && next.action === "assistant") {
+                setAssistantPreviewKey(assistantKey);
+              }
+            })
+            .catch(() => undefined);
+        }}
+      >
+        <label className="source-import-field">
+          <span>Source assistant</span>
+          <textarea
+            onChange={(event) => {
+              setAssistantText(event.target.value);
+              setAssistantPreviewKey("");
+            }}
+            placeholder={"add @remote_jobs and @frontend_jobs\npause @old_jobs\nremove @spam_jobs"}
+            rows={4}
+            value={assistantText}
+          />
+        </label>
+        <div className="source-import-actions">
+          <label className="source-assistant-ai">
+            <input
+              checked={assistantExternalAi}
+              onChange={(event) => {
+                setAssistantExternalAi(event.target.checked);
+                setAssistantPreviewKey("");
+              }}
+              type="checkbox"
+            />
+            <span>Use AI on saved source names</span>
+          </label>
+          <button className="text-button secondary" disabled={busy || !canAssistantPreview} type="submit">
+            <Eye size={15} />
+            <span>{busy ? "Checking" : "Preview plan"}</span>
+          </button>
+          <button
+            className="text-button"
+            disabled={busy || !canAssistantApply}
+            onClick={() => void applySourceAssistant(assistantText, topic, assistantExternalAi).catch(() => undefined)}
+            type="button"
+          >
+            <Save size={15} />
+            <span>Apply plan</span>
+          </button>
+        </div>
+      </form>
       <form
         className="source-import-form"
         onSubmit={(event) => {
@@ -1001,6 +1113,9 @@ function SourceImportPanel({
             <strong>{result.title || (result.written ? "Sources saved" : "Source preview ready")}</strong>
             <span>
               {result.added_count} new / {result.updated_count} updated / {result.unchanged_count} already saved
+              {result.removed_count ? ` / ${result.removed_count} removed` : ""}
+              {result.enabled_count ? ` / ${result.enabled_count} enabled` : ""}
+              {result.disabled_count ? ` / ${result.disabled_count} paused` : ""}
             </span>
             {previewSources.length > 0 && (
               <div className="source-import-preview-list" aria-label="Preview sources">
@@ -1025,13 +1140,17 @@ function deliveryChatId(target: DeliveryTarget) {
 function DeliveryTargetEditor({
   target,
   testResult,
+  detectionResult,
   saveDeliveryTarget,
+  detectDeliveryChatId,
   testDeliveryTarget,
   busy,
 }: {
   target: DeliveryTarget;
   testResult: DeliveryTestResult | null;
+  detectionResult: DeliveryChatDetectionResult | null;
   saveDeliveryTarget: (targetId: string, chatId: string, enabled: boolean) => Promise<void>;
+  detectDeliveryChatId: (targetId: string) => Promise<DeliveryChatDetectionResult>;
   testDeliveryTarget: (targetId: string, chatId: string) => Promise<void>;
   busy: boolean;
 }) {
@@ -1090,6 +1209,23 @@ function DeliveryTargetEditor({
         <button
           className="text-button secondary"
           disabled={busy}
+          onClick={() =>
+            void detectDeliveryChatId(target.target_id)
+              .then((result) => {
+                if (result.ok && result.chat_id) {
+                  setChatId(result.chat_id);
+                }
+              })
+              .catch(() => undefined)
+          }
+          type="button"
+        >
+          <PlugZap size={15} />
+          <span>Detect chat ID</span>
+        </button>
+        <button
+          className="text-button secondary"
+          disabled={busy}
           onClick={() => void testDeliveryTarget(target.target_id, chatId)}
           type="button"
         >
@@ -1103,6 +1239,12 @@ function DeliveryTargetEditor({
         <div className={`delivery-test-result ${testResult.ok ? "ok" : "failed"}`} role="status">
           <strong>{testResult.title || "Notification test"}</strong>
           <span>{testResult.detail || testResult.status}</span>
+        </div>
+      )}
+      {detectionResult && (
+        <div className={`delivery-test-result ${detectionResult.ok ? "ok" : "failed"}`} role="status">
+          <strong>{detectionResult.title || "Chat ID detection"}</strong>
+          <span>{detectionResult.detail || detectionResult.status}</span>
         </div>
       )}
     </form>

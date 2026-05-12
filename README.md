@@ -69,7 +69,7 @@ normal user does not have to edit TOML, copy JSON, or remember CLI commands.
 | `Review` | Triage the newest/highest-priority cards first, then teach future matching with Keep / Skip / Wrong match / Tune profile. |
 | `Profiles` | Create profiles from plain language or files, edit matching rules, tune scan window and post limits. |
 | `Runs` | See whether recent scans are healthy and open generated report artifacts. |
-| `Settings` | Add sources, set AI/OCR keys, configure notifications, manage learning data, and check repository state. |
+| `Settings` | Add or prune sources with starter sets or Source assistant, set AI/OCR keys, configure notifications, manage learning data, and check repository state. |
 
 Signal Desk is still local-first. It does not store raw Telegram messages,
 sessions, API keys, or bot tokens in dashboard state.
@@ -114,7 +114,7 @@ Platform-specific notes for local key storage and auto-scan setup live in
    login or an LLM key.
 2. Connect Telegram using your `api_id` and `api_hash` from
    [my.telegram.org/apps](https://my.telegram.org/apps).
-3. Add channel links or handles in `Settings -> Sources`.
+3. Add sources in `Settings -> Sources` with the starter set, pasted handles, or Source assistant.
 4. Run a dry scan from `Start`.
 5. Review cards in `Review`, then tune the profile when the results are too
    broad or too narrow.

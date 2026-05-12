@@ -2422,10 +2422,9 @@ def setup_checklist(
     runs: list[dict[str, Any]],
     active_targets: list[dict[str, Any]],
     latest_source_attention: bool,
-) -> list[dict[str, str]]:
+    ) -> list[dict[str, str]]:
     preferred = preferred_setup_profile(active_profiles)
     first_run_command = f"tgcs monitor run --profile-id {preferred['profile_id']} --delivery-mode dry-run"
-    source_command = source_attention_next_step(profile_for_run(active_profiles, runs[0])) if runs else ""
 
     if not profiles:
         profile_status = "active"
@@ -2487,14 +2486,14 @@ def setup_checklist(
             "Source access",
             source_status,
             detail=source_detail,
-            command=source_command if latest_source_attention else "",
+            command="",
         ),
         setup_check(
             "first_run",
             "First monitor run",
             first_run_status,
             detail=first_run_detail,
-            command=source_command if latest_source_attention else first_run_command,
+            command="" if latest_source_attention else first_run_command,
         ),
         setup_check(
             "delivery",
@@ -2519,19 +2518,10 @@ def latest_run_needs_source_attention(run: dict[str, Any]) -> bool:
 def source_attention_next_step(profile: dict[str, Any]) -> str:
     config = profile.get("config") if isinstance(profile.get("config"), dict) else {}
     profile_id = str(profile.get("profile_id") or config.get("id") or "market-news")
-    topics = [
-        str(topic).strip()
-        for topic in (config.get("source_topics") or config.get("topics") or [])
-        if str(topic).strip()
-    ]
-    if not topics and profile_id == "jobs-fast":
-        topics = ["jobs"]
-    topic_args = " ".join(f"--topic {topic}" for topic in topics)
-    list_name = "jobs.txt" if "jobs" in topics else "channels.txt"
-    command = f"tgcs sources import channel_lists/{list_name}"
-    if topic_args:
-        command = f"{command} {topic_args}"
-    return f"{command}; then tgcs monitor run --profile-id {profile_id} --delivery-mode dry-run"
+    return (
+        "Open Signal Desk Settings > Sources, use starter sources or Source assistant, "
+        f"then run a dry scan for {profile_id}."
+    )
 
 
 def source_value_stats(conn: sqlite3.Connection, runs: list[dict[str, Any]] | None = None) -> list[dict[str, Any]]:

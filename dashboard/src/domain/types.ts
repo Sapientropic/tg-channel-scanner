@@ -106,6 +106,9 @@ export type SourceImportResult = {
   added_count: number;
   updated_count: number;
   unchanged_count: number;
+  removed_count?: number;
+  enabled_count?: number;
+  disabled_count?: number;
   source_count: number;
   registry_path: string;
   preview_sources: Array<{
@@ -113,6 +116,8 @@ export type SourceImportResult = {
     source_id: string;
   }>;
   preview_truncated_count: number;
+  action?: string;
+  llm_used?: boolean;
   title?: string;
   detail?: string;
   next_action?: string;
@@ -274,6 +279,20 @@ export type DeliveryTestResult = {
   title?: string;
   detail?: string;
   error?: string;
+  finished_at?: string;
+};
+
+export type DeliveryChatDetectionResult = {
+  schema_version?: "desk_delivery_chat_detection_v1";
+  target_id: string;
+  target_type: string;
+  ok: boolean;
+  status: string;
+  source: string;
+  chat_id: string;
+  chat_type: string;
+  title?: string;
+  detail?: string;
   finished_at?: string;
 };
 

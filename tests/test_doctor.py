@@ -201,6 +201,17 @@ class DoctorTests(unittest.TestCase):
         self.assertEqual(result.details["minimax_key_type"], "token_plan")
         self.assertEqual(result.details["minimax_base_url"], "https://api.minimaxi.com/v1")
 
+    def test_local_signal_desk_ai_key_counts_as_llm_provider(self):
+        from scripts import doctor
+
+        with patch.dict("os.environ", {}, clear=True):
+            with patch.object(doctor.report, "ai_secret", side_effect=lambda name: "sk-local" if name == "DEEPSEEK_API_KEY" else None):
+                result = doctor.check_llm_provider()
+
+        self.assertEqual(result.status, "pass")
+        self.assertIn("deepseek", result.details["providers"])
+        self.assertEqual(result.details["provider_sources"]["deepseek"], "local_store")
+
     def test_source_registry_warns_when_only_placeholder_sources_exist(self):
         from scripts import doctor
 
@@ -232,6 +243,8 @@ class DoctorTests(unittest.TestCase):
 
         self.assertEqual(result.status, "warn")
         self.assertIn("placeholder", result.message)
+        self.assertIn("Settings > Sources", result.next_step)
+        self.assertIn("Source assistant", result.next_step)
         self.assertIn("tgcs init --starter jobs --force", result.next_step)
         self.assertIn("tgcs sources import channel_lists/jobs.txt --topic jobs", result.next_step)
         self.assertEqual(result.details["placeholder_count"], 1)

@@ -26,6 +26,10 @@ scripts/scan.sh channel_lists/my-jobs.txt --since 2026-05-06T07:30:00Z
 scripts\scan.bat channel_lists\my-jobs.txt 24
 ```
 
+`jobs.txt` is the packaged Developer Opportunity starter used by Signal Desk.
+It is deliberately illustrative; replace those handles from Signal Desk Settings
+before relying on live scans.
+
 ## Tips
 
 - Keep lists under 50 channels per scan for smooth operation (no hard limit — just rate limiting)

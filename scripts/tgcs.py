@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import shutil
 import sqlite3
 import subprocess
@@ -136,6 +137,40 @@ def _run(cmd: list[str | Path], *, cwd: Path | None = None) -> int:
     return completed.returncode
 
 
+def _parse_node_version(raw: str) -> tuple[int, int, int] | None:
+    text = raw.strip().removeprefix("v")
+    match = re.match(r"^(\d+)\.(\d+)(?:\.(\d+))?", text)
+    if not match:
+        return None
+    return int(match.group(1)), int(match.group(2)), int(match.group(3) or 0)
+
+
+def _node_version_satisfies_dashboard_contract(version: tuple[int, int, int]) -> bool:
+    major, minor, patch = version
+    if major == 20:
+        return (minor, patch) >= (19, 0)
+    if major == 22:
+        return (minor, patch) >= (12, 0)
+    return major > 22
+
+
+def _dashboard_build_prerequisite_error() -> str:
+    if not shutil.which("npm"):
+        return "npm was not found. Install Node.js 20.19+ or 22.12+ with npm, then run ./signal-desk again."
+    if not shutil.which("node"):
+        return "node was not found. Install Node.js 20.19+ or 22.12+ with npm, then run ./signal-desk again."
+    try:
+        completed = subprocess.run(["node", "--version"], check=False, capture_output=True, text=True, timeout=5)
+    except (OSError, subprocess.TimeoutExpired):
+        return "Node.js version could not be checked. Install Node.js 20.19+ or 22.12+, then run ./signal-desk again."
+    stdout = completed.stdout or ""
+    version = _parse_node_version(stdout)
+    if version is None or not _node_version_satisfies_dashboard_contract(version):
+        found = stdout.strip() or "unknown"
+        return f"Node.js {found} does not satisfy the dashboard build requirement. Install Node.js 20.19+ or 22.12+, then run ./signal-desk again."
+    return ""
+
+
 def _quickstart_check(check_id: str, label: str, status: str, detail: str, command: str = "") -> dict[str, str]:
     payload = {
         "check_id": check_id,
@@ -229,8 +264,8 @@ def quickstart_jobs_status() -> dict[str, Any]:
         why = "Local .tgcs defaults are missing."
     elif not jobs_sources:
         stage = "source_import_required"
-        next_command = "tgcs init --starter jobs"
-        why = "The local source registry does not yet have enabled jobs-topic sources."
+        next_command = "tgcs dashboard"
+        why = "The local source registry does not yet have enabled jobs-topic sources; use Settings > Sources to install or edit them."
     elif not credentials:
         stage = "doctor_required"
         next_command = "tgcs doctor --profile jobs"
@@ -275,7 +310,7 @@ def quickstart_jobs_status() -> dict[str, Any]:
             "jobs_sources",
             "Jobs sources",
             status_for("jobs_sources"),
-            "Merge channel_lists/jobs.txt into .tgcs/sources.json with the jobs topic.",
+            "Install the packaged starter set, then add/pause/remove real channels from Signal Desk Settings > Sources.",
             "tgcs init --starter jobs",
         ),
         _quickstart_check(
@@ -342,7 +377,7 @@ def _print_init_next_steps(starter: str = "default") -> None:
     if starter == "jobs":
         print("- Check jobs setup: tgcs doctor --profile jobs")
         print("- Run jobs monitor: tgcs monitor run --profile-id jobs-fast --delivery-mode dry-run")
-    print("- Import real jobs sources: tgcs sources import channel_lists/jobs.txt --topic jobs")
+    print("- Manage sources: tgcs dashboard (Settings > Sources: Use starter set or Source assistant)")
     print("- Login: tgcs login")
     print("- Run report: tgcs run")
     print("- Print scheduler command: tgcs schedule print --profile-id jobs-fast --interval-minutes 15")
@@ -640,6 +675,11 @@ def run_monitor(args: argparse.Namespace) -> int:
 def run_dashboard(args: argparse.Namespace) -> int:
     static_dir = _root_path(args.static_dir or "dashboard/dist")
     if not args.no_build and not static_dir.exists() and not args.static_dir:
+        prereq_error = _dashboard_build_prerequisite_error()
+        if prereq_error:
+            print(f"Error: {prereq_error}", file=sys.stderr)
+            print("Next: install Node.js, or run with a checkout that already includes dashboard/dist.", file=sys.stderr)
+            return 3
         dashboard_dir = PROJECT_ROOT / "dashboard"
         code = _run(["npm", "ci"], cwd=dashboard_dir)
         if code != 0:

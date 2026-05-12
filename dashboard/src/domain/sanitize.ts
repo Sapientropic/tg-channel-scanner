@@ -1,6 +1,7 @@
 export { emptyDashboardState, sanitizeDashboardState, sanitizeInboxCards } from "./sanitize/dashboard";
 export {
   sanitizeDeliveryTestResult,
+  sanitizeDeliveryChatDetectionResult,
   sanitizeDeskActions,
   sanitizeDeskActionResult,
   sanitizeDeskAiSettingsStatus,
