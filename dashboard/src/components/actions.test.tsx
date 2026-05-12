@@ -152,6 +152,34 @@ describe("Signal Desk journey", () => {
     expect(automation?.advancedActionIds).not.toContain("live_delivery_human");
   });
 
+  it("keeps unsupported scheduler installs on the manual preview path", () => {
+    const unsupportedScheduler: DeskSchedulerStatus = {
+      ...schedulerStatus(false),
+      available: false,
+      status: "manual",
+      backend: "manual_cron_preview",
+      can_install: false,
+      can_remove: false,
+    };
+    const steps = buildJourneySteps(
+      actions,
+      {},
+      { stage: "ready", has_profiles: true, has_runs: true },
+      telegramReady,
+      unsupportedScheduler,
+    );
+
+    const automation = steps.find((step) => step.key === "automation");
+
+    expect(automation?.state).toBe("manual");
+    expect(automation?.stateLabel).toBe("Manual");
+    expect(automation?.detail).toContain("manual schedule preview");
+    expect(automation?.buttons.map((button) => button.label)).toEqual([
+      "Preview schedule",
+      "Notifications",
+    ]);
+  });
+
   it("replaces the automation turn-on control after a successful Desk install", () => {
     const steps = buildJourneySteps(
       actions,

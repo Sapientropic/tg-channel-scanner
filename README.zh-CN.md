@@ -72,6 +72,11 @@ API key 或 bot token。
 
 ## 快速开始
 
+环境要求：
+
+- Python 3.12+。
+- 如果要在本机自动构建 dashboard 资源，需要 Node.js 20.19+ 或 22.12+。
+
 ### Windows
 
 1. 安装 Python 3.12+。
@@ -79,7 +84,7 @@ API key 或 bot token。
 3. 双击 `Signal Desk.bat`。
 4. 浏览器打开后，保持启动器窗口开着。
 
-启动器会准备本地 Python 环境；如果有 Node/npm，也会构建 dashboard 资源。默认打开
+启动器会准备本地 Python 环境；如果有 Node.js 20.19+ 或 22.12+ 及 npm，也会构建 dashboard 资源。默认打开
 `127.0.0.1:8765`，如果端口被占用，会继续尝试 `8766-8799`。
 
 ### macOS / Linux
@@ -87,10 +92,16 @@ API key 或 bot token。
 ```bash
 git clone https://github.com/Sapientropic/T-Sense.git
 cd T-Sense
-chmod +x setup.sh tgcs
-./setup.sh
-./tgcs dashboard --open
+chmod +x setup.sh tgcs signal-desk "Signal Desk.command"
+./signal-desk
 ```
+
+`./signal-desk` 是推荐的 app-like 入口：首次运行会执行 setup，缺少本地默认配置时
+初始化 jobs starter，然后打开 Signal Desk。macOS 也可以从 Finder 打开
+`Signal Desk.command`。`./tgcs ...` 保留为专家 CLI 路径。
+
+本地 key 存储、自动扫描安装和 Linux headless 边界集中放在
+[docs/desktop-platforms.md](docs/desktop-platforms.md)，README 只保留启动路径。
 
 ### 第一轮有效结果
 
@@ -170,7 +181,7 @@ python scripts/monitor.py feedback-export \
 
 - Telegram 访问通过 Telethon / MTProto，只读取你本来就能访问的来源。
 - secrets 留在本机；`.tgcs/`、`output/`、session、日志、env 文件和 dashboard build 都被 Git 忽略。
-- Signal Desk 在可用时把通知 bot token 存到 Windows Credential Manager；专家路径也可以使用环境变量。
+- Signal Desk 在可用时使用本机 OS-backed secret storage；环境变量仍是稳定的专家 fallback。
 - live delivery 和 live schedule 都需要明确开启；默认先 dry-run。
 - 这是本地个人工作流工具。使用时仍应遵守 Telegram 条款和频道规则。
 
@@ -179,11 +190,13 @@ python scripts/monitor.py feedback-export \
 | 路径 | 用途 |
 | --- | --- |
 | `Signal Desk.bat` | Windows app 式启动器。 |
+| `signal-desk` / `Signal Desk.command` | macOS/Linux app 式启动器。 |
 | `dashboard/` | Signal Desk 的 React dashboard 源码。 |
 | `scripts/` | 扫描、报告、monitor、source registry、delivery 和 dashboard server。 |
 | `profiles/` | Markdown profile 模板和 starter 配置。 |
 | `channel_lists/` | 示例频道列表输入。 |
 | `templates/` | 报告模板，以及 `tgcs demo` 使用的 demo fixture。 |
+| `docs/desktop-platforms.md` | 桌面启动器、本地 key 存储和自动扫描平台边界。 |
 | `docs/agent-cli-contract.md` | 给 agent 使用的稳定 JSON / CLI 合同。 |
 | `docs/getting-api-credentials.md` | Telegram API 凭证获取指南。 |
 | `docs/tos-risk-analysis.md` | ToS 与运行风险说明。 |

@@ -59,6 +59,11 @@ python -m pip install -r requirements.txt --quiet
 echo Installing optional pinned LLM dependencies (openai for summarize.py)...
 python -m pip install -r requirements-llm.txt --quiet 2>nul || echo   ^(openai not installed - summarize.py will need it later^)
 
+if exist "requirements-desktop.txt" (
+    echo Installing optional desktop integration dependencies...
+    python -m pip install -r requirements-desktop.txt --quiet 2>nul || echo   ^(desktop keyring extras not installed - environment variables still work^)
+)
+
 set "TELETHON_VERSION="
 for /f "delims=" %%v in ('python -c "import telethon; print(telethon.__version__)" 2^>nul') do set "TELETHON_VERSION=%%v"
 if "%TELETHON_VERSION%"=="" (

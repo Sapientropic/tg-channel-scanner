@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shutil
 import sqlite3
 import subprocess
 import sys
@@ -27,6 +28,8 @@ DEFAULT_PROFILE = "market-news"
 DEFAULT_FEEDBACK_EXPORT_PATH = "output/feedback/review-feedback.jsonl"
 DEFAULT_TGCLI_CONFIG_PATH = Path.home() / ".config" / "tgcli" / "config.toml"
 DEFAULT_SESSION_PATH = Path.home() / ".config" / "tgcli" / "session"
+SCHEDULER_LAUNCHD_LABEL = "com.sapientropic.tgcs.jobs-fast.dry-run"
+SCHEDULER_SYSTEMD_NAME = "tgcs-jobs-fast-dry-run"
 PROFILE_ALIASES = {
     "jobs": "profiles/templates/jobs.md",
     "airdrops": "profiles/templates/airdrops.md",
@@ -697,6 +700,22 @@ def _cron_prefix(interval_minutes: int) -> str:
     raise SystemExit("cron intervals above 59 minutes must be whole hours")
 
 
+def _schedule_platform(value: str | None) -> str:
+    if value and value != "auto":
+        return value
+    if sys.platform.startswith("win"):
+        return "windows"
+    if sys.platform == "darwin":
+        return "launchd"
+    # Keep auto aligned with the dashboard installer: systemd is only the
+    # default when a per-user runtime exists. Headless Linux or CI boxes often
+    # have systemctl on PATH but no user manager, so auto must stay preview-only
+    # via cron instead of implying install support that will fail at runtime.
+    if sys.platform.startswith("linux") and shutil.which("systemctl") and os.environ.get("XDG_RUNTIME_DIR"):
+        return "systemd"
+    return "cron"
+
+
 def _load_monitor_profile(profile_id: str) -> dict[str, Any]:
     try:
         from scripts import monitor
@@ -736,7 +755,7 @@ def run_schedule(args: argparse.Namespace) -> int:
         raise SystemExit("--interval-minutes must be at least 1")
 
     delivery_mode = args.delivery_mode
-    platform = args.platform or ("windows" if sys.platform.startswith("win") else "cron")
+    platform = _schedule_platform(args.platform)
 
     if platform == "windows":
         task_name = args.task_name or f"TGCS {profile_id}"
@@ -754,6 +773,43 @@ def run_schedule(args: argparse.Namespace) -> int:
             f'schtasks /Create /TN "{task_name}" /SC MINUTE /MO {interval_minutes} '
             f'/TR "{task_command}" /F'
         )
+        print("Preview command:")
+        print(preview_command)
+        return 0
+
+    if platform == "launchd":
+        tgcs_path = PROJECT_ROOT / "tgcs"
+        plist_path = Path.home() / "Library" / "LaunchAgents" / f"{SCHEDULER_LAUNCHD_LABEL}.plist"
+        preview_command = f'"{tgcs_path}" monitor run --profile-id {profile_id} --delivery-mode {delivery_mode}'
+        print("LaunchAgent plist path:")
+        print(plist_path)
+        print("ProgramArguments:")
+        print(f"{tgcs_path} monitor run --profile-id {profile_id} --delivery-mode {delivery_mode}")
+        print("StartInterval seconds:")
+        print(interval_minutes * 60)
+        print("Install command:")
+        print(f"launchctl load -w {plist_path}")
+        print("Preview command:")
+        print(preview_command)
+        return 0
+
+    if platform == "systemd":
+        tgcs_path = PROJECT_ROOT / "tgcs"
+        user_dir = Path.home() / ".config" / "systemd" / "user"
+        service_path = user_dir / f"{SCHEDULER_SYSTEMD_NAME}.service"
+        timer_path = user_dir / f"{SCHEDULER_SYSTEMD_NAME}.timer"
+        preview_command = f'"{tgcs_path}" monitor run --profile-id {profile_id} --delivery-mode {delivery_mode}'
+        print("systemd user service:")
+        print(service_path)
+        print("systemd user timer:")
+        print(timer_path)
+        print("ExecStart:")
+        print(f"{tgcs_path} monitor run --profile-id {profile_id} --delivery-mode {delivery_mode}")
+        print("Timer interval:")
+        print(f"OnUnitActiveSec={interval_minutes}min")
+        print("Install commands:")
+        print("systemctl --user daemon-reload")
+        print(f"systemctl --user enable --now {SCHEDULER_SYSTEMD_NAME}.timer")
         print("Preview command:")
         print(preview_command)
         return 0
@@ -909,8 +965,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     schedule = subparsers.add_parser("schedule", help="Print local scheduler commands without installing them.")
     schedule_subparsers = schedule.add_subparsers(dest="schedule_command", required=True)
-    schedule_print = schedule_subparsers.add_parser("print", help="Print a Task Scheduler or cron command.")
-    schedule_print.add_argument("--platform", choices=("windows", "cron"))
+    schedule_print = schedule_subparsers.add_parser("print", help="Print a local scheduler command without installing it.")
+    schedule_print.add_argument("--platform", choices=("auto", "windows", "launchd", "systemd", "cron"), default="auto")
     schedule_print.add_argument("--profile-id", default=DEFAULT_PROFILE)
     schedule_print.add_argument("--interval-minutes", type=int)
     schedule_print.add_argument("--delivery-mode", choices=("off", "dry-run", "live"), default="dry-run")

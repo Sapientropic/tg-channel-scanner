@@ -72,6 +72,18 @@ class DeliveryTests(unittest.TestCase):
         self.assertEqual(token.source, "windows_credential_manager")
         self.assertEqual(token.updated_at, "2026-05-10T00:00:00Z")
 
+    def test_token_resolution_reports_keyring_source_when_backend_is_keyring(self):
+        stored = delivery.local_credentials.StoredSecret(secret="stored-token", updated_at="2026-05-10T00:00:00Z")
+        with patch.dict("os.environ", {}, clear=True):
+            with patch.object(delivery.local_credentials, "is_supported", return_value=True):
+                with patch.object(delivery.local_credentials, "backend", return_value="keyring", create=True):
+                    with patch.object(delivery.local_credentials, "read_secret", return_value=stored):
+                        token = delivery.resolve_telegram_bot_token()
+
+        self.assertEqual(token.token, "stored-token")
+        self.assertEqual(token.source, "keyring")
+        self.assertEqual(token.updated_at, "2026-05-10T00:00:00Z")
+
 
 if __name__ == "__main__":
     unittest.main()

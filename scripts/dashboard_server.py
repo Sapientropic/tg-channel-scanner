@@ -11,7 +11,9 @@ import ipaddress
 import json
 import mimetypes
 import os
+import plistlib
 import re
+import shutil
 import subprocess
 import socket
 import sys
@@ -77,6 +79,8 @@ DESK_SOURCE_IMPORT_MAX_CHANNELS = 500
 DESK_SCHEDULER_PROFILE_ID = "jobs-fast"
 DESK_SCHEDULER_INTERVAL_MINUTES = 15
 DESK_SCHEDULER_TASK_NAME = "TGCS jobs-fast dry-run"
+DESK_SCHEDULER_LAUNCHD_LABEL = "com.sapientropic.tgcs.jobs-fast.dry-run"
+DESK_SCHEDULER_SYSTEMD_NAME = "tgcs-jobs-fast-dry-run"
 DESK_AI_PROVIDER_CONFIGS: dict[str, dict[str, str]] = {
     "openai": {
         "label": "OpenAI",
@@ -1005,9 +1009,34 @@ def _local_notification_token() -> local_credentials.StoredSecret | None:
     return local_credentials.read_secret(delivery.TELEGRAM_BOT_TOKEN_CREDENTIAL_TARGET)
 
 
+def _local_store_backend(local_supported: bool) -> str:
+    try:
+        selected = local_credentials.backend()
+    except Exception:
+        selected = local_credentials.BACKEND_UNSUPPORTED
+    if selected != local_credentials.BACKEND_UNSUPPORTED:
+        return selected
+    # Some tests patch is_supported/read/write directly to exercise dashboard
+    # behavior without invoking the OS store. Keep that compatibility while
+    # production still derives support from local_credentials.backend().
+    return local_credentials.BACKEND_WINDOWS if local_supported else local_credentials.BACKEND_UNSUPPORTED
+
+
+def _local_store_label(local_supported: bool) -> str:
+    try:
+        label = local_credentials.store_label()
+    except Exception:
+        label = "environment variables only"
+    if local_supported and label == "environment variables only":
+        return "Windows Credential Manager"
+    return label
+
+
 def desk_notification_token_status() -> dict:
     env_configured = bool(os.environ.get(delivery.TELEGRAM_BOT_TOKEN_ENV, "").strip())
     local_supported = local_credentials.is_supported()
+    local_backend = _local_store_backend(local_supported)
+    local_label = _local_store_label(local_supported)
     local_configured = False
     local_updated_at: str | None = None
     local_error = ""
@@ -1020,16 +1049,16 @@ def desk_notification_token_status() -> dict:
         local_configured = bool(stored and stored.secret.strip())
         local_updated_at = stored.updated_at if stored else None
 
-    source = "environment" if env_configured else "windows_credential_manager" if local_configured else "missing"
+    source = "environment" if env_configured else local_backend if local_configured else "missing"
     configured = env_configured or local_configured
     if env_configured:
         detail = "Telegram bot token is configured from the environment. Environment wins over local storage."
     elif local_configured:
-        detail = "Telegram bot token is saved in Windows Credential Manager."
+        detail = f"Telegram bot token is saved in {local_label}."
     elif local_supported:
         detail = "Telegram bot token is not configured."
     else:
-        detail = "⚠️ Needs confirmation: local secure token storage currently supports Windows Credential Manager only."
+        detail = "Local secure token storage is unavailable on this machine. Set TGCS_TELEGRAM_BOT_TOKEN instead."
     return {
         "schema_version": "desk_notification_token_status_v1",
         "configured": configured,
@@ -1038,6 +1067,8 @@ def desk_notification_token_status() -> dict:
         "env_configured": env_configured,
         "local_store_supported": local_supported,
         "local_store_configured": local_configured,
+        "local_store_backend": local_backend,
+        "local_store_label": local_label,
         "can_save": local_supported,
         "can_clear": local_supported and local_configured,
         "platform": sys.platform,
@@ -1063,7 +1094,7 @@ def update_desk_notification_token(body: dict) -> dict:
     if unexpected:
         raise ValueError(f"Unsupported notification token field: {', '.join(unexpected)}")
     if not local_credentials.is_supported():
-        raise ValueError("⚠️ Needs confirmation: saving bot tokens in Signal Desk currently requires Windows Credential Manager.")
+        raise ValueError("Local secure token storage is unavailable. Set TGCS_TELEGRAM_BOT_TOKEN in the environment instead.")
     clear = body.get("clear")
     raw_token = body.get("token")
     if clear is not None and not isinstance(clear, bool):
@@ -1093,6 +1124,8 @@ def _local_ai_secret(provider_id: str) -> local_credentials.StoredSecret | None:
 def desk_ai_settings_status() -> dict:
     providers = []
     local_supported = local_credentials.is_supported()
+    local_backend = _local_store_backend(local_supported)
+    local_label = _local_store_label(local_supported)
     for provider_id, config in DESK_AI_PROVIDER_CONFIGS.items():
         env_name = config["env_name"]
         env_configured = bool(os.environ.get(env_name, "").strip())
@@ -1103,8 +1136,8 @@ def desk_ai_settings_status() -> dict:
             source = "environment"
             detail = f"{config['label']} is configured from {env_name}. Environment wins over local storage."
         elif local_configured:
-            source = "windows_credential_manager"
-            detail = f"{config['label']} API key is saved in Windows Credential Manager."
+            source = local_backend
+            detail = f"{config['label']} API key is saved in {local_label}."
         else:
             source = "missing"
             detail = f"{config['label']} API key is not configured."
@@ -1117,6 +1150,8 @@ def desk_ai_settings_status() -> dict:
                 "source": source,
                 "env_configured": env_configured,
                 "local_store_configured": local_configured,
+                "local_store_backend": local_backend,
+                "local_store_label": local_label,
                 "can_save": local_supported,
                 "can_clear": local_configured,
                 "updated_at": None if env_configured else stored.updated_at if stored else None,
@@ -1128,6 +1163,8 @@ def desk_ai_settings_status() -> dict:
         "schema_version": "desk_ai_settings_status_v1",
         "configured_count": configured_count,
         "local_store_supported": local_supported,
+        "local_store_backend": local_backend,
+        "local_store_label": local_label,
         "platform": sys.platform,
         "detail": (
             f"{configured_count} AI provider key{'s' if configured_count != 1 else ''} configured."
@@ -1164,7 +1201,7 @@ def update_desk_ai_settings(body: dict) -> dict:
     if unexpected:
         raise ValueError(f"Unsupported AI settings field: {', '.join(sorted(unexpected))}")
     if not local_credentials.is_supported():
-        raise ValueError("⚠️ Needs confirmation: saving AI API keys in Signal Desk currently requires Windows Credential Manager.")
+        raise ValueError("Local secure API key storage is unavailable. Set the provider API key in the environment instead.")
     provider_id = _clean_ai_provider(body.get("provider"))
     config = DESK_AI_PROVIDER_CONFIGS[provider_id]
     clear = body.get("clear") is True
@@ -1815,8 +1852,9 @@ def _scheduler_result(
 
 
 def _run_scheduler_command(args: list[str]) -> subprocess.CompletedProcess[str]:
-    # Task Scheduler should return quickly for query/create/delete. Keep this bounded
-    # so a Windows permission dialog or scheduler hang cannot freeze Signal Desk.
+    # Local scheduler commands should return quickly for query/create/delete.
+    # Keep this bounded so a permission prompt or daemon hang cannot freeze
+    # Signal Desk. Callers must pass fixed argv lists, never browser input.
     return subprocess.run(
         args,
         cwd=PROJECT_ROOT,
@@ -1827,21 +1865,110 @@ def _run_scheduler_command(args: list[str]) -> subprocess.CompletedProcess[str]:
     )
 
 
-def desk_scheduler_status() -> dict:
-    base = {
+def _scheduler_backend() -> str:
+    if sys.platform.startswith("win"):
+        return "windows_schtasks"
+    if sys.platform == "darwin":
+        return "macos_launchd"
+    if sys.platform.startswith("linux") and shutil.which("systemctl") and os.environ.get("XDG_RUNTIME_DIR"):
+        return "linux_systemd_user"
+    return "manual_cron_preview"
+
+
+def _scheduler_base(backend: str) -> dict:
+    can_install = backend in {"windows_schtasks", "macos_launchd", "linux_systemd_user"}
+    return {
         "schema_version": "desk_scheduler_status_v1",
         "task_label": "jobs-fast dry-run",
         "interval_minutes": DESK_SCHEDULER_INTERVAL_MINUTES,
+        "platform": sys.platform,
+        "backend": backend,
+        "can_install": can_install,
+        "can_remove": can_install,
         "checked_at": _utc_now(),
     }
-    if not sys.platform.startswith("win"):
+
+
+def _launchd_plist_path() -> Path:
+    return Path.home() / "Library" / "LaunchAgents" / f"{DESK_SCHEDULER_LAUNCHD_LABEL}.plist"
+
+
+def _systemd_user_dir() -> Path:
+    return Path.home() / ".config" / "systemd" / "user"
+
+
+def _systemd_service_path() -> Path:
+    return _systemd_user_dir() / f"{DESK_SCHEDULER_SYSTEMD_NAME}.service"
+
+
+def _systemd_timer_path() -> Path:
+    return _systemd_user_dir() / f"{DESK_SCHEDULER_SYSTEMD_NAME}.timer"
+
+
+def _posix_tgcs_entry() -> Path:
+    return PROJECT_ROOT / "tgcs"
+
+
+def _fixed_monitor_argv(entry: Path) -> list[str]:
+    return [
+        str(entry),
+        "monitor",
+        "run",
+        "--profile-id",
+        DESK_SCHEDULER_PROFILE_ID,
+        "--delivery-mode",
+        "dry-run",
+    ]
+
+
+def _systemd_exec_path(path: Path) -> str:
+    text = str(path)
+    if any(char.isspace() for char in text):
+        return '"' + text.replace("\\", "\\\\").replace('"', '\\"') + '"'
+    return text
+
+
+def desk_scheduler_status() -> dict:
+    backend = _scheduler_backend()
+    base = _scheduler_base(backend)
+    if backend == "manual_cron_preview":
         return {
             **base,
             "available": False,
             "installed": False,
-            "status": "unavailable",
-            "detail": "Automatic practice scans can be installed from Signal Desk only on Windows.",
-            "next_action": "Use manual scans from Signal Desk on this machine.",
+            "status": "manual" if sys.platform.startswith("linux") else "unavailable",
+            "detail": "Automatic scan install is not available on this machine; use the schedule preview or manual scans.",
+            "next_action": "Run tgcs schedule print --platform cron for a no-side-effect crontab preview.",
+        }
+
+    if backend == "macos_launchd":
+        installed = _launchd_plist_path().exists()
+        return {
+            **base,
+            "available": True,
+            "installed": installed,
+            "status": "installed" if installed else "not_installed",
+            "detail": "Automatic practice scans are on every 15 minutes." if installed else "Automatic practice scans are off.",
+            "next_action": (
+                "You can turn them off from Signal Desk when you no longer need background checks."
+                if installed
+                else "Turn on auto scan from Signal Desk when you want background checks."
+            ),
+        }
+
+    if backend == "linux_systemd_user":
+        installed = _systemd_timer_path().exists()
+        return {
+            **base,
+            "available": True,
+            "installed": installed,
+            "status": "installed" if installed else "not_installed",
+            "detail": "Automatic practice scans are on every 15 minutes." if installed else "Automatic practice scans are off.",
+            "next_action": (
+                "You can turn them off from Signal Desk when you no longer need background checks."
+                if installed
+                else "Turn on auto scan from Signal Desk when you want background checks."
+            ),
         }
 
     try:
@@ -1884,6 +2011,71 @@ def desk_scheduler_status() -> dict:
     }
 
 
+def _write_launchd_plist(path: Path, entry: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "Label": DESK_SCHEDULER_LAUNCHD_LABEL,
+        "ProgramArguments": _fixed_monitor_argv(entry),
+        "RunAtLoad": True,
+        "StartInterval": DESK_SCHEDULER_INTERVAL_MINUTES * 60,
+        "WorkingDirectory": str(PROJECT_ROOT),
+        "StandardOutPath": str(PROJECT_ROOT / "output" / f"tgcs-{DESK_SCHEDULER_PROFILE_ID}.log"),
+        "StandardErrorPath": str(PROJECT_ROOT / "output" / f"tgcs-{DESK_SCHEDULER_PROFILE_ID}.err.log"),
+    }
+    PROJECT_ROOT.joinpath("output").mkdir(parents=True, exist_ok=True)
+    with path.open("wb") as handle:
+        plistlib.dump(payload, handle)
+
+
+def _write_systemd_units(service_path: Path, timer_path: Path, entry: Path) -> None:
+    service_path.parent.mkdir(parents=True, exist_ok=True)
+    PROJECT_ROOT.joinpath("output").mkdir(parents=True, exist_ok=True)
+    exec_start = " ".join(
+        [
+            _systemd_exec_path(entry),
+            "monitor",
+            "run",
+            "--profile-id",
+            DESK_SCHEDULER_PROFILE_ID,
+            "--delivery-mode",
+            "dry-run",
+        ]
+    )
+    service_path.write_text(
+        "\n".join(
+            [
+                "[Unit]",
+                "Description=T-Sense jobs-fast dry-run scan",
+                "",
+                "[Service]",
+                "Type=oneshot",
+                f"WorkingDirectory={PROJECT_ROOT}",
+                f"ExecStart={exec_start}",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    timer_path.write_text(
+        "\n".join(
+            [
+                "[Unit]",
+                "Description=Run T-Sense jobs-fast dry-run scan every 15 minutes",
+                "",
+                "[Timer]",
+                "OnBootSec=1min",
+                f"OnUnitActiveSec={DESK_SCHEDULER_INTERVAL_MINUTES}min",
+                f"Unit={DESK_SCHEDULER_SYSTEMD_NAME}.service",
+                "",
+                "[Install]",
+                "WantedBy=timers.target",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+
 def run_desk_scheduler_action(action_id: str, *, body: dict | None = None) -> dict:
     if body is None:
         body = {}
@@ -1892,53 +2084,140 @@ def run_desk_scheduler_action(action_id: str, *, body: dict | None = None) -> di
         raise DashboardDeskActionError("Scheduler actions only accept an explicit confirmation flag.")
     if body.get("confirm") is not True:
         raise DashboardDeskActionError("Automation changes require explicit confirmation.")
-    if not sys.platform.startswith("win"):
+    backend = _scheduler_backend()
+    if backend == "manual_cron_preview":
         return _scheduler_result(
             action_id,
             status="blocked",
-            title="Auto scan needs Windows",
-            detail="Signal Desk can install this automatic practice-scan task only through Windows Task Scheduler.",
-            next_action="Use the schedule preview for this machine, or run scans manually from Signal Desk.",
+            title="Auto scan needs a supported scheduler",
+            detail="Signal Desk will not edit crontab directly. This machine can use the schedule preview or manual scans.",
+            next_action="Run tgcs schedule print --platform cron for a no-side-effect crontab preview.",
         )
 
-    tgcs_entry = PROJECT_ROOT / "tgcs.bat"
+    tgcs_entry = PROJECT_ROOT / "tgcs.bat" if backend == "windows_schtasks" else _posix_tgcs_entry()
     if not tgcs_entry.exists():
         return _scheduler_result(
             action_id,
             status="blocked",
             title="Launcher file is missing",
-            detail="Signal Desk could not find the local T-Sense launcher needed by Task Scheduler.",
+            detail="Signal Desk could not find the local T-Sense launcher needed by the scheduler.",
             next_action="Repair the repo-local install, then turn on auto scan again.",
         )
 
-    # Keep this as a single fixed /TR argument in a list argv call. Do not
-    # refactor this path through shell=True: the browser must never be able to
-    # turn scheduler setup into a local shell proxy.
-    task_action = f'"{tgcs_entry}" monitor run --profile-id {DESK_SCHEDULER_PROFILE_ID} --delivery-mode dry-run'
-    if action_id == "schedule_install_dry_run":
-        args = [
-            "schtasks.exe",
-            "/Create",
-            "/TN",
-            DESK_SCHEDULER_TASK_NAME,
-            "/SC",
-            "MINUTE",
-            "/MO",
-            str(DESK_SCHEDULER_INTERVAL_MINUTES),
-            "/TR",
-            task_action,
-            "/F",
-        ]
-        success_title = "Auto scan is on"
-        success_detail = "Windows Task Scheduler will run local practice scans every 15 minutes. Live Telegram delivery is still off."
-        success_next = "You can leave Signal Desk and return later to review new Inbox cards."
-    elif action_id == "schedule_remove_dry_run":
-        args = ["schtasks.exe", "/Delete", "/TN", DESK_SCHEDULER_TASK_NAME, "/F"]
-        success_title = "Auto scan is off"
-        success_detail = "Signal Desk removed the Windows Task Scheduler task for automatic practice scans."
-        success_next = "Manual scans still work from Signal Desk."
-    else:
+    if action_id not in {"schedule_install_dry_run", "schedule_remove_dry_run"}:
         raise DashboardDeskActionError(f"Unknown scheduler action: {action_id}")
+
+    if backend == "windows_schtasks":
+        # Keep this as a single fixed /TR argument in a list argv call. Do not
+        # refactor this path through shell=True: the browser must never be able
+        # to turn scheduler setup into a local shell proxy.
+        task_action = f'"{tgcs_entry}" monitor run --profile-id {DESK_SCHEDULER_PROFILE_ID} --delivery-mode dry-run'
+        if action_id == "schedule_install_dry_run":
+            args = [
+                "schtasks.exe",
+                "/Create",
+                "/TN",
+                DESK_SCHEDULER_TASK_NAME,
+                "/SC",
+                "MINUTE",
+                "/MO",
+                str(DESK_SCHEDULER_INTERVAL_MINUTES),
+                "/TR",
+                task_action,
+                "/F",
+            ]
+            success_title = "Auto scan is on"
+            success_detail = "Windows Task Scheduler will run local practice scans every 15 minutes. Live Telegram delivery is still off."
+            success_next = "You can leave Signal Desk and return later to review new Inbox cards."
+        else:
+            args = ["schtasks.exe", "/Delete", "/TN", DESK_SCHEDULER_TASK_NAME, "/F"]
+            success_title = "Auto scan is off"
+            success_detail = "Signal Desk removed the Windows Task Scheduler task for automatic practice scans."
+            success_next = "Manual scans still work from Signal Desk."
+
+        try:
+            completed = _run_scheduler_command(args)
+        except subprocess.TimeoutExpired:
+            return _scheduler_result(
+                action_id,
+                status="failed",
+                title="Scheduler change timed out",
+                detail="The local scheduler did not finish the requested change in time.",
+                next_action="Check the local scheduler, then retry from Signal Desk.",
+            )
+        except OSError:
+            return _scheduler_result(
+                action_id,
+                status="blocked",
+                title="Scheduler is unavailable",
+                detail="Signal Desk could not start the local scheduler command on this machine.",
+                next_action="Use manual scans in Signal Desk, or install the task from the local scheduler.",
+            )
+
+        if completed.returncode == 0:
+            return _scheduler_result(
+                action_id,
+                status="success",
+                title=success_title,
+                detail=success_detail,
+                next_action=success_next,
+                exit_code=completed.returncode,
+            )
+
+        failure = _desk_safe_result_text(completed.stderr, completed.stdout) or "The local scheduler rejected the change."
+        return _scheduler_result(
+            action_id,
+            status="failed",
+            title="Scheduler change failed",
+            detail=failure,
+            next_action="Check scheduler permissions, then retry from Signal Desk.",
+            exit_code=completed.returncode,
+        )
+
+    if backend == "macos_launchd":
+        plist_path = _launchd_plist_path()
+        if action_id == "schedule_install_dry_run":
+            _write_launchd_plist(plist_path, tgcs_entry)
+            args = ["launchctl", "load", "-w", str(plist_path)]
+            success_title = "Auto scan is on"
+            success_detail = "launchd will run local practice scans every 15 minutes. Live Telegram delivery is still off."
+            success_next = "You can leave Signal Desk and return later to review new Inbox cards."
+        else:
+            args = ["launchctl", "unload", "-w", str(plist_path)]
+            success_title = "Auto scan is off"
+            success_detail = "Signal Desk removed the launchd LaunchAgent for automatic practice scans."
+            success_next = "Manual scans still work from Signal Desk."
+
+    elif backend == "linux_systemd_user":
+        service_path = _systemd_service_path()
+        timer_path = _systemd_timer_path()
+        if action_id == "schedule_install_dry_run":
+            _write_systemd_units(service_path, timer_path, tgcs_entry)
+            try:
+                reload_result = _run_scheduler_command(["systemctl", "--user", "daemon-reload"])
+            except (OSError, subprocess.TimeoutExpired):
+                reload_result = subprocess.CompletedProcess(["systemctl"], 1, stdout="", stderr="systemctl --user daemon-reload failed")
+            if reload_result.returncode != 0:
+                failure = _desk_safe_result_text(reload_result.stderr, reload_result.stdout) or "systemd user daemon reload failed."
+                return _scheduler_result(
+                    action_id,
+                    status="failed",
+                    title="Scheduler change failed",
+                    detail=failure,
+                    next_action="Check systemd --user availability, then retry from Signal Desk.",
+                    exit_code=reload_result.returncode,
+                )
+            args = ["systemctl", "--user", "enable", "--now", f"{DESK_SCHEDULER_SYSTEMD_NAME}.timer"]
+            success_title = "Auto scan is on"
+            success_detail = "systemd --user will run local practice scans every 15 minutes. Live Telegram delivery is still off."
+            success_next = "You can leave Signal Desk and return later to review new Inbox cards."
+        else:
+            args = ["systemctl", "--user", "disable", "--now", f"{DESK_SCHEDULER_SYSTEMD_NAME}.timer"]
+            success_title = "Auto scan is off"
+            success_detail = "Signal Desk removed the systemd user timer for automatic practice scans."
+            success_next = "Manual scans still work from Signal Desk."
+    else:
+        raise DashboardDeskActionError(f"Unknown scheduler backend: {backend}")
 
     try:
         completed = _run_scheduler_command(args)
@@ -1947,17 +2226,27 @@ def run_desk_scheduler_action(action_id: str, *, body: dict | None = None) -> di
             action_id,
             status="failed",
             title="Scheduler change timed out",
-            detail="Windows Task Scheduler did not finish the requested change in time.",
-            next_action="Check Windows Task Scheduler, then retry from Signal Desk.",
+            detail="The local scheduler did not finish the requested change in time.",
+            next_action="Check the local scheduler, then retry from Signal Desk.",
         )
     except OSError:
         return _scheduler_result(
             action_id,
             status="blocked",
-            title="Task Scheduler is unavailable",
-            detail="Signal Desk could not start the Windows Task Scheduler command on this machine.",
-            next_action="Use manual scans in Signal Desk, or install the task from Windows Task Scheduler.",
+            title="Scheduler is unavailable",
+            detail="Signal Desk could not start the local scheduler command on this machine.",
+            next_action="Use manual scans in Signal Desk, or install the task from the local scheduler.",
         )
+
+    if backend == "macos_launchd" and action_id == "schedule_remove_dry_run":
+        _launchd_plist_path().unlink(missing_ok=True)
+    if backend == "linux_systemd_user" and action_id == "schedule_remove_dry_run":
+        _systemd_service_path().unlink(missing_ok=True)
+        _systemd_timer_path().unlink(missing_ok=True)
+        try:
+            _run_scheduler_command(["systemctl", "--user", "daemon-reload"])
+        except (OSError, subprocess.TimeoutExpired):
+            pass
 
     if completed.returncode == 0:
         return _scheduler_result(
@@ -1969,13 +2258,13 @@ def run_desk_scheduler_action(action_id: str, *, body: dict | None = None) -> di
             exit_code=completed.returncode,
         )
 
-    failure = _desk_safe_result_text(completed.stderr, completed.stdout) or "Windows Task Scheduler rejected the change."
+    failure = _desk_safe_result_text(completed.stderr, completed.stdout) or "The local scheduler rejected the change."
     return _scheduler_result(
         action_id,
         status="failed",
         title="Scheduler change failed",
         detail=failure,
-        next_action="Check Windows Task Scheduler permissions, then retry from Signal Desk.",
+        next_action="Check scheduler permissions, then retry from Signal Desk.",
         exit_code=completed.returncode,
     )
 

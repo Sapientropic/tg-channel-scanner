@@ -1,8 +1,10 @@
 import io
 import json
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 
@@ -257,11 +259,47 @@ class DoctorTests(unittest.TestCase):
             (root / "dashboard" / "package.json").write_text("{}", encoding="utf-8")
 
             with patch.object(doctor, "PROJECT_ROOT", root):
-                with patch.object(doctor.shutil, "which", return_value="C:\\node\\npm.cmd"):
-                    result = doctor.check_dashboard_assets()
+                with patch.object(doctor.shutil, "which", side_effect=lambda name: f"C:\\node\\{name}.cmd"):
+                    with patch.object(
+                        doctor,
+                        "subprocess",
+                        SimpleNamespace(
+                            run=lambda *args, **kwargs: subprocess.CompletedProcess(
+                                ["node"], 0, stdout="v22.12.0\n", stderr=""
+                            )
+                        ),
+                        create=True,
+                    ):
+                        result = doctor.check_dashboard_assets()
 
         self.assertEqual(result.status, "warn")
         self.assertIn("tgcs dashboard", result.next_step)
+
+    def test_dashboard_assets_warns_when_node_version_is_too_old_for_vite(self):
+        from scripts import doctor
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "dashboard").mkdir()
+            (root / "dashboard" / "package.json").write_text("{}", encoding="utf-8")
+
+            with patch.object(doctor, "PROJECT_ROOT", root):
+                with patch.object(doctor.shutil, "which", side_effect=lambda name: f"/usr/bin/{name}"):
+                    with patch.object(
+                        doctor,
+                        "subprocess",
+                        SimpleNamespace(
+                            run=lambda *args, **kwargs: subprocess.CompletedProcess(
+                                ["node"], 0, stdout="v20.18.1\n", stderr=""
+                            )
+                        ),
+                        create=True,
+                    ):
+                        result = doctor.check_dashboard_assets()
+
+        self.assertEqual(result.status, "warn")
+        self.assertIn("Node.js 20.19+", result.next_step)
+        self.assertFalse(result.details["auto_build"])
 
 
 if __name__ == "__main__":

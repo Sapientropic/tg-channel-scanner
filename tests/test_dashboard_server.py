@@ -2,6 +2,8 @@ import subprocess
 import tempfile
 import unittest
 import json
+import plistlib
+from types import SimpleNamespace
 from io import BytesIO
 from contextlib import AbstractContextManager
 from datetime import UTC, datetime, timedelta
@@ -430,7 +432,8 @@ class DashboardServerGitTests(unittest.TestCase):
 
         run_mock.assert_not_called()
         self.assertEqual(result["status"], "blocked")
-        self.assertIn("Windows Task Scheduler", result["detail"])
+        self.assertIn("crontab", result["detail"])
+        self.assertIn("schedule print --platform cron", result["next_action"])
 
     def test_schedule_install_dry_run_blocks_when_launcher_is_missing(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -510,8 +513,43 @@ class DashboardServerGitTests(unittest.TestCase):
         self.assertNotIn(str(project_root), result["detail"])
         self.assertIn("project folder", result["detail"])
 
-    def test_desk_scheduler_status_blocks_non_windows_without_subprocess(self):
+    def test_desk_scheduler_status_uses_manual_preview_on_non_systemd_linux_without_subprocess(self):
         with patch.object(dashboard_server.sys, "platform", "linux"):
+            with patch.object(
+                dashboard_server,
+                "shutil",
+                SimpleNamespace(which=lambda name: None),
+                create=True,
+            ):
+                with patch.object(dashboard_server, "_run_scheduler_command") as run_mock:
+                    status = dashboard_server.desk_scheduler_status()
+
+        run_mock.assert_not_called()
+        self.assertFalse(status["available"])
+        self.assertFalse(status["installed"])
+        self.assertEqual(status["status"], "manual")
+        self.assertEqual(status["backend"], "manual_cron_preview")
+        self.assertFalse(status["can_install"])
+        self.assertFalse(status["can_remove"])
+
+    def test_desk_scheduler_status_uses_manual_preview_when_linux_user_bus_is_missing(self):
+        with patch.object(dashboard_server.sys, "platform", "linux"):
+            with patch.dict(dashboard_server.os.environ, {"XDG_RUNTIME_DIR": ""}, clear=False):
+                with patch.object(
+                    dashboard_server,
+                    "shutil",
+                    SimpleNamespace(which=lambda name: "/usr/bin/systemctl" if name == "systemctl" else None),
+                    create=True,
+                ):
+                    with patch.object(dashboard_server, "_run_scheduler_command") as run_mock:
+                        status = dashboard_server.desk_scheduler_status()
+
+        run_mock.assert_not_called()
+        self.assertEqual(status["backend"], "manual_cron_preview")
+        self.assertFalse(status["can_install"])
+
+    def test_desk_scheduler_status_blocks_unsupported_platform_without_subprocess(self):
+        with patch.object(dashboard_server.sys, "platform", "freebsd"):
             with patch.object(dashboard_server, "_run_scheduler_command") as run_mock:
                 status = dashboard_server.desk_scheduler_status()
 
@@ -519,6 +557,157 @@ class DashboardServerGitTests(unittest.TestCase):
         self.assertFalse(status["available"])
         self.assertFalse(status["installed"])
         self.assertEqual(status["status"], "unavailable")
+        self.assertEqual(status["backend"], "manual_cron_preview")
+
+    def test_schedule_install_dry_run_writes_macos_launch_agent_with_fixed_argv(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp) / "home"
+            project_root = Path(tmp) / "repo"
+            home.mkdir()
+            project_root.mkdir()
+            (project_root / "tgcs").write_text("#!/usr/bin/env bash\n", encoding="utf-8")
+            calls: list[list[str]] = []
+
+            def fake_run(args):
+                calls.append(args)
+                return subprocess.CompletedProcess(args, 0, stdout="", stderr="")
+
+            with patch.object(dashboard_server.sys, "platform", "darwin"):
+                with patch.object(dashboard_server.Path, "home", return_value=home):
+                    with patch.object(dashboard_server, "PROJECT_ROOT", project_root):
+                        with patch.object(dashboard_server, "_run_scheduler_command", side_effect=fake_run):
+                            result = dashboard_server.run_desk_action(
+                                "schedule_install_dry_run",
+                                body={"confirm": True},
+                            )
+
+            plist_path = home / "Library" / "LaunchAgents" / "com.sapientropic.tgcs.jobs-fast.dry-run.plist"
+            plist = plistlib.loads(plist_path.read_bytes())
+
+        self.assertEqual(result["status"], "success")
+        self.assertEqual(plist["Label"], "com.sapientropic.tgcs.jobs-fast.dry-run")
+        self.assertEqual(
+            plist["ProgramArguments"],
+            [
+                str(project_root / "tgcs"),
+                "monitor",
+                "run",
+                "--profile-id",
+                "jobs-fast",
+                "--delivery-mode",
+                "dry-run",
+            ],
+        )
+        self.assertIn(["launchctl", "load", "-w", str(plist_path)], calls)
+
+    def test_schedule_remove_dry_run_unloads_macos_launch_agent_with_fixed_argv(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp) / "home"
+            project_root = Path(tmp) / "repo"
+            plist_path = home / "Library" / "LaunchAgents" / "com.sapientropic.tgcs.jobs-fast.dry-run.plist"
+            home.mkdir()
+            project_root.mkdir()
+            plist_path.parent.mkdir(parents=True)
+            plist_path.write_text("placeholder", encoding="utf-8")
+            (project_root / "tgcs").write_text("#!/usr/bin/env bash\n", encoding="utf-8")
+            calls: list[list[str]] = []
+
+            def fake_run(args):
+                calls.append(args)
+                return subprocess.CompletedProcess(args, 0, stdout="", stderr="")
+
+            with patch.object(dashboard_server.sys, "platform", "darwin"):
+                with patch.object(dashboard_server.Path, "home", return_value=home):
+                    with patch.object(dashboard_server, "PROJECT_ROOT", project_root):
+                        with patch.object(dashboard_server, "_run_scheduler_command", side_effect=fake_run):
+                            result = dashboard_server.run_desk_action(
+                                "schedule_remove_dry_run",
+                                body={"confirm": True},
+                            )
+
+        self.assertEqual(result["status"], "success")
+        self.assertEqual(calls, [["launchctl", "unload", "-w", str(plist_path)]])
+        self.assertFalse(plist_path.exists())
+
+    def test_schedule_install_dry_run_writes_linux_systemd_user_units_with_fixed_argv(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp) / "home"
+            project_root = Path(tmp) / "repo"
+            home.mkdir()
+            project_root.mkdir()
+            (project_root / "tgcs").write_text("#!/usr/bin/env bash\n", encoding="utf-8")
+            calls: list[list[str]] = []
+
+            def fake_run(args):
+                calls.append(args)
+                return subprocess.CompletedProcess(args, 0, stdout="", stderr="")
+
+            with patch.object(dashboard_server.sys, "platform", "linux"):
+                with patch.dict(dashboard_server.os.environ, {"XDG_RUNTIME_DIR": str(Path(tmp) / "runtime")}, clear=False):
+                    with patch.object(
+                        dashboard_server,
+                        "shutil",
+                        SimpleNamespace(which=lambda name: "/usr/bin/systemctl" if name == "systemctl" else None),
+                        create=True,
+                    ):
+                        with patch.object(dashboard_server.Path, "home", return_value=home):
+                            with patch.object(dashboard_server, "PROJECT_ROOT", project_root):
+                                with patch.object(dashboard_server, "_run_scheduler_command", side_effect=fake_run):
+                                    result = dashboard_server.run_desk_action(
+                                        "schedule_install_dry_run",
+                                        body={"confirm": True},
+                                    )
+
+            service_path = home / ".config" / "systemd" / "user" / "tgcs-jobs-fast-dry-run.service"
+            timer_path = home / ".config" / "systemd" / "user" / "tgcs-jobs-fast-dry-run.timer"
+            service_text = service_path.read_text(encoding="utf-8")
+            timer_text = timer_path.read_text(encoding="utf-8")
+
+        self.assertEqual(result["status"], "success")
+        self.assertIn(f"ExecStart={project_root / 'tgcs'} monitor run --profile-id jobs-fast --delivery-mode dry-run", service_text)
+        self.assertIn("OnUnitActiveSec=15min", timer_text)
+        self.assertIn(["systemctl", "--user", "daemon-reload"], calls)
+        self.assertIn(["systemctl", "--user", "enable", "--now", "tgcs-jobs-fast-dry-run.timer"], calls)
+
+    def test_schedule_remove_dry_run_disables_linux_systemd_user_units_with_fixed_argv(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp) / "home"
+            project_root = Path(tmp) / "repo"
+            service_path = home / ".config" / "systemd" / "user" / "tgcs-jobs-fast-dry-run.service"
+            timer_path = home / ".config" / "systemd" / "user" / "tgcs-jobs-fast-dry-run.timer"
+            home.mkdir()
+            project_root.mkdir()
+            service_path.parent.mkdir(parents=True)
+            service_path.write_text("[Service]\n", encoding="utf-8")
+            timer_path.write_text("[Timer]\n", encoding="utf-8")
+            (project_root / "tgcs").write_text("#!/usr/bin/env bash\n", encoding="utf-8")
+            calls: list[list[str]] = []
+
+            def fake_run(args):
+                calls.append(args)
+                return subprocess.CompletedProcess(args, 0, stdout="", stderr="")
+
+            with patch.object(dashboard_server.sys, "platform", "linux"):
+                with patch.dict(dashboard_server.os.environ, {"XDG_RUNTIME_DIR": str(Path(tmp) / "runtime")}, clear=False):
+                    with patch.object(
+                        dashboard_server,
+                        "shutil",
+                        SimpleNamespace(which=lambda name: "/usr/bin/systemctl" if name == "systemctl" else None),
+                        create=True,
+                    ):
+                        with patch.object(dashboard_server.Path, "home", return_value=home):
+                            with patch.object(dashboard_server, "PROJECT_ROOT", project_root):
+                                with patch.object(dashboard_server, "_run_scheduler_command", side_effect=fake_run):
+                                    result = dashboard_server.run_desk_action(
+                                        "schedule_remove_dry_run",
+                                        body={"confirm": True},
+                                    )
+
+        self.assertEqual(result["status"], "success")
+        self.assertIn(["systemctl", "--user", "disable", "--now", "tgcs-jobs-fast-dry-run.timer"], calls)
+        self.assertIn(["systemctl", "--user", "daemon-reload"], calls)
+        self.assertFalse(service_path.exists())
+        self.assertFalse(timer_path.exists())
 
     def test_desk_scheduler_status_queries_fixed_task_name(self):
         completed = subprocess.CompletedProcess(["schtasks.exe"], 0, stdout="TaskName: TGCS jobs-fast dry-run\n", stderr="")
@@ -954,6 +1143,29 @@ class DashboardServerGitTests(unittest.TestCase):
         self.assertNotIn("env-token", rendered)
         self.assertNotIn("local-token", rendered)
 
+    def test_notification_token_status_reports_keyring_backend_and_label(self):
+        stored = dashboard_server.local_credentials.StoredSecret(
+            secret="local-token",
+            updated_at="2026-05-10T00:00:00Z",
+        )
+        with patch.dict("os.environ", {}, clear=True):
+            with patch.object(dashboard_server.local_credentials, "is_supported", return_value=True):
+                with patch.object(dashboard_server.local_credentials, "backend", return_value="keyring", create=True):
+                    with patch.object(
+                        dashboard_server.local_credentials,
+                        "store_label",
+                        return_value="macOS Keychain",
+                        create=True,
+                    ):
+                        with patch.object(dashboard_server.local_credentials, "read_secret", return_value=stored):
+                            status = dashboard_server.desk_notification_token_status()
+
+        self.assertTrue(status["configured"])
+        self.assertEqual(status["source"], "keyring")
+        self.assertEqual(status["local_store_backend"], "keyring")
+        self.assertEqual(status["local_store_label"], "macOS Keychain")
+        self.assertIn("macOS Keychain", status["detail"])
+
     def test_notification_token_save_and_clear_uses_credential_store_without_echoing_secret(self):
         store: dict[str, dashboard_server.local_credentials.StoredSecret] = {}
 
@@ -1014,6 +1226,31 @@ class DashboardServerGitTests(unittest.TestCase):
         rendered = json.dumps(status, ensure_ascii=False)
         self.assertNotIn("env-deepseek-key", rendered)
         self.assertNotIn("local-deepseek-key", rendered)
+
+    def test_ai_settings_status_reports_keyring_backend_and_label(self):
+        stored = dashboard_server.local_credentials.StoredSecret(
+            secret="local-deepseek-key",
+            updated_at="2026-05-10T00:00:00Z",
+        )
+        with patch.dict("os.environ", {}, clear=True):
+            with patch.object(dashboard_server.local_credentials, "is_supported", return_value=True):
+                with patch.object(dashboard_server.local_credentials, "backend", return_value="keyring", create=True):
+                    with patch.object(
+                        dashboard_server.local_credentials,
+                        "store_label",
+                        return_value="Linux Secret Service/KWallet",
+                        create=True,
+                    ):
+                        with patch.object(dashboard_server.local_credentials, "read_secret", return_value=stored):
+                            status = dashboard_server.desk_ai_settings_status()
+
+        deepseek = next(item for item in status["providers"] if item["provider"] == "deepseek")
+        self.assertTrue(deepseek["configured"])
+        self.assertEqual(deepseek["source"], "keyring")
+        self.assertEqual(status["local_store_backend"], "keyring")
+        self.assertEqual(status["local_store_label"], "Linux Secret Service/KWallet")
+        self.assertEqual(deepseek["local_store_backend"], "keyring")
+        self.assertEqual(deepseek["local_store_label"], "Linux Secret Service/KWallet")
 
     def test_ai_settings_save_and_clear_uses_credential_store_without_echoing_secret(self):
         store: dict[str, dashboard_server.local_credentials.StoredSecret] = {}

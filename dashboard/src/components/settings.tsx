@@ -341,6 +341,7 @@ function AiApiSettingsPanel({
   const selected = providers.find((item) => item.provider === provider);
   const selectedProviderKey = provider.toLowerCase();
   const showOpenAiOAuth = selectedProviderKey === "openai";
+  const localStoreLabel = selected?.local_store_label ?? status?.local_store_label ?? "local secure storage";
   const canSave = Boolean(selected?.can_save && apiKey.trim());
   const canClear = Boolean(selected?.can_clear);
   return (
@@ -427,7 +428,7 @@ function AiApiSettingsPanel({
         </div>
       </form>
       <p className="ai-api-note">
-        Keys are stored locally in Windows Credential Manager. Environment variables still win when both are present.
+        Keys are stored locally in {localStoreLabel} when available. Environment variables still win when both are present.
       </p>
     </div>
   );
@@ -448,7 +449,7 @@ function NotificationTokenPanel({
 }) {
   const [token, setToken] = useState("");
   const configured = status?.configured === true;
-  const sourceLabel = notificationTokenSourceLabel(status?.source);
+  const sourceLabel = notificationTokenSourceLabel(status?.source, status?.local_store_label);
   const canSave = status?.can_save !== false;
   const canClear = status?.can_clear === true;
   return (
@@ -476,7 +477,7 @@ function NotificationTokenPanel({
           autoComplete="new-password"
           disabled={busy || !canSave}
           onChange={(event) => setToken(event.target.value)}
-          placeholder={canSave ? "123456:ABC..." : "Windows Credential Manager unavailable"}
+          placeholder={canSave ? "123456:ABC..." : "Local secure storage unavailable"}
           type="password"
           value={token}
         />
@@ -508,12 +509,12 @@ function NotificationTokenPanel({
   );
 }
 
-function notificationTokenSourceLabel(source?: string) {
+function notificationTokenSourceLabel(source?: string, localStoreLabel?: string) {
   if (source === "environment") {
     return "environment override";
   }
-  if (source === "windows_credential_manager") {
-    return "Windows Credential Manager";
+  if (source === "windows_credential_manager" || source === "keyring") {
+    return localStoreLabel || "local secure storage";
   }
   if (source === "credential_error") {
     return "credential store error";

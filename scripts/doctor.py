@@ -8,6 +8,7 @@ import importlib.util
 import json
 import os
 import shutil
+import subprocess
 import sys
 import tempfile
 import tomllib
@@ -376,6 +377,66 @@ def check_media_dependencies() -> CheckResult:
     )
 
 
+def _parse_node_version(raw: str) -> tuple[int, int, int] | None:
+    text = raw.strip()
+    if text.startswith("v"):
+        text = text[1:]
+    parts = text.split(".")
+    if len(parts) < 2:
+        return None
+    try:
+        major = int(parts[0])
+        minor = int(parts[1])
+        patch = int(parts[2]) if len(parts) > 2 else 0
+    except ValueError:
+        return None
+    return major, minor, patch
+
+
+def _node_version_satisfies_dashboard_contract(version: tuple[int, int, int]) -> bool:
+    major, minor, patch = version
+    if major == 20:
+        return (minor, patch) >= (19, 0)
+    if major == 22:
+        return (minor, patch) >= (12, 0)
+    return major > 22
+
+
+def _dashboard_node_check() -> CheckResult | None:
+    if not shutil.which("node"):
+        return _warn(
+            "dashboard_assets",
+            "Dashboard static assets are not built and Node.js was not found.",
+            "Install Node.js 20.19+ or 22.12+ before first dashboard launch, or build dashboard/dist on another machine.",
+            details={"auto_build": False},
+        )
+    try:
+        completed = subprocess.run(
+            ["node", "--version"],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return _warn(
+            "dashboard_assets",
+            "Dashboard static assets are not built and Node.js version could not be checked.",
+            "Install Node.js 20.19+ or 22.12+ before first dashboard launch.",
+            details={"auto_build": False},
+        )
+    version = _parse_node_version(completed.stdout)
+    if version is None or not _node_version_satisfies_dashboard_contract(version):
+        found = completed.stdout.strip() or "unknown"
+        return _warn(
+            "dashboard_assets",
+            f"Dashboard static assets are not built and Node.js {found} does not satisfy Vite 7.",
+            "Install Node.js 20.19+ or 22.12+, then rerun tgcs dashboard.",
+            details={"node_version": found, "auto_build": False},
+        )
+    return None
+
+
 def check_dashboard_assets() -> CheckResult:
     dashboard_dir = PROJECT_ROOT / "dashboard"
     static_dir = dashboard_dir / "dist"
@@ -394,6 +455,10 @@ def check_dashboard_assets() -> CheckResult:
             details={"static_dir": str(static_dir)},
         )
     if shutil.which("npm"):
+        node_problem = _dashboard_node_check()
+        if node_problem is not None:
+            node_problem.details.setdefault("static_dir", str(static_dir))
+            return node_problem
         return _warn(
             "dashboard_assets",
             "Dashboard static assets are not built yet.",
@@ -403,7 +468,7 @@ def check_dashboard_assets() -> CheckResult:
     return _warn(
         "dashboard_assets",
         "Dashboard static assets are not built and npm was not found.",
-        "Install Node.js/npm before first dashboard launch, or build dashboard/dist on another machine.",
+        "Install Node.js 20.19+ or 22.12+ with npm before first dashboard launch, or build dashboard/dist on another machine.",
         details={"static_dir": str(static_dir), "auto_build": False},
     )
 

@@ -134,9 +134,11 @@ uses `/api/desk/health` to reuse an existing compatible Signal Desk on 8765 or
 auto-select the next free port through 8799. An explicit `--port` is strict and
 fails with a human-readable error when occupied. `--no-build` skips asset
 building for packaged/offline environments or custom static asset handling.
-`--open` opens Signal Desk in the default browser after the server starts. On
-Windows, `Signal Desk.bat` is the no-command-line launcher for first setup and
-repeated use.
+`--open` opens Signal Desk in the default browser after the server starts.
+`Signal Desk.bat` is the Windows no-command-line launcher. `./signal-desk` is
+the macOS/Linux app-like launcher; it runs setup on first launch, initializes
+the jobs starter when local defaults are missing, then starts
+`./tgcs dashboard --open`.
 Signal Desk `Start` is the primary human surface. It exposes a small dashboard
 action API for human-friendly wrappers around fixed local commands:
 
@@ -149,12 +151,15 @@ action API for human-friendly wrappers around fixed local commands:
   input.
 - Execute-mode actions call `sys.executable scripts/tgcs.py ...` with static
   argv.
-- The Windows-only dry-run scheduler actions require an explicit confirmation
-  body, then call fixed `schtasks.exe` argv for the local `jobs-fast` dry-run
-  task. They do not accept browser-supplied command strings, paths, or argv.
+- Dry-run scheduler install/remove actions require an explicit confirmation
+  body, then call only fixed server-side argv/files for the local `jobs-fast`
+  dry-run task. Windows uses `schtasks.exe`, macOS uses a per-user launchd
+  LaunchAgent, and Linux uses a `systemd --user` service/timer when available.
+  They do not accept browser-supplied command strings, paths, or argv.
 - `GET /api/desk/scheduler-status` returns `desk_scheduler_status_v1` by
-  querying only that fixed dry-run task. It never returns raw `schtasks` output,
-  local launcher paths, or command strings.
+  checking only that fixed dry-run task. The payload may include optional
+  `platform`, `backend`, `can_install`, and `can_remove` fields. It never
+  returns raw scheduler output, local launcher paths, or command strings.
 - Dedicated Telegram setup/login endpoints handle the normal human login path
   from the browser: `/api/desk/telegram-status`,
   `/api/desk/telegram-credentials`, `/api/desk/telegram-login/send-code`,
@@ -164,9 +169,11 @@ action API for human-friendly wrappers around fixed local commands:
   returning the token: `GET /api/desk/notification-token/status` returns
   configured/source/update metadata, and `POST /api/desk/notification-token`
   accepts only `{ "token": "..." }` or `{ "clear": true }`. Mutation requires
-  loopback access. Windows alpha stores the token in Windows Credential Manager;
-  non-Windows keychain support still needs confirmation and remains an
-  expert/env boundary.
+  loopback access. Environment variables win over local storage. Local desktop
+  storage uses Windows Credential Manager on Windows and optional Python
+  `keyring` backends on macOS/Linux; when no usable keyring exists, the product
+  must clearly fall back to environment variables instead of pretending a save
+  succeeded.
 - Dedicated notification target endpoints handle the default Telegram Bot target
   without accepting command strings or tokens:
   `/api/desk/delivery-targets/telegram-bot-default` saves `chat_id/enabled`,
@@ -193,9 +200,10 @@ action API for human-friendly wrappers around fixed local commands:
   list, validates short topic tags, writes the fixed `.tgcs/sources.json`
   registry, and returns the refreshed source list. It does not accept registry
   paths, commands, argv, tokens, or raw Telegram message data.
-- Live delivery, live scheduler installation, non-Windows scheduler
-  installation, session access, and raw Telegram message operations return
-  guarded preview / `needs_human` or remain outside the action API.
+- Live delivery, session access, raw Telegram message operations, and unsupported
+  scheduler installation return guarded preview / `needs_human` or remain
+  outside the action API. Non-systemd Linux remains a manual cron-preview path;
+  the browser must not edit user crontabs.
 - Sensitive Start endpoints require loopback access; non-loopback clients are
   blocked from running Desk actions, Telegram setup/login, notification target
   mutations, source import mutations, saved-source mutations, or dry-run
@@ -215,12 +223,17 @@ Markdown and HTML report artifacts exist for a run, the Dashboard projection mus
 use HTML as the default click target. Markdown-only report artifacts are served
 as rendered HTML by the local artifact route.
 `tgcs schedule print` is a no-side-effect helper: it prints a Windows Task
-Scheduler or cron command for review and never installs or starts a system task.
+Scheduler, macOS launchd, Linux systemd-user, or cron preview for review and
+never installs or starts a system task. `--platform auto` selects the current
+machine's preferred preview; explicit `windows`, `launchd`, `systemd`, or `cron`
+keeps output deterministic for docs and tests.
+On Linux, `auto` selects systemd only when `systemctl` and a per-user runtime
+are both present; headless or non-systemd environments stay on the cron preview.
 When `--interval-minutes` is omitted, it previews the selected profile's
 `work_interval_minutes`; an explicit `--interval-minutes` remains the override.
-Signal Desk may install or remove only its fixed Windows dry-run scheduler task
-after a browser confirmation; this is intentionally narrower than the expert
-CLI schedule preview.
+Signal Desk may install or remove only its fixed dry-run scheduler task after a
+browser confirmation; this remains intentionally narrower than the expert CLI
+schedule preview.
 Agents should call the lower-level commands when they need stable JSON output:
 
 ```powershell
@@ -240,7 +253,8 @@ python scripts/monitor.py feedback-export --db .tgcs/tgcs.db --output output/fee
 
 `doctor.py` reports `dashboard_assets` as pass/warn only; missing dashboard
 static files are not a hard failure because the human `tgcs dashboard` facade
-can build `dashboard/dist` automatically when npm is available. Channel-list
+can build `dashboard/dist` automatically when npm and Node.js 20.19+ or 22.12+
+are available. Channel-list
 checks warn on duplicates and `t.me/+...` / `joinchat` invite-link references
 so the human can replace them with usernames, numeric ids, or Telegram folder
 import before the first real scan. Source-registry checks warn when all enabled
@@ -587,7 +601,8 @@ suffixes only when duplicate basenames would collide. They must not copy raw
 Telegram message text or contact handles.
 
 Telegram Bot delivery resolves the token from `TGCS_TELEGRAM_BOT_TOKEN` first,
-then from the Windows Credential Manager entry saved by Signal Desk Settings.
+then from the local OS secret store entry saved by Signal Desk Settings
+(Windows Credential Manager or optional Python `keyring` backend).
 Use `--delivery-mode dry-run` for tests and `--delivery-mode live` only when the
 target chat id and token are intentionally configured.
 Signal Desk `Settings` can save the default target `chat_id` and enabled/muted

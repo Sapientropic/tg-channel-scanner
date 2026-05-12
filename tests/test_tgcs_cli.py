@@ -678,6 +678,96 @@ class TgcsCliTests(unittest.TestCase):
         self.assertIn("*/15 * * * *", output)
         self.assertIn("./tgcs monitor run --profile-id jobs-fast", output)
 
+    def test_schedule_print_launchd_outputs_launch_agent_preview_without_running_it(self):
+        tgcs = load_tgcs_module(self)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            stdout = io.StringIO()
+            with patch.object(tgcs, "PROJECT_ROOT", root):
+                with patch.object(tgcs.subprocess, "run") as run_mock:
+                    with patch("sys.stdout", stdout):
+                        exit_code = tgcs.main(
+                            [
+                                "schedule",
+                                "print",
+                                "--platform",
+                                "launchd",
+                                "--profile-id",
+                                "jobs-fast",
+                                "--interval-minutes",
+                                "15",
+                            ]
+                        )
+
+        self.assertEqual(exit_code, 0)
+        run_mock.assert_not_called()
+        output = stdout.getvalue()
+        self.assertIn("LaunchAgent plist path:", output)
+        self.assertIn("com.sapientropic.tgcs.jobs-fast.dry-run.plist", output)
+        self.assertIn(str(root / "tgcs"), output)
+        self.assertIn("launchctl load -w", output)
+
+    def test_schedule_print_systemd_outputs_user_timer_preview_without_running_it(self):
+        tgcs = load_tgcs_module(self)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            stdout = io.StringIO()
+            with patch.object(tgcs, "PROJECT_ROOT", root):
+                with patch.object(tgcs.subprocess, "run") as run_mock:
+                    with patch("sys.stdout", stdout):
+                        exit_code = tgcs.main(
+                            [
+                                "schedule",
+                                "print",
+                                "--platform",
+                                "systemd",
+                                "--profile-id",
+                                "jobs-fast",
+                                "--interval-minutes",
+                                "15",
+                            ]
+                        )
+
+        self.assertEqual(exit_code, 0)
+        run_mock.assert_not_called()
+        output = stdout.getvalue()
+        self.assertIn("systemd user service:", output)
+        self.assertIn("tgcs-jobs-fast-dry-run.service", output)
+        self.assertIn("systemctl --user enable --now tgcs-jobs-fast-dry-run.timer", output)
+        self.assertIn(str(root / "tgcs"), output)
+
+    def test_schedule_print_auto_uses_cron_when_linux_user_runtime_is_missing(self):
+        tgcs = load_tgcs_module(self)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            stdout = io.StringIO()
+            with patch.object(tgcs, "PROJECT_ROOT", root):
+                with patch.object(tgcs.sys, "platform", "linux"):
+                    with patch.object(tgcs.shutil, "which", return_value="/usr/bin/systemctl"):
+                        with patch.dict(tgcs.os.environ, {"XDG_RUNTIME_DIR": ""}, clear=False):
+                            with patch("sys.stdout", stdout):
+                                exit_code = tgcs.main(
+                                    [
+                                        "schedule",
+                                        "print",
+                                        "--platform",
+                                        "auto",
+                                        "--profile-id",
+                                        "jobs-fast",
+                                        "--interval-minutes",
+                                        "15",
+                                    ]
+                                )
+
+        self.assertEqual(exit_code, 0)
+        output = stdout.getvalue()
+        self.assertIn("Crontab line:", output)
+        self.assertIn("*/15 * * * *", output)
+        self.assertNotIn("systemd user service:", output)
+
     def test_schedule_print_cron_outputs_two_hour_interval(self):
         tgcs = load_tgcs_module(self)
 

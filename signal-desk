@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
+cd "$ROOT_DIR"
+
+if [ ! -x "$ROOT_DIR/.venv/bin/python" ] && [ ! -x "$ROOT_DIR/.venv/Scripts/python.exe" ]; then
+  echo "First run: preparing T-Sense local dependencies..."
+  bash "$ROOT_DIR/setup.sh"
+elif [ ! -f "$ROOT_DIR/.tgcs/sources.json" ]; then
+  echo "Initializing T-Sense jobs starter defaults..."
+  "$ROOT_DIR/tgcs" init --starter jobs
+fi
+
+exec "$ROOT_DIR/tgcs" dashboard --open "$@"

@@ -674,6 +674,10 @@ describe("dashboard state sanitizers", () => {
         detail: " Checks every 15 minutes. ",
         next_action: " Review Inbox. ",
         checked_at: " 2026-05-10T00:00:00Z ",
+        platform: " linux ",
+        backend: " linux_systemd_user ",
+        can_install: true,
+        can_remove: false,
         stdout: "ignored",
         command: "schtasks /Query",
       }),
@@ -687,6 +691,10 @@ describe("dashboard state sanitizers", () => {
       detail: "Checks every 15 minutes.",
       next_action: "Review Inbox.",
       checked_at: "2026-05-10T00:00:00Z",
+      platform: "linux",
+      backend: "linux_systemd_user",
+      can_install: true,
+      can_remove: false,
     });
 
     expect(sanitizeDeskSchedulerStatus({ available: true, installed: false })).toBeNull();

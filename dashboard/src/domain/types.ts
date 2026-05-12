@@ -147,6 +147,8 @@ export type DeskNotificationTokenStatus = {
   env_configured: boolean;
   local_store_supported: boolean;
   local_store_configured: boolean;
+  local_store_backend?: string;
+  local_store_label?: string;
   can_save: boolean;
   can_clear: boolean;
   platform: string;
@@ -161,6 +163,8 @@ export type DeskAiProviderStatus = {
   source: string;
   env_configured: boolean;
   local_store_configured: boolean;
+  local_store_backend?: string;
+  local_store_label?: string;
   can_save: boolean;
   can_clear: boolean;
   updated_at?: string | null;
@@ -171,6 +175,8 @@ export type DeskAiSettingsStatus = {
   schema_version?: "desk_ai_settings_status_v1";
   configured_count: number;
   local_store_supported: boolean;
+  local_store_backend?: string;
+  local_store_label?: string;
   platform: string;
   detail: string;
   providers: DeskAiProviderStatus[];
@@ -432,6 +438,10 @@ export type DeskSchedulerStatus = {
   status: string;
   task_label: string;
   interval_minutes: number;
+  platform?: string;
+  backend?: string;
+  can_install?: boolean;
+  can_remove?: boolean;
   detail: string;
   next_action: string;
   checked_at: string;

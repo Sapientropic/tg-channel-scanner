@@ -191,7 +191,7 @@ export function sanitizeDeskSchedulerStatus(value: unknown): DeskSchedulerStatus
   if (!status || !taskLabel || !detail || !nextAction || !checkedAt) {
     return null;
   }
-  return {
+  const sanitized: DeskSchedulerStatus = {
     schema_version: "desk_scheduler_status_v1",
     available: value.available === true,
     installed: value.installed === true,
@@ -202,6 +202,21 @@ export function sanitizeDeskSchedulerStatus(value: unknown): DeskSchedulerStatus
     next_action: nextAction,
     checked_at: checkedAt,
   };
+  const platform = optionalString(value.platform);
+  const backend = optionalString(value.backend);
+  if (platform) {
+    sanitized.platform = platform;
+  }
+  if (backend) {
+    sanitized.backend = backend;
+  }
+  if ("can_install" in value) {
+    sanitized.can_install = value.can_install === true;
+  }
+  if ("can_remove" in value) {
+    sanitized.can_remove = value.can_remove === true;
+  }
+  return sanitized;
 }
 
 export function sanitizeDeskTelegramStatus(value: unknown): DeskTelegramStatus | null {
@@ -232,7 +247,7 @@ export function sanitizeDeskNotificationTokenStatus(value: unknown): DeskNotific
   if (!source) {
     return null;
   }
-  return {
+  const sanitized: DeskNotificationTokenStatus = {
     schema_version: "desk_notification_token_status_v1",
     configured: value.configured === true,
     source,
@@ -245,6 +260,15 @@ export function sanitizeDeskNotificationTokenStatus(value: unknown): DeskNotific
     platform: optionalString(value.platform) ?? "",
     detail: optionalString(value.detail) ?? "",
   };
+  const localStoreBackend = optionalString(value.local_store_backend);
+  const localStoreLabel = optionalString(value.local_store_label);
+  if (localStoreBackend) {
+    sanitized.local_store_backend = localStoreBackend;
+  }
+  if (localStoreLabel) {
+    sanitized.local_store_label = localStoreLabel;
+  }
+  return sanitized;
 }
 
 export function sanitizeDeskAiSettingsStatus(value: unknown): DeskAiSettingsStatus | null {
@@ -252,7 +276,7 @@ export function sanitizeDeskAiSettingsStatus(value: unknown): DeskAiSettingsStat
     return null;
   }
   const configuredCount = nonNegativeIntegerOrDefault(value.configured_count, 0);
-  return {
+  const sanitized: DeskAiSettingsStatus = {
     schema_version: value.schema_version === "desk_ai_settings_status_v1" ? value.schema_version : undefined,
     configured_count: configuredCount,
     local_store_supported: value.local_store_supported === true,
@@ -261,6 +285,15 @@ export function sanitizeDeskAiSettingsStatus(value: unknown): DeskAiSettingsStat
     providers: sanitizeDeskAiProviders(value.providers),
     checked_at: optionalString(value.checked_at),
   };
+  const localStoreBackend = optionalString(value.local_store_backend);
+  const localStoreLabel = optionalString(value.local_store_label);
+  if (localStoreBackend) {
+    sanitized.local_store_backend = localStoreBackend;
+  }
+  if (localStoreLabel) {
+    sanitized.local_store_label = localStoreLabel;
+  }
+  return sanitized;
 }
 
 function sanitizeDeskAiProviders(value: unknown): DeskAiProviderStatus[] {
@@ -273,21 +306,28 @@ function sanitizeDeskAiProviders(value: unknown): DeskAiProviderStatus[] {
       console.warn(`[tgcs dashboard schema] desk_ai_settings.providers[${index}] missing required field`, record);
       return [];
     }
-    return [
-      {
-        provider,
-        label,
-        env_name: envName,
-        configured: record.configured === true,
-        source,
-        env_configured: record.env_configured === true,
-        local_store_configured: record.local_store_configured === true,
-        can_save: record.can_save === true,
-        can_clear: record.can_clear === true,
-        updated_at: optionalStringOrNull(record.updated_at),
-        detail: optionalString(record.detail) ?? "",
-      },
-    ];
+    const providerStatus: DeskAiProviderStatus = {
+      provider,
+      label,
+      env_name: envName,
+      configured: record.configured === true,
+      source,
+      env_configured: record.env_configured === true,
+      local_store_configured: record.local_store_configured === true,
+      can_save: record.can_save === true,
+      can_clear: record.can_clear === true,
+      updated_at: optionalStringOrNull(record.updated_at),
+      detail: optionalString(record.detail) ?? "",
+    };
+    const localStoreBackend = optionalString(record.local_store_backend);
+    const localStoreLabel = optionalString(record.local_store_label);
+    if (localStoreBackend) {
+      providerStatus.local_store_backend = localStoreBackend;
+    }
+    if (localStoreLabel) {
+      providerStatus.local_store_label = localStoreLabel;
+    }
+    return [providerStatus];
   });
 }
 

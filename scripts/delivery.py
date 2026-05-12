@@ -73,7 +73,7 @@ def resolve_telegram_bot_token(
     if stored and stored.secret.strip():
         return TelegramBotToken(
             token=stored.secret.strip(),
-            source="windows_credential_manager",
+            source=local_credentials.backend(),
             updated_at=stored.updated_at,
         )
     return TelegramBotToken(token="", source="missing")

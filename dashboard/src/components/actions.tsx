@@ -468,9 +468,20 @@ export function buildJourneySteps(
   const hasSuccess = (actionId: string) => results[actionId]?.status === "success";
   const dryRunScheduleOn = scheduler?.installed || (hasSuccess("schedule_install_dry_run") && results.schedule_remove_dry_run?.status !== "success");
   const notifications = notificationReadiness(targets);
+  const schedulerCanInstall = scheduler ? (scheduler.can_install ?? scheduler.available !== false) : true;
+  const schedulerCanRemove = scheduler ? (scheduler.can_remove ?? schedulerCanInstall) : true;
   const automationDetail = scheduler?.installed
     ? "Automatic practice scans are on every 15 minutes."
-    : "Automatic practice scans can run every 15 minutes from Signal Desk.";
+    : schedulerCanInstall
+      ? "Automatic practice scans can run every 15 minutes from Signal Desk."
+      : "Automatic practice scans need the manual schedule preview on this machine.";
+  const automationStateLabel = scheduler?.installed ? "Auto scan on" : schedulerCanInstall ? "Off" : "Manual";
+  const automationState =
+    ready || stage === "needs_delivery_target"
+      ? schedulerCanInstall || scheduler?.installed
+        ? "ready"
+        : "manual"
+      : "blocked";
   const availableButtons = (buttons: JourneyButton[]) => buttons.filter((button) => actionIds.has(button.actionId));
   const availableAdvanced = (ids: string[]) => ids.filter((actionId) => actionIds.has(actionId));
 
@@ -523,12 +534,12 @@ export function buildJourneySteps(
       key: "automation",
       title: "Automation",
       detail: `${automationDetail} Notifications: ${notifications.value}. ${notifications.detail}`,
-      state: ready || stage === "needs_delivery_target" ? "ready" : "blocked",
-      stateLabel: ready || stage === "needs_delivery_target" ? (scheduler?.installed ? "Auto scan on" : "Off") : "Finish setup first",
+      state: automationState,
+      stateLabel: ready || stage === "needs_delivery_target" ? automationStateLabel : "Finish setup first",
       buttons: availableButtons([
         { actionId: "schedule_preview", label: "Preview schedule", variant: "secondary" },
-        ...(dryRunScheduleOn ? [] : [{ actionId: "schedule_install_dry_run", label: "Turn on auto scan", variant: "primary" as const }]),
-        ...(dryRunScheduleOn ? [{ actionId: "schedule_remove_dry_run", label: "Turn off auto scan", variant: "secondary" as const }] : []),
+        ...(!dryRunScheduleOn && schedulerCanInstall ? [{ actionId: "schedule_install_dry_run", label: "Turn on auto scan", variant: "primary" as const }] : []),
+        ...(dryRunScheduleOn && schedulerCanRemove ? [{ actionId: "schedule_remove_dry_run", label: "Turn off auto scan", variant: "secondary" as const }] : []),
         { actionId: "live_delivery_human", label: "Notifications", variant: "secondary" },
       ]),
       advancedActionIds: availableAdvanced([

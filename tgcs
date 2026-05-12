@@ -7,8 +7,13 @@ if [ -x "$ROOT_DIR/.venv/bin/python" ]; then
   PYTHON="$ROOT_DIR/.venv/bin/python"
 elif [ -x "$ROOT_DIR/.venv/Scripts/python.exe" ]; then
   PYTHON="$ROOT_DIR/.venv/Scripts/python.exe"
-else
+elif command -v python3 >/dev/null 2>&1; then
+  PYTHON="python3"
+elif command -v python >/dev/null 2>&1; then
   PYTHON="python"
+else
+  echo "Error: Python 3.12+ is required. Run ./setup.sh after installing python3 or uv." >&2
+  exit 127
 fi
 
 exec "$PYTHON" "$ROOT_DIR/scripts/tgcs.py" "$@"

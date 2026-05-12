@@ -76,6 +76,11 @@ sessions, API keys, or bot tokens in dashboard state.
 
 ## Quick Start
 
+Requirements:
+
+- Python 3.12+.
+- Node.js 20.19+ or 22.12+ when you want the dashboard assets built locally.
+
 ### Windows
 
 1. Install Python 3.12+.
@@ -84,7 +89,7 @@ sessions, API keys, or bot tokens in dashboard state.
 4. Keep the launcher window open while using the browser dashboard.
 
 The launcher prepares the local Python environment, builds dashboard assets when
-Node/npm is available, and opens Signal Desk on `127.0.0.1`. If port `8765` is
+Node.js 20.19+ or 22.12+ with npm is available, and opens Signal Desk on `127.0.0.1`. If port `8765` is
 busy, it tries `8766-8799`.
 
 ### macOS / Linux
@@ -92,10 +97,16 @@ busy, it tries `8766-8799`.
 ```bash
 git clone https://github.com/Sapientropic/T-Sense.git
 cd T-Sense
-chmod +x setup.sh tgcs
-./setup.sh
-./tgcs dashboard --open
+chmod +x setup.sh tgcs signal-desk "Signal Desk.command"
+./signal-desk
 ```
+
+`./signal-desk` is the recommended app-like launcher. On macOS you can also
+open `Signal Desk.command` from Finder. Use `./tgcs ...` directly only when you
+want the expert CLI path.
+
+Platform-specific notes for local key storage and auto-scan setup live in
+[docs/desktop-platforms.md](docs/desktop-platforms.md).
 
 ### First useful run
 
@@ -185,8 +196,8 @@ python scripts/monitor.py feedback-export \
   already access.
 - Secrets stay local. `.tgcs/`, `output/`, sessions, logs, env files, and
   dashboard builds are ignored by Git.
-- Signal Desk stores notification bot tokens in Windows Credential Manager when
-  available, or uses environment variables for expert setups.
+- Signal Desk uses local OS-backed secret storage when available. Environment
+  variables remain the reliable expert fallback.
 - Live delivery and live schedules remain explicit choices. The default path is
   dry-run first.
 - The project is a local personal workflow tool. Use it in a way that respects
@@ -197,11 +208,13 @@ python scripts/monitor.py feedback-export \
 | Path | Purpose |
 | --- | --- |
 | `Signal Desk.bat` | Windows app-style launcher. |
+| `signal-desk` / `Signal Desk.command` | macOS/Linux app-style launchers. |
 | `dashboard/` | React dashboard source for Signal Desk. |
 | `scripts/` | Scanner, report, monitor, source registry, delivery, and dashboard server code. |
 | `profiles/` | Markdown profile templates and starter profile config. |
 | `channel_lists/` | Example channel-list inputs. |
 | `templates/` | Report templates and demo fixtures used by `tgcs demo`. |
+| `docs/desktop-platforms.md` | Desktop launcher, key storage, and auto-scan platform notes. |
 | `docs/agent-cli-contract.md` | Stable JSON/CLI contract for agents. |
 | `docs/getting-api-credentials.md` | Telegram API credential guide. |
 | `docs/tos-risk-analysis.md` | Terms-of-service and operational risk notes. |
