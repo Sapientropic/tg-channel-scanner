@@ -253,3 +253,41 @@ Next:
 
 - Commit this sanitizer drift checkpoint, then continue with artifact path
   validation and/or feedback export path hardening.
+
+## Slice 6: Report Artifact Path Projection
+
+Status: completed.
+
+Actions:
+
+- Added backend report-artifact path validation before projecting run artifacts
+  into `dashboard_state_v1`.
+- Added frontend run artifact path validation before rendering report links.
+- Kept resolver/projection/sanitizer naming compatible with existing
+  `signal-report` and `signal-brief` filenames.
+- Added negative tests for absolute paths, traversal, raw/non-report artifacts,
+  and a positive resolver test for named brief files.
+
+Verification:
+
+- `python -m pytest tests/test_monitor_state.py::MonitorStateTests::test_dashboard_report_artifact_rejects_non_report_paths tests/test_monitor_state.py::MonitorStateTests::test_dashboard_runs_prefer_html_report_artifact_for_click_target tests/test_monitor_state.py::MonitorStateTests::test_dashboard_runs_project_report_artifact_without_full_manifest`
+  passed: `3 passed`.
+- `python -m pytest tests/test_dashboard_server.py::DashboardServerGitTests::test_resolve_run_artifact_allows_named_brief_file tests/test_dashboard_server.py::DashboardServerGitTests::test_resolve_run_artifact_rejects_non_report_html`
+  passed: `2 passed`.
+- `npm test -- sanitize` passed: `1` file, `27` tests.
+- `npm run typecheck` passed.
+
+Reviewer Gate:
+
+- Addresses Cicero P1 artifact path concern across backend projection, server
+  resolver, and frontend sanitizer.
+
+Residual Risk:
+
+- This is path-shape validation, not content inspection. It assumes report
+  artifact writers only label report HTML/Markdown as report artifacts.
+
+Next:
+
+- Commit this artifact hardening checkpoint, then continue with feedback export
+  path hardening and broader verification.

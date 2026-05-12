@@ -363,7 +363,7 @@ def is_dashboard_report_artifact_name(name: str) -> bool:
     path = PurePosixPath(lower)
     if path.suffix not in {".html", ".md"}:
         return False
-    return "report" in path.stem.split("-")
+    return any(token in path.stem.split("-") for token in {"report", "brief"})
 
 
 def dashboard_host_warning(host: str) -> str | None:

@@ -261,11 +261,43 @@ describe("dashboard state sanitizers", () => {
           started_at: "2026-05-09T00:00:00Z",
           report_artifact: { path: 42 },
         },
+        {
+          run_id: "run-absolute",
+          profile_id: "jobs-fast",
+          status: "complete",
+          started_at: "2026-05-09T00:00:00Z",
+          report_artifact: { path: "C:/Users/Administrator/private/report.html" },
+        },
+        {
+          run_id: "run-traversal",
+          profile_id: "jobs-fast",
+          status: "complete",
+          started_at: "2026-05-09T00:00:00Z",
+          report_artifact: { path: "output/runs/run-1/../secret-report.html" },
+        },
+        {
+          run_id: "run-non-report",
+          profile_id: "jobs-fast",
+          status: "complete",
+          started_at: "2026-05-09T00:00:00Z",
+          report_artifact: { path: "output/runs/run-1/scan.jsonl" },
+        },
+        {
+          run_id: "run-report",
+          profile_id: "jobs-fast",
+          status: "complete",
+          started_at: "2026-05-09T00:00:00Z",
+          report_artifact: { path: "output/runs/run-1/jobs-fast-signal-report-2026-05-09-1225.html" },
+        },
       ],
     });
     expect(state.runs[0]).toHaveProperty("report_artifact", null);
     expect(state.runs[1]).not.toHaveProperty("report_artifact");
     expect(state.runs[2]).not.toHaveProperty("report_artifact");
+    expect(state.runs[3]).not.toHaveProperty("report_artifact");
+    expect(state.runs[4]).not.toHaveProperty("report_artifact");
+    expect(state.runs[5]).not.toHaveProperty("report_artifact");
+    expect(state.runs[6].report_artifact?.path).toBe("output/runs/run-1/jobs-fast-signal-report-2026-05-09-1225.html");
   });
 
   it("drops empty optional summary objects", () => {

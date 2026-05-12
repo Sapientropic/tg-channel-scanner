@@ -129,6 +129,21 @@ class DashboardServerGitTests(unittest.TestCase):
 
         self.assertEqual(resolved, report.resolve())
 
+    def test_resolve_run_artifact_allows_named_brief_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            artifact_root = root / "output" / "runs"
+            report = artifact_root / "run-1" / "market-news-signal-brief-2026-05-09-1225.html"
+            report.parent.mkdir(parents=True)
+            report.write_text("<html>brief</html>", encoding="utf-8")
+
+            resolved = dashboard_server.resolve_run_artifact_path(
+                "output/runs/run-1/market-news-signal-brief-2026-05-09-1225.html",
+                artifact_root=artifact_root,
+            )
+
+        self.assertEqual(resolved, report.resolve())
+
     def test_resolve_run_artifact_allows_custom_output_dir_report(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

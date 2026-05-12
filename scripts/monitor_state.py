@@ -15,7 +15,7 @@ import re
 import sqlite3
 import uuid
 from datetime import UTC, datetime, timedelta
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any, Iterable
 
 from scripts.item_display import display_item_title, is_placeholder_value
@@ -1952,7 +1952,12 @@ def dashboard_report_artifact(
     report_candidates = [
         item
         for item in artifacts
-        if isinstance(item, dict) and item.get("path") and item.get("type") in {"report_html", "report_markdown"}
+        if (
+            isinstance(item, dict)
+            and item.get("path")
+            and item.get("type") in {"report_html", "report_markdown"}
+            and is_dashboard_report_artifact_path(str(item.get("path") or ""))
+        )
     ]
     report_candidates.sort(key=report_artifact_priority)
     report = report_candidates[0] if report_candidates else None
@@ -1986,6 +1991,29 @@ def report_artifact_priority(report: dict[str, Any]) -> int:
     if report.get("type") == "report_markdown":
         return 1
     return 2
+
+
+def is_dashboard_report_artifact_path(path: str) -> bool:
+    cleaned = str(path or "").strip().replace("\\", "/")
+    if not cleaned or cleaned.startswith("/") or re.match(r"^[A-Za-z]:", cleaned):
+        return False
+    parts = PurePosixPath(cleaned).parts
+    if not parts or ".." in parts or "runs" not in parts:
+        return False
+    run_index = parts.index("runs")
+    if run_index >= len(parts) - 2:
+        return False
+    return is_dashboard_report_artifact_name(parts[-1])
+
+
+def is_dashboard_report_artifact_name(name: str) -> bool:
+    lower = str(name or "").strip().lower()
+    if lower in {"report.html", "report.md"}:
+        return True
+    path = PurePosixPath(lower)
+    if path.suffix not in {".html", ".md"}:
+        return False
+    return any(token in path.stem.split("-") for token in {"report", "brief"})
 
 
 def report_artifact_display_name(

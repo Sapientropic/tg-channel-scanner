@@ -1034,6 +1034,33 @@ class MonitorStateTests(unittest.TestCase):
         self.assertEqual(report["format"], "HTML")
         self.assertEqual(report["path"], "output/runs/run-1/market-news-signal-brief-2026-05-09-0300.html")
 
+    def test_dashboard_report_artifact_rejects_non_report_paths(self):
+        conn = sqlite3.connect(":memory:")
+        conn.row_factory = sqlite3.Row
+        monitor_state.init_db(conn)
+        monitor_state.record_run(
+            conn,
+            {
+                "schema_version": "run_manifest_v1",
+                "run_id": "run-unsafe",
+                "profile_id": "jobs-fast",
+                "profile_path": "profiles/templates/jobs.md",
+                "status": "complete",
+                "started_at": "2026-05-09T03:00:00Z",
+                "completed_at": "2026-05-09T03:01:00Z",
+                "artifacts": [
+                    {"type": "report_html", "path": "C:/Users/Administrator/private/report.html"},
+                    {"type": "report_markdown", "path": "output/runs/run-unsafe/../secret-report.md"},
+                    {"type": "report_html", "path": "output/runs/run-unsafe/scan.html"},
+                    {"type": "raw_scan", "path": "output/runs/run-unsafe/report.html"},
+                ],
+            },
+        )
+
+        snapshot = monitor_state.dashboard_snapshot(conn)
+
+        self.assertIsNone(snapshot["runs"][0]["report_artifact"])
+
     def test_dashboard_runs_include_human_profile_display_name(self):
         with tempfile.TemporaryDirectory() as tmp:
             profile_path = Path(tmp) / "profiles" / "market-news.md"

@@ -775,12 +775,42 @@ function sanitizeRunArtifact(value: unknown): RunArtifact | null | undefined {
   if (value === null) {
     return null;
   }
-  if (!isRecord(value) || typeof value.path !== "string") {
+  if (!isRecord(value) || typeof value.path !== "string" || !isSafeRunReportArtifactPath(value.path)) {
     return undefined;
   }
   const artifact: RunArtifact = { path: value.path };
   assignOptionalStrings(artifact, value, ["type", "sha256", "category", "format", "display_name", "display_path"]);
   return artifact;
+}
+
+function isSafeRunReportArtifactPath(value: string): boolean {
+  const cleaned = value.trim().replace(/\\/g, "/");
+  if (!cleaned || cleaned.startsWith("/") || /^[A-Za-z]:/.test(cleaned)) {
+    return false;
+  }
+  const parts = cleaned.split("/").filter(Boolean);
+  if (!parts.length || parts.includes("..")) {
+    return false;
+  }
+  const runIndex = parts.indexOf("runs");
+  if (runIndex < 0 || runIndex >= parts.length - 2) {
+    return false;
+  }
+  return isDashboardReportArtifactName(parts[parts.length - 1] ?? "");
+}
+
+function isDashboardReportArtifactName(value: string): boolean {
+  const lower = value.trim().toLowerCase();
+  if (lower === "report.html" || lower === "report.md") {
+    return true;
+  }
+  const dotIndex = lower.lastIndexOf(".");
+  if (dotIndex < 0) {
+    return false;
+  }
+  const stem = lower.slice(0, dotIndex);
+  const suffix = lower.slice(dotIndex);
+  return (suffix === ".html" || suffix === ".md") && stem.split("-").some((token) => token === "report" || token === "brief");
 }
 
 function sanitizeRunQuality(value: unknown): Run["quality"] | undefined {
