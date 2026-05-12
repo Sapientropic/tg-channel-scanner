@@ -467,3 +467,38 @@ Next:
 
 - Commit this checkpoint, run a wider backend checkpoint, then continue with
   the next bot/dashboard hardening slice.
+
+## Slice 12: Profile Patch Workspace Scope
+
+Status: in progress.
+
+Actions:
+
+- Added a workspace resolver for Dashboard-sourced profile file paths.
+- Applied it to DB-sourced profile patch suggestion, matching-preference patch,
+  apply, and revert flows.
+- Kept explicit low-level `profile_path` arguments available for tests and
+  non-dashboard callers, while preventing polluted profile rows from driving
+  Dashboard writes outside the project workspace.
+
+Verification:
+
+- `python -m pytest tests/test_monitor_state.py::MonitorStateTests::test_follow_up_patch_can_apply_to_profile_file tests/test_monitor_state.py::MonitorStateTests::test_dashboard_profile_patch_refuses_db_path_outside_project tests/test_monitor_state.py::MonitorStateTests::test_apply_profile_patch_refuses_when_profile_changed_after_suggestion tests/test_monitor_state.py::MonitorStateTests::test_applied_profile_patch_can_revert_to_snapshot_when_file_unchanged tests/test_monitor_state.py::MonitorStateTests::test_revert_profile_patch_refuses_when_profile_changed_after_apply`
+  passed: `5 passed`.
+- `git diff --check` reported only pre-existing CRLF normalization warnings in
+  unrelated WIP files.
+
+Reviewer Gate:
+
+- Addresses the read-only audit concern that a polluted `profiles.path` could
+  let Dashboard profile patch actions write outside the workspace.
+
+Residual Risk:
+
+- Explicit low-level function arguments can still target external paths. This is
+  intentional for direct tests/non-dashboard usage; Dashboard routes do not pass
+  those arguments.
+
+Next:
+
+- Commit this checkpoint, then run a broader `monitor_state` regression.

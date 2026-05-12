@@ -1769,21 +1769,22 @@ class MonitorStateTests(unittest.TestCase):
             monitor_state.set_card_action(conn, card_id=cards[1]["card_id"], action="skip")
             monitor_state.set_card_action(conn, card_id=cards[2]["card_id"], action="false_positive")
 
-            result = monitor_state.create_feedback_profile_patch_suggestions(conn)
-            second_result = monitor_state.create_feedback_profile_patch_suggestions(conn)
-            patch = conn.execute("SELECT * FROM profile_patch_suggestions").fetchone()
+            with patch.object(monitor_state, "PROJECT_ROOT", Path(tmp)):
+                result = monitor_state.create_feedback_profile_patch_suggestions(conn)
+                second_result = monitor_state.create_feedback_profile_patch_suggestions(conn)
+            patch_row = conn.execute("SELECT * FROM profile_patch_suggestions").fetchone()
             summary = monitor_state.feedback_summary(conn)
 
         self.assertEqual(result["created_count"], 1)
         self.assertEqual(result["existing_count"], 0)
         self.assertEqual(second_result["created_count"], 0)
         self.assertEqual(second_result["existing_count"], 1)
-        self.assertIn("Desk feedback tuning", patch["note"])
-        self.assertIn("Extract the generalized matching patterns", patch["note"])
-        self.assertNotIn("Kept TypeScript role", patch["note"])
-        self.assertNotIn("Skipped internship", patch["note"])
-        self.assertNotIn("Wrong crypto promo", patch["note"])
-        self.assertIn("## Follow-up Preferences", patch["proposed_profile_text"])
+        self.assertIn("Desk feedback tuning", patch_row["note"])
+        self.assertIn("Extract the generalized matching patterns", patch_row["note"])
+        self.assertNotIn("Kept TypeScript role", patch_row["note"])
+        self.assertNotIn("Skipped internship", patch_row["note"])
+        self.assertNotIn("Wrong crypto promo", patch_row["note"])
+        self.assertIn("## Follow-up Preferences", patch_row["proposed_profile_text"])
         self.assertEqual(summary["next_action"]["label"], "Apply profile drafts")
         self.assertEqual(summary["next_action"]["target_tab"], "profiles")
 
@@ -2126,9 +2127,9 @@ class MonitorStateTests(unittest.TestCase):
                     }
                 ],
             )
-            monitor_state.set_card_action(conn, card_id=cards[0]["card_id"], action="follow_up", note="Prefer remote roles.")
-
-            snapshot = monitor_state.dashboard_snapshot(conn)
+            with patch.object(monitor_state, "PROJECT_ROOT", Path(tmp)):
+                monitor_state.set_card_action(conn, card_id=cards[0]["card_id"], action="follow_up", note="Prefer remote roles.")
+                snapshot = monitor_state.dashboard_snapshot(conn)
 
         self.assertEqual(snapshot["profiles"][0]["display_path"], "Profiles/jobs.md")
         self.assertEqual(snapshot["profiles"][0]["display_name"], "Developer Opportunity")
@@ -2275,11 +2276,48 @@ class MonitorStateTests(unittest.TestCase):
                 profile_path=profile_path,
             )
             patch = card["profile_patch_suggestion"]
-            result = monitor_state.apply_profile_patch(conn, patch_id=patch["patch_id"])
+            result = monitor_state.apply_profile_patch(conn, patch_id=patch["patch_id"], profile_path=profile_path)
 
             self.assertEqual(result["status"], "applied")
             self.assertIn("## Follow-up Preferences", profile_path.read_text(encoding="utf-8"))
             self.assertIn("Prefer official incident updates.", profile_path.read_text(encoding="utf-8"))
+
+    def test_dashboard_profile_patch_refuses_db_path_outside_project(self):
+        conn = sqlite3.connect(":memory:")
+        conn.row_factory = sqlite3.Row
+        monitor_state.init_db(conn)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace = Path(tmp) / "repo"
+            outside_profile = Path(tmp) / "outside" / "profile.md"
+            outside_profile.parent.mkdir(parents=True)
+            original = "# Profile\n\n## Search Rules\n1. Keep useful items.\n"
+            outside_profile.write_text(original, encoding="utf-8")
+            monitor_state.upsert_profile(
+                conn,
+                {"id": "market-news", "path": str(outside_profile), "enabled": True},
+            )
+            suggestion = monitor_state.create_profile_patch_suggestion(
+                conn,
+                profile_id="market-news",
+                card_id=None,
+                note="Prefer official incident updates.",
+                profile_path=outside_profile,
+            )
+
+            with patch.object(monitor_state, "PROJECT_ROOT", workspace):
+                with self.assertRaises(monitor_state.MonitorStateError) as apply_error:
+                    monitor_state.apply_profile_patch(conn, patch_id=suggestion["patch_id"])
+                with self.assertRaises(monitor_state.MonitorStateError) as draft_error:
+                    monitor_state.create_profile_preferences_patch_suggestion(
+                        conn,
+                        profile_id="market-news",
+                        preferences_text="Prefer official incident updates.",
+                    )
+
+            self.assertIn("workspace", str(apply_error.exception))
+            self.assertIn("workspace", str(draft_error.exception))
+            self.assertEqual(outside_profile.read_text(encoding="utf-8"), original)
 
     def test_apply_profile_patch_refuses_when_profile_changed_after_suggestion(self):
         conn = sqlite3.connect(":memory:")
@@ -2319,7 +2357,7 @@ class MonitorStateTests(unittest.TestCase):
             profile_path.write_text(manually_edited, encoding="utf-8")
 
             with self.assertRaisesRegex(monitor_state.MonitorStateError, "Profile changed after patch was suggested"):
-                monitor_state.apply_profile_patch(conn, patch_id=patch["patch_id"])
+                monitor_state.apply_profile_patch(conn, patch_id=patch["patch_id"], profile_path=profile_path)
             remaining_text = profile_path.read_text(encoding="utf-8")
 
         self.assertEqual(remaining_text, manually_edited)
@@ -2365,9 +2403,9 @@ class MonitorStateTests(unittest.TestCase):
                 profile_path=profile_path,
             )
             patch = card["profile_patch_suggestion"]
-            monitor_state.apply_profile_patch(conn, patch_id=patch["patch_id"])
+            monitor_state.apply_profile_patch(conn, patch_id=patch["patch_id"], profile_path=profile_path)
 
-            result = monitor_state.revert_profile_patch(conn, patch_id=patch["patch_id"])
+            result = monitor_state.revert_profile_patch(conn, patch_id=patch["patch_id"], profile_path=profile_path)
             reverted_text = profile_path.read_text(encoding="utf-8")
 
         self.assertEqual(result["status"], "reverted")
@@ -2413,12 +2451,12 @@ class MonitorStateTests(unittest.TestCase):
                 profile_path=profile_path,
             )
             patch = card["profile_patch_suggestion"]
-            monitor_state.apply_profile_patch(conn, patch_id=patch["patch_id"])
+            monitor_state.apply_profile_patch(conn, patch_id=patch["patch_id"], profile_path=profile_path)
             manually_edited = profile_path.read_text(encoding="utf-8") + "\nManual edit.\n"
             profile_path.write_text(manually_edited, encoding="utf-8")
 
             with self.assertRaisesRegex(monitor_state.MonitorStateError, "Profile changed after patch was applied"):
-                monitor_state.revert_profile_patch(conn, patch_id=patch["patch_id"])
+                monitor_state.revert_profile_patch(conn, patch_id=patch["patch_id"], profile_path=profile_path)
             remaining_text = profile_path.read_text(encoding="utf-8")
 
         self.assertEqual(remaining_text, manually_edited)

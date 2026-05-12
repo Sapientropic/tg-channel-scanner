@@ -1602,6 +1602,21 @@ def _replace_follow_up_preferences(profile_text: str, preferences_text: str) -> 
     return "\n".join(output).rstrip() + "\n"
 
 
+def dashboard_profile_file_path(profile_path: object) -> Path:
+    raw = str(profile_path or "").strip()
+    if not raw:
+        raise MonitorStateError("Profile path is missing.")
+    path = Path(raw)
+    if not path.is_absolute():
+        path = PROJECT_ROOT / path
+    resolved = path.resolve()
+    try:
+        resolved.relative_to(PROJECT_ROOT.resolve())
+    except ValueError as exc:
+        raise MonitorStateError("Profile file path must stay inside the project workspace.") from exc
+    return resolved
+
+
 def create_profile_patch_suggestion(
     conn: sqlite3.Connection,
     *,
@@ -1614,7 +1629,7 @@ def create_profile_patch_suggestion(
         row = conn.execute("SELECT path FROM profiles WHERE profile_id = ?", (profile_id,)).fetchone()
         if not row:
             raise MonitorStateError(f"Profile is not registered: {profile_id}")
-        profile_path = Path(row["path"])
+        profile_path = dashboard_profile_file_path(row["path"])
     if not profile_path.exists():
         raise MonitorStateError(f"Profile file not found: {profile_path}")
     current = profile_path.read_text(encoding="utf-8")
@@ -1679,9 +1694,7 @@ def create_profile_preferences_patch_suggestion(
     row = conn.execute("SELECT path FROM profiles WHERE profile_id = ?", (profile_id,)).fetchone()
     if not row:
         raise MonitorStateError(f"Profile is not registered: {profile_id}")
-    profile_path = Path(row["path"])
-    if not profile_path.is_absolute():
-        profile_path = PROJECT_ROOT / profile_path
+    profile_path = dashboard_profile_file_path(row["path"])
     if not profile_path.exists():
         raise MonitorStateError(f"Profile file not found: {profile_path}")
     current = profile_path.read_text(encoding="utf-8")
@@ -1748,7 +1761,7 @@ def apply_profile_patch(conn: sqlite3.Connection, *, patch_id: str, profile_path
         profile_row = conn.execute("SELECT path FROM profiles WHERE profile_id = ?", (row["profile_id"],)).fetchone()
         if not profile_row:
             raise MonitorStateError(f"Profile is not registered: {row['profile_id']}")
-        profile_path = Path(profile_row["path"])
+        profile_path = dashboard_profile_file_path(profile_row["path"])
     current = profile_path.read_text(encoding="utf-8") if profile_path.exists() else ""
     base_profile_hash = row["base_profile_hash"]
     if not base_profile_hash:
@@ -1804,7 +1817,7 @@ def revert_profile_patch(conn: sqlite3.Connection, *, patch_id: str, profile_pat
         raise MonitorStateError(f"Profile snapshot not found for patch: {patch_id}")
     if profile_path is None:
         profile_row = conn.execute("SELECT path FROM profiles WHERE profile_id = ?", (row["profile_id"],)).fetchone()
-        profile_path = Path(profile_row["path"] if profile_row else snapshot["profile_path"])
+        profile_path = dashboard_profile_file_path(profile_row["path"] if profile_row else snapshot["profile_path"])
     current = profile_path.read_text(encoding="utf-8") if profile_path.exists() else ""
     # Do not silently erase manual profile edits made after an applied diff.
     # Revert is only automatic while the file still equals the patch proposal.
