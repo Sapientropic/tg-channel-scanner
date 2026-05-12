@@ -890,6 +890,7 @@ describe("dashboard state sanitizers", () => {
 
     expect(
       sanitizeDeskActionResult({
+        schema_version: "desk_action_result_v1",
         action_id: "login_human",
         status: "needs_human",
         title: "Login requires terminal",
@@ -903,6 +904,14 @@ describe("dashboard state sanitizers", () => {
       exit_code: null,
     });
     expect(sanitizeDeskActionResult({ status: "success", title: "Missing id" })).toBeNull();
+    expect(
+      sanitizeDeskActionResult({
+        action_id: "monitor_jobs_dry_run",
+        status: "success",
+        title: "Missing schema",
+        display_command: "tgcs monitor run --profile-id jobs-fast --delivery-mode dry-run",
+      }),
+    ).toBeNull();
     expect(sanitizeDeskActionResult({ action_id: "feedback_export", status: " ", title: "Bad status" })).toBeNull();
     for (const artifact_path of [
       "output/feedback/review-feedback.jsonl",
@@ -911,6 +920,7 @@ describe("dashboard state sanitizers", () => {
       "https://example.com/report.html",
     ]) {
       const payload = {
+        schema_version: "desk_action_result_v1" as const,
         action_id: "monitor_jobs_dry_run",
         status: "success",
         title: "Report ready",

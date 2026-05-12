@@ -271,7 +271,7 @@ export async function runDeskAction(
 ): Promise<DeskActionResult> {
   const payload = await postJson(`/api/desk/actions/${encodeURIComponent(actionId)}/run`, body, signal);
   const result = sanitizeDeskActionResult(payload.result);
-  if (!result) {
+  if (!result || result.action_id !== actionId) {
     throw new Error("Invalid Desk action response");
   }
   return result;

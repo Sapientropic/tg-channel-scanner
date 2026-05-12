@@ -173,7 +173,7 @@ export function sanitizeDeskActions(value: unknown): DeskAction[] {
 }
 
 export function sanitizeDeskActionResult(value: unknown): DeskActionResult | null {
-  if (!isRecord(value)) {
+  if (!isRecord(value) || value.schema_version !== "desk_action_result_v1") {
     return null;
   }
   const actionId = optionalString(value.action_id);

@@ -8,6 +8,7 @@ import {
   loadDeskSources,
   normalizeDashboardError,
   previewSourceAssistant,
+  runDeskAction,
   saveDeskDeliveryTarget,
 } from "./client";
 
@@ -121,5 +122,32 @@ describe("dashboard API contract validation", () => {
     mockJsonResponse({ ai: { schema_version: "desk_ai_settings_status_v1" } });
 
     await expect(loadDeskAiSettingsStatus()).rejects.toThrow("Invalid AI API settings response");
+  });
+
+  it("throws on schema-less Desk action results instead of accepting sanitizer fallback", async () => {
+    mockJsonResponse({
+      result: {
+        action_id: "monitor_jobs_dry_run",
+        status: "success",
+        title: "Practice scan finished",
+        display_command: "tgcs monitor run --profile-id jobs-fast --delivery-mode dry-run",
+      },
+    });
+
+    await expect(runDeskAction("monitor_jobs_dry_run")).rejects.toThrow("Invalid Desk action response");
+  });
+
+  it("throws when a Desk action result belongs to another action", async () => {
+    mockJsonResponse({
+      result: {
+        schema_version: "desk_action_result_v1",
+        action_id: "feedback_export",
+        status: "success",
+        title: "Exported feedback",
+        display_command: "tgcs feedback export",
+      },
+    });
+
+    await expect(runDeskAction("monitor_jobs_dry_run")).rejects.toThrow("Invalid Desk action response");
   });
 });

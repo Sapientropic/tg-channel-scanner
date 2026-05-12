@@ -727,3 +727,36 @@ Next:
 
 - Commit this checkpoint, then continue with action/result contract gates:
   `runDeskAction`, delivery test, and chat detection.
+
+## Slice 19: Desk Action Result Schema Gate
+
+Status: completed.
+
+Actions:
+
+- Required `desk_action_result_v1` before the frontend accepts Desk action
+  result payloads.
+- Changed `runDeskAction(actionId)` to reject responses whose nested
+  `action_id` does not match the requested action.
+- Added client tests for schema-less action results and mismatched action IDs.
+- Updated sanitizer fixtures so positive cases use the current result schema
+  while malformed artifact-path cases still prove path stripping.
+
+Verification:
+
+- `npm test -- sanitize client actions` passed: `3` files, `55` tests.
+- `npm run typecheck` passed.
+
+Reviewer Gate:
+
+- Addresses Bernoulli's action/result finding for the highest-impact action
+  execution path.
+
+Residual Risk:
+
+- Delivery test and chat detection result endpoints still need equivalent
+  schema and target-id checks.
+
+Next:
+
+- Commit this checkpoint, then continue with delivery test/chat-detection gates.
