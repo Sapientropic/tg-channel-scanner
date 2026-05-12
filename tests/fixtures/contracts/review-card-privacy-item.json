@@ -1,0 +1,125 @@
+{
+  "schema_version": "tgcs_contract_privacy_fixture_v1",
+  "review_item": {
+    "topic": "Frontend role",
+    "company": "ACME Labs",
+    "role": "Senior TypeScript Engineer",
+    "rating": "high",
+    "why": "Strong TypeScript and React match.",
+    "decision_state": {
+      "schema_version": "decision_state_v1",
+      "status": "new",
+      "signals": ["new"],
+      "explanations": {
+        "match_confidence": "high"
+      }
+    },
+    "source_message_refs": [
+      {
+        "channel": "jobs",
+        "id": 42
+      }
+    ],
+    "text": "RAW_TELEGRAM_BODY_SHOULD_NOT_RENDER",
+    "caption": "RAW_TELEGRAM_CAPTION_SHOULD_NOT_RENDER",
+    "ocr_text": "RAW_TELEGRAM_OCR_SHOULD_NOT_RENDER",
+    "media_text": "RAW_TELEGRAM_MEDIA_SHOULD_NOT_RENDER",
+    "bot_token": "BOT_TOKEN_SHOULD_NOT_RENDER",
+    "api_key": "API_KEY_SHOULD_NOT_RENDER",
+    "session_path": "C:/Users/Administrator/.config/tgcli/session",
+    "command": "SECRET_COMMAND_SHOULD_NOT_RENDER",
+    "argv": ["--dangerous-argv"],
+    "path": "C:/Users/Administrator/private/scan.jsonl",
+    "headers": {
+      "authorization": "Bearer SECRET_HEADER_SHOULD_NOT_RENDER"
+    }
+  },
+  "dashboard_state": {
+    "schema_version": "dashboard_state_v1",
+    "inbox": [
+      {
+        "schema_version": "review_card_v1",
+        "card_id": "card_fixture_privacy",
+        "profile_id": "jobs-fast",
+        "title": "Senior TypeScript Engineer - ACME Labs",
+        "rating": "high",
+        "decision_status": "new",
+        "source_refs": [
+          {
+            "channel": "jobs",
+            "id": 42,
+            "url": "https://t.me/jobs/42"
+          },
+          {
+            "channel": "bad",
+            "id": 7,
+            "url": "javascript:alert('XSS_SHOULD_NOT_RENDER')"
+          }
+        ],
+        "item": {
+          "why": "Strong TypeScript and React match.",
+          "decision_state": {
+            "status": "new",
+            "signals": ["new"]
+          },
+          "raw_text": "RAW_TELEGRAM_BODY_SHOULD_NOT_RENDER",
+          "bot_token": "BOT_TOKEN_SHOULD_NOT_RENDER",
+          "argv": ["--dangerous-argv"]
+        },
+        "status": "pending",
+        "opportunity_status": "open",
+        "opportunity_updated_at": "",
+        "updated_at": "2026-05-13T00:00:00Z"
+      }
+    ],
+    "delivery_targets": [
+      {
+        "schema_version": "delivery_target_v1",
+        "target_id": "telegram-bot-default",
+        "type": "telegram_bot",
+        "enabled": true,
+        "config": {
+          "chat_id": "123456",
+          "bot_token": "BOT_TOKEN_SHOULD_NOT_RENDER",
+          "token": "BOT_TOKEN_SHOULD_NOT_RENDER",
+          "api_key": "API_KEY_SHOULD_NOT_RENDER",
+          "command": "SECRET_COMMAND_SHOULD_NOT_RENDER",
+          "argv": ["--dangerous-argv"],
+          "path": "C:/Users/Administrator/private/scan.jsonl"
+        },
+        "updated_at": "2026-05-13T00:00:00Z"
+      }
+    ],
+    "setup_status": {
+      "stage": "ready",
+      "next_step": "Run a practice scan.",
+      "has_profiles": true,
+      "has_runs": false,
+      "delivery_configured": true,
+      "delivery_enabled": true,
+      "checks": [
+        {
+          "check_id": "doctor",
+          "label": "Doctor",
+          "status": "todo",
+          "detail": "Run doctor before first live scan.",
+          "command": "tgcs doctor --profile jobs"
+        }
+      ]
+    }
+  },
+  "denied_strings": [
+    "RAW_TELEGRAM_BODY_SHOULD_NOT_RENDER",
+    "RAW_TELEGRAM_CAPTION_SHOULD_NOT_RENDER",
+    "RAW_TELEGRAM_OCR_SHOULD_NOT_RENDER",
+    "RAW_TELEGRAM_MEDIA_SHOULD_NOT_RENDER",
+    "BOT_TOKEN_SHOULD_NOT_RENDER",
+    "API_KEY_SHOULD_NOT_RENDER",
+    "C:/Users/Administrator/.config/tgcli/session",
+    "C:/Users/Administrator/private/scan.jsonl",
+    "SECRET_COMMAND_SHOULD_NOT_RENDER",
+    "--dangerous-argv",
+    "SECRET_HEADER_SHOULD_NOT_RENDER",
+    "XSS_SHOULD_NOT_RENDER"
+  ]
+}

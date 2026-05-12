@@ -1536,7 +1536,7 @@ def build_agent_extraction_request(
         ],
         "system_prompt": system_prompt,
         "user_prompt": user_prompt,
-        "scan_meta": meta or {},
+        "scan_meta": extraction_prompt_meta(meta),
         "selected_messages": selected,
     }
 

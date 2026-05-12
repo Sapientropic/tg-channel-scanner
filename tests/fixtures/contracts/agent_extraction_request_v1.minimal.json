@@ -1,0 +1,53 @@
+{
+  "schema_version": "agent_extraction_request_v1",
+  "scan_meta": {
+    "scan_date": "2026-05-09",
+    "scan_window": "Last 2 hours",
+    "channel_count": 68,
+    "total_messages_collected": 23,
+    "failure_count": 0,
+    "incomplete_count": 0,
+    "ocr_enabled": false,
+    "ocr_count": 0
+  },
+  "selected_messages": [
+    {
+      "channel": "jobs_a",
+      "id": 10,
+      "date": "2026-05-09T12:00:00Z",
+      "text": "Senior React remote role. Contact @hr.",
+      "origin_channel": "original_jobs",
+      "origin_url": "https://t.me/original_jobs/10",
+      "origin_message_ref": {
+        "channel": "original_jobs",
+        "id": 10
+      }
+    }
+  ],
+  "denied_scan_meta_keys": [
+    "source_health",
+    "output_path",
+    "errors_path",
+    "source_registry_path",
+    "scan_started_at",
+    "scan_completed_at",
+    "cutoff"
+  ],
+  "denied_message_keys": [
+    "sender_id",
+    "media_type",
+    "has_photo",
+    "monitor_prefilter",
+    "message_ref"
+  ],
+  "denied_strings": [
+    "E:\\workspace",
+    "source_health",
+    "errors_path",
+    "source_registry_path",
+    "sender_id",
+    "media_type",
+    "monitor_prefilter",
+    "MessageMediaPhoto"
+  ]
+}

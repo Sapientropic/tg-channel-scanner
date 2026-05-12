@@ -61,7 +61,45 @@ RAW_ITEM_FIELDS = {
     "audio_transcript",
     "video_transcript",
 }
-
+PRIVATE_ITEM_FIELDS = {
+    "api_key",
+    "args",
+    "argv",
+    "artifact_path",
+    "authorization",
+    "bot_token",
+    "client_secret",
+    "command",
+    "cookie",
+    "cookies",
+    "cwd",
+    "debug",
+    "env",
+    "environment",
+    "headers",
+    "metadata",
+    "password",
+    "path",
+    "profile_path",
+    "raw",
+    "registry_path",
+    "request",
+    "response",
+    "scan_path",
+    "secret",
+    "session",
+    "session_path",
+    "token",
+    "trace",
+}
+PRIVATE_ITEM_FIELD_SUFFIXES = (
+    "_api_key",
+    "_client_secret",
+    "_password",
+    "_secret",
+    "_session_path",
+    "_token",
+)
 
 class MonitorStateError(Exception):
     """Raised when monitor state cannot be loaded or updated safely."""
@@ -601,8 +639,20 @@ def _item_key(profile_id: str, item: dict[str, Any]) -> str:
     return "monitor:" + sha256_text(stable_json(basis))[:24]
 
 
+def _is_private_item_field(key: object) -> bool:
+    normalized = str(key or "").strip().lower()
+    return normalized in PRIVATE_ITEM_FIELDS or normalized.endswith(PRIVATE_ITEM_FIELD_SUFFIXES)
+
+
 def _sanitize_item(item: dict[str, Any]) -> dict[str, Any]:
-    sanitized = {key: value for key, value in item.items() if key not in RAW_ITEM_FIELDS}
+    # Review-card item_json is reused by Dashboard and feedback export. Keep it
+    # as a product decision projection; runner control fields, local paths, and
+    # credentials belong in manifests or guarded setup contracts instead.
+    sanitized = {
+        key: value
+        for key, value in item.items()
+        if key not in RAW_ITEM_FIELDS and not _is_private_item_field(key)
+    }
     sanitized["schema_version"] = "monitor_item_projection_v1"
     return sanitized
 
