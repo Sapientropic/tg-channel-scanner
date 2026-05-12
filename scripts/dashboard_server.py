@@ -429,6 +429,11 @@ def fetch_compatible_desk_health(host: str, port: int, *, timeout_seconds: float
         return None
     if payload.get("app") != DESK_APP_ID:
         return None
+    health_url = str(payload.get("url") or "").strip()
+    if health_url:
+        parsed = urlparse(health_url)
+        if parsed.scheme != "http" or not parsed.hostname or not is_loopback_address(parsed.hostname) or parsed.port != port:
+            return None
     return payload
 
 
@@ -450,7 +455,7 @@ def select_dashboard_server(
             health = fetch_compatible_desk_health(host, candidate)
             if health:
                 return DashboardServerSelection(
-                    url=str(health.get("url") or dashboard_url(host, candidate)),
+                    url=dashboard_url(host, candidate),
                     port=candidate,
                     server=None,
                     reused_existing=True,

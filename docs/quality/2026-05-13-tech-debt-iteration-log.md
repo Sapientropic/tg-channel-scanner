@@ -399,3 +399,35 @@ Next:
 
 - Commit this checkpoint, then run wider regression and continue with the next
   contract/privacy hardening target.
+
+## Slice 10: Desk Health URL Trust Boundary
+
+Status: in progress.
+
+Actions:
+
+- Tightened compatible Desk health checks so a reused local instance must report
+  an HTTP loopback URL on the same port when it includes a URL.
+- Changed auto-port reuse to open the URL computed from the requested local
+  host/port instead of trusting the health payload's `url` field.
+
+Verification:
+
+- `python -m pytest tests/test_dashboard_server.py::DashboardServerGitTests::test_select_dashboard_server_reuses_existing_compatible_instance tests/test_dashboard_server.py::DashboardServerGitTests::test_fetch_compatible_desk_health_rejects_remote_payload_url tests/test_dashboard_server.py::DashboardServerGitTests::test_select_dashboard_server_auto_port_skips_incompatible_occupied_port`
+  passed: `3 passed`.
+- `git diff --check` reported only pre-existing CRLF normalization warnings in
+  unrelated WIP files.
+
+Reviewer Gate:
+
+- Prevents localhost health probing from becoming a browser redirect trust
+  channel.
+
+Residual Risk:
+
+- This validates the health URL shape, not the identity of the local process
+  beyond the existing `desk_health_v1` app marker.
+
+Next:
+
+- Commit this checkpoint, then run a wider backend checkpoint.

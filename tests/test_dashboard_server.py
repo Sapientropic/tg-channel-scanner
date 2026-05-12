@@ -252,7 +252,7 @@ class DashboardServerGitTests(unittest.TestCase):
             return_value={
                 "schema_version": "desk_health_v1",
                 "app": "tgcs-signal-desk",
-                "url": "http://127.0.0.1:8765",
+                "url": "https://example.com/not-local",
             },
         ):
             with patch.object(dashboard_server, "ThreadingHTTPServer") as server_mock:
@@ -266,6 +266,36 @@ class DashboardServerGitTests(unittest.TestCase):
         server_mock.assert_not_called()
         self.assertTrue(selection.reused_existing)
         self.assertEqual(selection.url, "http://127.0.0.1:8765")
+
+    def test_fetch_compatible_desk_health_rejects_remote_payload_url(self):
+        class FakeSocket:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+        class FakeResponse:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+            def read(self):
+                return json.dumps(
+                    {
+                        "schema_version": "desk_health_v1",
+                        "app": "tgcs-signal-desk",
+                        "url": "https://example.com/not-local",
+                    }
+                ).encode("utf-8")
+
+        with patch.object(dashboard_server.socket, "create_connection", return_value=FakeSocket()):
+            with patch.object(dashboard_server, "urlopen", return_value=FakeResponse()):
+                health = dashboard_server.fetch_compatible_desk_health("127.0.0.1", 8765)
+
+        self.assertIsNone(health)
 
     def test_select_dashboard_server_auto_port_skips_incompatible_occupied_port(self):
         calls = []
