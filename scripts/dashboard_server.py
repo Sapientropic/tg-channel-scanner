@@ -3860,10 +3860,12 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 self._json(HTTPStatus.OK, {"ok": True, "ai": desk_ai_settings_status()})
                 return
             if parsed.path == "/api/state":
+                DashboardHandler._require_loopback_access(self, "Dashboard state")
                 with close_after_use(self._connect()) as conn:
                     self._json(HTTPStatus.OK, dashboard_state_payload(conn))
                 return
             if parsed.path.startswith("/artifacts/"):
+                DashboardHandler._require_loopback_access(self, "Report artifacts")
                 self._serve_artifact(parsed.path.removeprefix("/artifacts/"))
                 return
             self._serve_static(parsed.path)
@@ -3965,16 +3967,19 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 self._json(HTTPStatus.OK, {"ok": True, "git": _git_update_status(fetch=True)})
                 return
             if parsed.path == "/api/git/pull-latest":
+                DashboardHandler._require_loopback_access(self, "Git update")
                 if body.get("confirm") is not True:
                     raise DashboardGitError("Pull latest requires explicit confirmation.")
                 self._json(HTTPStatus.OK, {"ok": True, "git": _git_pull_latest()})
                 return
             if parsed.path == "/api/feedback/export":
+                DashboardHandler._require_loopback_access(self, "Feedback export")
                 with close_after_use(self._connect()) as conn:
                     result = write_feedback_export(conn)
                 self._json(HTTPStatus.OK, {"ok": True, "export": result})
                 return
             if parsed.path == "/api/feedback/clear":
+                DashboardHandler._require_loopback_access(self, "Feedback clear")
                 with close_after_use(self._connect()) as conn:
                     result = monitor_state.clear_feedback_decisions(conn)
                 self._json(HTTPStatus.OK, {"ok": True, "feedback": result})
@@ -3992,12 +3997,14 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 self._json(HTTPStatus.OK, {"ok": True, "profile": result})
                 return
             if parsed.path.startswith("/api/review-cards/") and parsed.path.endswith("/undo"):
+                DashboardHandler._require_loopback_access(self, "Review card actions")
                 card_id = unquote(parsed.path.split("/")[3])
                 with close_after_use(self._connect()) as conn:
                     card = monitor_state.undo_card_action(conn, card_id=card_id)
                 self._json(HTTPStatus.OK, {"ok": True, "card": card})
                 return
             if parsed.path.startswith("/api/review-cards/") and parsed.path.endswith("/action"):
+                DashboardHandler._require_loopback_access(self, "Review card actions")
                 card_id = unquote(parsed.path.split("/")[3])
                 with close_after_use(self._connect()) as conn:
                     card = monitor_state.set_card_action(
@@ -4089,12 +4096,14 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 self._json(HTTPStatus.OK, {"ok": True, "patch": patch})
                 return
             if parsed.path.startswith("/api/profile-patches/") and parsed.path.endswith("/apply"):
+                DashboardHandler._require_loopback_access(self, "Profile patch actions")
                 patch_id = unquote(parsed.path.split("/")[3])
                 with close_after_use(self._connect()) as conn:
                     result = monitor_state.apply_profile_patch(conn, patch_id=patch_id)
                 self._json(HTTPStatus.OK, {"ok": True, "result": result})
                 return
             if parsed.path.startswith("/api/profile-patches/") and parsed.path.endswith("/revert"):
+                DashboardHandler._require_loopback_access(self, "Profile patch actions")
                 patch_id = unquote(parsed.path.split("/")[3])
                 with close_after_use(self._connect()) as conn:
                     result = monitor_state.revert_profile_patch(conn, patch_id=patch_id)

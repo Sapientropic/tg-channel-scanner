@@ -142,3 +142,45 @@ Next:
 
 - Commit a passing checkpoint, then take the next large hardening slice from
   the reviewer P1 list.
+
+## Slice 3: Dashboard Loopback Boundary
+
+Status: completed.
+
+Actions:
+
+- Added loopback guards to `GET /api/state` and `GET /artifacts/*`.
+- Added loopback guards to local mutation endpoints:
+  - `POST /api/git/pull-latest`
+  - `POST /api/feedback/export`
+  - `POST /api/feedback/clear`
+  - `POST /api/review-cards/*/action`
+  - `POST /api/review-cards/*/undo`
+  - `POST /api/profile-patches/*/apply`
+  - `POST /api/profile-patches/*/revert`
+- Added negative HTTP handler tests proving non-loopback requests are rejected
+  before DB connections, artifact serving, or mutation functions are reached.
+
+Verification:
+
+- `python -m pytest tests/test_dashboard_server.py -k "loopback or state_and_artifact or local_state_mutation or get_state_returns_json_error or profile_patch_revert_endpoint or feedback_profile_suggestions"`
+  passed: `12 passed, 120 deselected`.
+- `python -m pytest tests/test_dashboard_server.py` passed: `132 passed`.
+
+Reviewer Gate:
+
+- Addresses Rawls P0/P1 local mutation endpoint loopback concern for the listed
+  endpoints.
+- Addresses Cicero P1 `/api/state` and `/artifacts/*` exposure concern for
+  non-loopback clients.
+
+Residual Risk:
+
+- This intentionally makes state and report artifacts localhost-only. Default
+  product launch is local Signal Desk; remote dashboard hosting remains outside
+  the current v0.5 local contract.
+
+Next:
+
+- Commit this verified dashboard boundary checkpoint, then continue with API
+  client contract drift and stale sanitizer duplication.

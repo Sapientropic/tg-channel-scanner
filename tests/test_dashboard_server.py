@@ -304,6 +304,42 @@ class DashboardServerGitTests(unittest.TestCase):
         self.assertEqual(handler.status, HTTPStatus.BAD_REQUEST)
         self.assertIn("localhost", handler.payload["error"])
 
+    def test_state_and_artifact_get_endpoints_require_loopback_client(self):
+        class FakeHandler:
+            client_address = ("192.168.1.10", 51000)
+            status = None
+            payload = None
+            connected = False
+            served_artifact = False
+
+            def __init__(self, path):
+                self.path = path
+
+            def _connect(self):
+                self.connected = True
+                raise AssertionError("state connection should be gated before use")
+
+            def _serve_artifact(self, encoded_path):
+                self.served_artifact = True
+                raise AssertionError("artifact serving should be gated before use")
+
+            def _serve_static(self, path):
+                raise AssertionError("sensitive routes should not fall back to static")
+
+            def _json(self, status, payload):
+                self.status = status
+                self.payload = payload
+
+        for path in ["/api/state", "/artifacts/output/runs/run-1/report.html"]:
+            with self.subTest(path=path):
+                handler = FakeHandler(path)
+                dashboard_server.DashboardHandler.do_GET(handler)
+
+                self.assertEqual(handler.status, HTTPStatus.BAD_REQUEST)
+                self.assertIn("localhost", handler.payload["error"])
+                self.assertFalse(handler.connected)
+                self.assertFalse(handler.served_artifact)
+
     def test_desk_actions_exposes_allowlisted_actions_and_human_boundaries(self):
         payload = dashboard_server.desk_actions()
 
@@ -2343,6 +2379,55 @@ class DashboardServerGitTests(unittest.TestCase):
                 action_mock.assert_not_called()
                 self.assertEqual(handler.status, HTTPStatus.BAD_REQUEST)
                 self.assertIn("localhost", handler.payload["error"])
+
+    def test_local_state_mutation_endpoints_require_loopback_client(self):
+        class FakeHandler:
+            status = None
+            payload = None
+            client_address = ("192.168.1.10", 51000)
+            connected = False
+
+            def __init__(self, path):
+                self.path = path
+
+            def _read_json_body(self):
+                return {"confirm": True, "action": "keep", "preferences": "Prefer remote roles."}
+
+            def _connect(self):
+                self.connected = True
+                raise AssertionError("local mutation connection should be gated before use")
+
+            def _json(self, status, payload):
+                self.status = status
+                self.payload = payload
+
+        endpoint_functions = {
+            "/api/git/pull-latest": (dashboard_server, "_git_pull_latest"),
+            "/api/feedback/export": (dashboard_server, "write_feedback_export"),
+            "/api/feedback/clear": (dashboard_server.monitor_state, "clear_feedback_decisions"),
+            "/api/feedback/profile-suggestions": (
+                dashboard_server.monitor_state,
+                "create_feedback_profile_patch_suggestions",
+            ),
+            "/api/review-cards/card_123/action": (dashboard_server.monitor_state, "set_card_action"),
+            "/api/review-cards/card_123/undo": (dashboard_server.monitor_state, "undo_card_action"),
+            "/api/profiles/jobs-fast/matching-preferences": (
+                dashboard_server.monitor_state,
+                "create_profile_preferences_patch_suggestion",
+            ),
+            "/api/profile-patches/patch_123/apply": (dashboard_server.monitor_state, "apply_profile_patch"),
+            "/api/profile-patches/patch_123/revert": (dashboard_server.monitor_state, "revert_profile_patch"),
+        }
+        for path, (module, function_name) in endpoint_functions.items():
+            with self.subTest(path=path):
+                with patch.object(module, function_name) as action_mock:
+                    handler = FakeHandler(path)
+                    dashboard_server.DashboardHandler.do_POST(handler)
+
+                action_mock.assert_not_called()
+                self.assertEqual(handler.status, HTTPStatus.BAD_REQUEST)
+                self.assertIn("localhost", handler.payload["error"])
+                self.assertFalse(handler.connected)
 
     def test_desk_actions_http_endpoint_returns_actions(self):
         class FakeHandler:
