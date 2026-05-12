@@ -29,6 +29,7 @@ REVIEW_CARD_SCHEMA_VERSION = "review_card_v1"
 ALERT_EVENT_SCHEMA_VERSION = "alert_event_v1"
 PROFILE_PATCH_SCHEMA_VERSION = "profile_patch_suggestion_v1"
 DELIVERY_TARGET_SCHEMA_VERSION = "delivery_target_v1"
+DEFAULT_FEEDBACK_EXPORT_PATH = "output/feedback/review-feedback.jsonl"
 ALERT_SCHEDULE_MODES = {"work_hours", "all_day", "muted"}
 PROFILE_RUNTIME_SETTING_LIMITS = {
     "scan_window_hours": (1, 168),
@@ -1392,7 +1393,11 @@ def feedback_summary(conn: sqlite3.Connection) -> dict[str, Any]:
         by_decision_status[decision_status] = by_decision_status.get(decision_status, 0) + 1
     exportable_count = sum(by_action.values())
     latest_export = latest_feedback_export(conn)
-    last_export_path = latest_export["output_path"] if latest_export else "output/feedback/review-feedback.jsonl"
+    last_export_path = (
+        dashboard_feedback_export_display_path(latest_export["output_path"])
+        if latest_export
+        else DEFAULT_FEEDBACK_EXPORT_PATH
+    )
     if latest_export and latest_export.get("exported_at"):
         changed_since_last_export = bool(
             conn.execute(
@@ -1429,6 +1434,22 @@ def feedback_summary(conn: sqlite3.Connection) -> dict[str, Any]:
         "by_rating": by_rating,
         "by_decision_status": by_decision_status,
     }
+
+
+def dashboard_feedback_export_display_path(path: object) -> str:
+    cleaned = str(path or "").strip().replace("\\", "/")
+    if (
+        not cleaned
+        or cleaned.startswith("/")
+        or re.match(r"^[A-Za-z]:", cleaned)
+        or re.match(r"^[a-z][a-z0-9+.-]*://", cleaned, flags=re.IGNORECASE)
+        or re.search(r"[\x00-\x1f\x7f]", cleaned)
+    ):
+        return DEFAULT_FEEDBACK_EXPORT_PATH
+    parts = PurePosixPath(cleaned).parts
+    if not parts or ".." in parts:
+        return DEFAULT_FEEDBACK_EXPORT_PATH
+    return cleaned
 
 
 def validation_summary(

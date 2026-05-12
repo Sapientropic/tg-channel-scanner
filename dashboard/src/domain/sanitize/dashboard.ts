@@ -542,7 +542,11 @@ function sanitizeFeedbackSummary(value: unknown): DashboardState["feedback_summa
   if (typeof value.changed_since_last_export === "boolean") {
     summary.changed_since_last_export = value.changed_since_last_export;
   }
-  assignOptionalStrings(summary, value, ["export_scope_note", "last_export_path"]);
+  assignOptionalStrings(summary, value, ["export_scope_note"]);
+  const lastExportPath = sanitizeDashboardRelativePath(value.last_export_path);
+  if (lastExportPath) {
+    summary.last_export_path = lastExportPath;
+  }
   const nextAction = sanitizeDashboardNextAction(value.next_action);
   if (nextAction) {
     summary.next_action = nextAction;
@@ -564,6 +568,27 @@ function sanitizeFeedbackSummary(value: unknown): DashboardState["feedback_summa
     summary.by_decision_status = byDecisionStatus;
   }
   return Object.keys(summary).length ? summary : undefined;
+}
+
+function sanitizeDashboardRelativePath(value: unknown): string | undefined {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+  const cleaned = value.trim().replace(/\\/g, "/");
+  if (
+    !cleaned ||
+    cleaned.startsWith("/") ||
+    /^[A-Za-z]:/.test(cleaned) ||
+    /^[a-z][a-z0-9+.-]*:\/\//i.test(cleaned) ||
+    /[\u0000-\u001F\u007F]/.test(cleaned)
+  ) {
+    return undefined;
+  }
+  const parts = cleaned.split("/").filter(Boolean);
+  if (!parts.length || parts.includes("..")) {
+    return undefined;
+  }
+  return cleaned;
 }
 
 function sanitizeOpportunitySummary(value: unknown): OpportunitySummary | undefined {

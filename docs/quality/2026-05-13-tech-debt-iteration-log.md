@@ -365,3 +365,37 @@ Next:
 
 - Commit this checkpoint, then run wider regression before selecting the next
   v0.5 hardening target.
+
+## Slice 9: Feedback Summary Legacy Path Hardening
+
+Status: in progress.
+
+Actions:
+
+- Added backend projection cleanup for `feedback_summary.last_export_path` so
+  legacy absolute, traversal, URL-shaped, or control-character paths degrade to
+  the default relative feedback export path.
+- Added frontend sanitizer cleanup for the same field so malformed dashboard
+  state cannot surface old local paths in Settings.
+
+Verification:
+
+- `python -m pytest tests/test_monitor_state.py::MonitorStateTests::test_feedback_summary_tracks_changes_since_last_export tests/test_monitor_state.py::MonitorStateTests::test_feedback_summary_masks_legacy_unsafe_export_path`
+  passed: `2 passed`.
+- `npm test -- sanitize` passed: `1` file, `27` tests.
+- `npm run typecheck` passed.
+
+Reviewer Gate:
+
+- Completes the feedback export hardening path by covering historical DB rows,
+  not only new dashboard exports.
+
+Residual Risk:
+
+- The CLI export command still prints explicit local output paths by design.
+  This slice only controls dashboard state and UI sanitizer surfaces.
+
+Next:
+
+- Commit this checkpoint, then run wider regression and continue with the next
+  contract/privacy hardening target.

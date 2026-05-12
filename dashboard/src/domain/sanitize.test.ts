@@ -343,7 +343,11 @@ describe("dashboard state sanitizers", () => {
         top_items: [{ card_id: "card-1", title: "Role", rating: "high", decision_status: "new", status: "pending", source_refs: ["bad"] }],
       },
       validation_summary: { by_action: { keep: 1, skip: "bad", bad_nan: Number.NaN }, next_action: { detail: "Review outcomes" } },
-      feedback_summary: { recent_impacts: ["bad", {}, { item_title: "Kept role", impact_status: 3 }], by_rating: { high: 1, low: null } },
+      feedback_summary: {
+        recent_impacts: ["bad", {}, { item_title: "Kept role", impact_status: 3 }],
+        by_rating: { high: 1, low: null },
+        last_export_path: "C:/Users/Administrator/private/review-feedback.jsonl",
+      },
       setup_status: { checks: [{ check_id: "profiles", label: "Profiles", status: "active", command: 42 }, null] },
     });
     expect(state.opportunity_summary).toEqual({
@@ -354,6 +358,10 @@ describe("dashboard state sanitizers", () => {
     });
     expect(state.validation_summary).toEqual({ by_action: { keep: 1 }, next_action: { detail: "Review outcomes" } });
     expect(state.feedback_summary).toEqual({ recent_impacts: [{ item_title: "Kept role" }], by_rating: { high: 1 } });
+    expect(
+      sanitizeDashboardState({ feedback_summary: { last_export_path: " output\\feedback\\review-feedback.jsonl " } }).feedback_summary
+        ?.last_export_path,
+    ).toBe("output/feedback/review-feedback.jsonl");
     expect(state.setup_status).toEqual({ checks: [{ check_id: "profiles", label: "Profiles", status: "active" }] });
     expect(state.delivery_targets[0].config).toEqual({ chat_id: "123456" });
     expect(JSON.stringify(state.delivery_targets)).not.toContain("secret");

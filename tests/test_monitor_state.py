@@ -1814,6 +1814,24 @@ class MonitorStateTests(unittest.TestCase):
         self.assertEqual(exported_summary["last_export_path"], "output/feedback/review-feedback.jsonl")
         self.assertTrue(changed_summary["changed_since_last_export"])
 
+    def test_feedback_summary_masks_legacy_unsafe_export_path(self):
+        conn = sqlite3.connect(":memory:")
+        conn.row_factory = sqlite3.Row
+        monitor_state.init_db(conn)
+        monitor_state.record_feedback_export(
+            conn,
+            output_path="C:/Users/Administrator/private/review-feedback.jsonl",
+            feedback_count=0,
+            exported_at="2026-05-10T00:00:01Z",
+        )
+
+        summary = monitor_state.feedback_summary(conn)
+        rendered = json.dumps(summary, ensure_ascii=False)
+
+        self.assertEqual(summary["last_export_path"], "output/feedback/review-feedback.jsonl")
+        self.assertNotIn("Administrator", rendered)
+        self.assertNotIn("private", rendered)
+
     def test_undo_card_feedback_restores_pending_review_state(self):
         conn = sqlite3.connect(":memory:")
         conn.row_factory = sqlite3.Row
