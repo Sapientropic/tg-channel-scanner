@@ -432,6 +432,8 @@ class DashboardServerGitTests(unittest.TestCase):
         self.assertEqual(result["status"], "success")
         self.assertIn("2 accessible", result["detail"])
         self.assertIn("cannot resolve 1", result["detail"])
+        self.assertEqual(result["source_access"]["accessible_count"], 2)
+        self.assertEqual(result["source_access"]["inaccessible_count"], 1)
 
     def test_desk_action_blocks_duplicate_long_running_scan(self):
         lock = dashboard_server._desk_action_lock("monitor_jobs_dry_run")

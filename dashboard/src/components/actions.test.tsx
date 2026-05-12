@@ -172,6 +172,35 @@ describe("Signal Desk journey", () => {
     ]);
   });
 
+  it("offers source repair immediately after a source access check finds problems", () => {
+    const steps = buildJourneySteps(
+      actions,
+      {
+        sources_probe_access: {
+          ...result("sources_probe_access"),
+          detail: "Access check: 3 accessible, 1 quiet, 2 inaccessible across 6 checked sources.",
+          source_access: {
+            schema_version: "desk_source_access_health_v1",
+            source_count: 6,
+            checked_count: 6,
+            accessible_count: 3,
+            quiet_count: 1,
+            inaccessible_count: 2,
+            truncated_count: 0,
+          },
+        },
+      },
+      { stage: "needs_first_run", has_profiles: true, has_runs: false },
+      telegramReady,
+    );
+
+    const workspace = steps.find((step) => step.key === "workspace");
+
+    expect(workspace?.detail).toContain("2 inaccessible");
+    expect(workspace?.buttons.map((button) => button.label)).toContain("Pause inaccessible");
+    expect(workspace?.buttons.map((button) => button.label)).toContain("Keep accessible only");
+  });
+
   it("keeps commands as advanced fallback data instead of primary controls", () => {
     const steps = buildJourneySteps(actions, {}, { stage: "ready", has_profiles: true, has_runs: true }, telegramReady);
 

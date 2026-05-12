@@ -648,6 +648,16 @@ describe("dashboard state sanitizers", () => {
         artifact_path: " output/feedback/review-feedback.jsonl ",
         next_action: "Share the export.",
         finished_at: " 2026-05-10T16:30:00+08:00 ",
+        source_access: {
+          schema_version: "desk_source_access_health_v1",
+          source_count: 8,
+          checked_count: 6,
+          accessible_count: 3,
+          quiet_count: 1,
+          inaccessible_count: 2,
+          truncated_count: 2,
+          reason_counts: { cannot_resolve_entity: 2, bad: "ignored" },
+        },
         stdout: "ignored",
       }),
     ).toEqual({
@@ -661,6 +671,17 @@ describe("dashboard state sanitizers", () => {
       artifact_path: "output/feedback/review-feedback.jsonl",
       next_action: "Share the export.",
       finished_at: "2026-05-10T16:30:00+08:00",
+      source_access: {
+        schema_version: "desk_source_access_health_v1",
+        checked_at: "",
+        source_count: 8,
+        checked_count: 6,
+        accessible_count: 3,
+        quiet_count: 1,
+        inaccessible_count: 2,
+        truncated_count: 2,
+        reason_counts: { cannot_resolve_entity: 2 },
+      },
     });
 
     expect(

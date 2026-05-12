@@ -465,6 +465,10 @@ export function buildJourneySteps(
   const firstRunReady = stage === "needs_first_run";
   const ready = stage === "ready";
   const sourceAccessDetail = setupCheckDetail(setupStatus, "source_access");
+  const sourceAccessResult = results.sources_probe_access?.source_access;
+  const sourceAccessNeedsRepair = sourceAttention
+    || Boolean(sourceAccessResult && (sourceAccessResult.inaccessible_count > 0 || sourceAccessResult.quiet_count > 0));
+  const sourceStepDetail = results.sources_probe_access?.detail || sourceAccessDetail;
 
   const hasSuccess = (actionId: string) => results[actionId]?.status === "success";
   const dryRunScheduleOn = scheduler?.installed || (hasSuccess("schedule_install_dry_run") && results.schedule_remove_dry_run?.status !== "success");
@@ -511,9 +515,9 @@ export function buildJourneySteps(
       key: "workspace",
       title: sourceAttention ? "Repair source list" : "Prepare Signal Desk files",
       detail: sourceAttention
-        ? sourceAccessDetail || "Check real Telegram source access, then pause sources that cannot be read."
-        : sourceAccessDetail
-          ? sourceAccessDetail
+        ? sourceStepDetail || "Check real Telegram source access, then pause sources that cannot be read."
+        : sourceStepDetail
+          ? sourceStepDetail
           : "Create the private settings and saved-channel files Signal Desk needs after Telegram is connected.",
       state: workspaceState(stage, workspaceDone, sourceAttention),
       stateLabel: workspaceStateLabel(stage, workspaceDone, sourceAttention),
@@ -521,7 +525,7 @@ export function buildJourneySteps(
         { actionId: "init_jobs", label: workspaceDone ? "Refresh files" : "Prepare files", variant: workspaceDone ? "secondary" : "primary" },
         { actionId: "sources_import_jobs", label: "Repair source list", variant: sourceAttention ? "primary" : "secondary" },
         { actionId: "sources_probe_access", label: "Check source access", variant: sourceAttention ? "primary" : "secondary" },
-        ...(sourceAttention
+        ...(sourceAccessNeedsRepair
           ? [
               { actionId: "sources_pause_inaccessible", label: "Pause inaccessible", variant: "secondary" as const },
               { actionId: "sources_keep_accessible", label: "Keep accessible only", variant: "secondary" as const },

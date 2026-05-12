@@ -455,6 +455,17 @@ export type DeskActionResult = {
   artifact_path: string;
   next_action: string;
   finished_at: string;
+  source_access?: {
+    schema_version?: "desk_source_access_health_v1";
+    checked_at?: string;
+    source_count: number;
+    checked_count: number;
+    accessible_count: number;
+    quiet_count: number;
+    inaccessible_count: number;
+    truncated_count: number;
+    reason_counts?: Record<string, number>;
+  };
 };
 
 export type DeskSchedulerStatus = {

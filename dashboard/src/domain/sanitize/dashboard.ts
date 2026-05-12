@@ -151,7 +151,7 @@ export function sanitizeDeskActionResult(value: unknown): DeskActionResult | nul
     return null;
   }
   const exitCode = typeof value.exit_code === "number" && Number.isInteger(value.exit_code) ? value.exit_code : null;
-  return {
+  const result: DeskActionResult = {
     schema_version: "desk_action_result_v1",
     action_id: actionId,
     status,
@@ -163,6 +163,32 @@ export function sanitizeDeskActionResult(value: unknown): DeskActionResult | nul
     next_action: optionalString(value.next_action) ?? "",
     finished_at: optionalString(value.finished_at) ?? "",
   };
+  const sourceAccess = sanitizeSourceAccessActionSummary(value.source_access);
+  if (sourceAccess) {
+    result.source_access = sourceAccess;
+  }
+  return result;
+}
+
+function sanitizeSourceAccessActionSummary(value: unknown): DeskActionResult["source_access"] {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+  const summary: NonNullable<DeskActionResult["source_access"]> = {
+    schema_version: value.schema_version === "desk_source_access_health_v1" ? value.schema_version : undefined,
+    checked_at: optionalString(value.checked_at) ?? "",
+    source_count: nonNegativeIntegerOrDefault(value.source_count, 0),
+    checked_count: nonNegativeIntegerOrDefault(value.checked_count, 0),
+    accessible_count: nonNegativeIntegerOrDefault(value.accessible_count, 0),
+    quiet_count: nonNegativeIntegerOrDefault(value.quiet_count, 0),
+    inaccessible_count: nonNegativeIntegerOrDefault(value.inaccessible_count, 0),
+    truncated_count: nonNegativeIntegerOrDefault(value.truncated_count, 0),
+  };
+  const reasonCounts = sanitizeNumberRecord(value.reason_counts);
+  if (reasonCounts) {
+    summary.reason_counts = reasonCounts;
+  }
+  return summary;
 }
 
 export function sanitizeDeskSchedulerStatus(value: unknown): DeskSchedulerStatus | null {

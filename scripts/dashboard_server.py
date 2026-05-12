@@ -1735,6 +1735,25 @@ def _source_access_health_detail(payload: dict) -> str:
     return detail
 
 
+def _source_access_action_summary(payload: dict) -> dict:
+    reason_counts = payload.get("reason_counts") if isinstance(payload.get("reason_counts"), dict) else {}
+    return {
+        "schema_version": DESK_SOURCE_ACCESS_HEALTH_SCHEMA_VERSION,
+        "checked_at": str(payload.get("checked_at") or ""),
+        "source_count": int(payload.get("source_count") or 0),
+        "checked_count": int(payload.get("checked_count") or 0),
+        "accessible_count": int(payload.get("accessible_count") or 0),
+        "quiet_count": int(payload.get("quiet_count") or 0),
+        "inaccessible_count": int(payload.get("inaccessible_count") or 0),
+        "truncated_count": int(payload.get("truncated_count") or 0),
+        "reason_counts": {
+            str(reason): int(count or 0)
+            for reason, count in reason_counts.items()
+            if int(count or 0) > 0
+        },
+    }
+
+
 def _source_access_record_base(source: dict) -> dict:
     channel = source_registry.channel_value(source)
     label = str(source.get("label") or channel or source.get("source_id") or "Unknown source").strip()
@@ -2872,9 +2891,10 @@ def _desk_action_result(
     next_action: str,
     exit_code: int | None = None,
     artifact_path: str = "",
+    extra: dict | None = None,
 ) -> dict:
     action = DESK_ACTION_BY_ID[action_id]
-    return {
+    result = {
         "schema_version": "desk_action_result_v1",
         "action_id": action_id,
         "status": status,
@@ -2886,6 +2906,9 @@ def _desk_action_result(
         "next_action": next_action,
         "finished_at": _utc_now(),
     }
+    if extra:
+        result.update(extra)
+    return result
 
 
 def _scheduler_result(
@@ -3391,6 +3414,7 @@ def _run_desk_action_unlocked(action_id: str, *, action: dict, body: dict | None
                 if int(health.get("inaccessible_count") or 0) or int(health.get("quiet_count") or 0)
                 else "Run a fresh practice scan."
             ),
+            extra={"source_access": _source_access_action_summary(health)},
         )
 
     if action_id in {"sources_pause_inaccessible", "sources_keep_accessible"}:
