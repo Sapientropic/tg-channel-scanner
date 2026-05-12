@@ -66,7 +66,7 @@ DESK_NOTIFICATION_TOKEN_ALLOWED_FIELDS = {"token", "clear"}
 DESK_AI_SETTINGS_ALLOWED_FIELDS = {"provider", "api_key", "clear"}
 DESK_SOURCE_IMPORT_ALLOWED_FIELDS = {"sources", "topic"}
 DESK_SOURCE_STARTER_ALLOWED_FIELDS = {"topic"}
-DESK_SOURCE_ASSISTANT_ALLOWED_FIELDS = {"instruction", "topic", "dry_run", "confirm_external_ai"}
+DESK_SOURCE_ASSISTANT_ALLOWED_FIELDS = {"instruction", "topic", "dry_run", "confirm_external_ai", "resolved_plan"}
 DESK_SOURCE_UPDATE_ALLOWED_FIELDS = {"enabled"}
 DESK_SOURCE_TOPIC_ALLOWED_FIELDS = {"topics"}
 PROFILE_ENABLED_ALLOWED_FIELDS = {"enabled"}
@@ -1472,6 +1472,7 @@ def _source_operation_payload(
     enabled_count: int = 0,
     disabled_count: int = 0,
     preview_sources: list[dict] | None = None,
+    resolved_plan: dict[str, list[str]] | None = None,
     title: str,
     detail: str,
     llm_used: bool = False,
@@ -1492,6 +1493,7 @@ def _source_operation_payload(
         "registry_path": ".tgcs/sources.json",
         "preview_sources": preview_sources or [],
         "preview_truncated_count": 0,
+        "resolved_plan": resolved_plan or {"add": [], "remove": [], "disable": [], "enable": []},
         "llm_used": llm_used,
         "title": title,
         "detail": detail,
@@ -1747,6 +1749,32 @@ def _dedupe_source_ids(source_ids: list[str]) -> list[str]:
     return deduped
 
 
+def _dedupe_source_channels(channels: list[str]) -> list[str]:
+    deduped: list[str] = []
+    seen: set[str] = set()
+    for channel in channels:
+        clean = source_registry.normalize_channel_name(channel)
+        if not clean:
+            continue
+        marker = clean.casefold()
+        if marker in seen:
+            continue
+        seen.add(marker)
+        deduped.append(clean)
+    return deduped
+
+
+def _clean_resolved_source_plan(plan: dict) -> dict[str, list[str]]:
+    if not isinstance(plan, dict):
+        raise ValueError("Source plan must be an object.")
+    return {
+        "add": _dedupe_source_channels([str(value) for value in plan.get("add") or []]),
+        "remove": _dedupe_source_ids([str(value) for value in plan.get("remove") or []]),
+        "disable": _dedupe_source_ids([str(value) for value in plan.get("disable") or []]),
+        "enable": _dedupe_source_ids([str(value) for value in plan.get("enable") or []]),
+    }
+
+
 def _source_assistant_llm_plan(instruction: str, topic: str, existing: dict[str, dict]) -> dict[str, list[str]]:
     if not report.llm_key_available():
         raise ValueError("Save an AI API key in Settings before using AI source planning.")
@@ -1838,11 +1866,17 @@ def run_source_assistant(body: dict) -> dict:
     confirm_external_ai = body.get("confirm_external_ai", False)
     if not isinstance(confirm_external_ai, bool):
         raise ValueError("AI source planning confirmation must be true or false.")
+    resolved_plan = body.get("resolved_plan")
+    if resolved_plan is not None and not isinstance(resolved_plan, dict):
+        raise ValueError("Resolved source plan must be an object.")
+    if not dry_run and resolved_plan is not None:
+        return apply_source_assistant_resolved_plan(resolved_plan, topic)
     plan = _source_assistant_plan(instruction)
     registry_path = PROJECT_ROOT / ".tgcs" / "sources.json"
     preview_sources: list[dict] = []
     added_count = updated_count = unchanged_count = removed_count = enabled_count = disabled_count = 0
     llm_used = False
+    resolved_plan = {"add": list(plan["add"]), "remove": [], "disable": [], "enable": []}
 
     if plan["add"]:
         result = source_registry.import_channels(
@@ -1869,7 +1903,9 @@ def run_source_assistant(body: dict) -> dict:
     def source_ids(values: list[str]) -> list[str]:
         return [_source_id_from_channel(value) for value in values]
 
-    for source_id in _dedupe_source_ids(source_ids(plan["disable"]) + llm_plan["disable"]):
+    disable_ids = _dedupe_source_ids(source_ids(plan["disable"]) + llm_plan["disable"])
+    resolved_plan["disable"] = list(disable_ids)
+    for source_id in disable_ids:
         source = existing.get(source_id)
         if not source:
             continue
@@ -1877,7 +1913,9 @@ def run_source_assistant(body: dict) -> dict:
         preview_sources.append(_desk_source_record({**source, "enabled": False}))
         if not dry_run:
             source_registry.update_source_enabled(registry_path, source_id=source_id, enabled=False)
-    for source_id in _dedupe_source_ids(source_ids(plan["enable"]) + llm_plan["enable"]):
+    enable_ids = _dedupe_source_ids(source_ids(plan["enable"]) + llm_plan["enable"])
+    resolved_plan["enable"] = list(enable_ids)
+    for source_id in enable_ids:
         source = existing.get(source_id)
         if not source:
             continue
@@ -1886,6 +1924,7 @@ def run_source_assistant(body: dict) -> dict:
         if not dry_run:
             source_registry.update_source_enabled(registry_path, source_id=source_id, enabled=True)
     remove_ids = [source_id for source_id in _dedupe_source_ids(source_ids(plan["remove"]) + llm_plan["remove"]) if source_id in existing]
+    resolved_plan["remove"] = list(remove_ids)
     removed_count += len(remove_ids)
     for source_id in remove_ids:
         preview_sources.append(_desk_source_record(existing[source_id]))
@@ -1906,6 +1945,7 @@ def run_source_assistant(body: dict) -> dict:
             title="No source changes found",
             detail=f"Include Telegram handles, t.me links, numeric chat IDs, or enable AI source planning. For example: add @remote_jobs; remove @old_jobs.{ai_hint}",
             llm_used=llm_used,
+            resolved_plan=resolved_plan,
         )
     return _source_operation_payload(
         action="assistant",
@@ -1918,9 +1958,75 @@ def run_source_assistant(body: dict) -> dict:
         enabled_count=enabled_count,
         disabled_count=disabled_count,
         preview_sources=preview_sources[:12],
+        resolved_plan=resolved_plan,
         title="Source plan ready" if dry_run else "Source plan applied",
         detail="Review the plan, then apply it." if dry_run else "Signal Desk updated the local source registry.",
         llm_used=llm_used,
+    )
+
+
+def apply_source_assistant_resolved_plan(plan: dict, topic: str) -> dict:
+    clean_plan = _clean_resolved_source_plan(plan)
+    clean_topic = _clean_source_topic(topic)
+    registry_path = PROJECT_ROOT / ".tgcs" / "sources.json"
+    preview_sources: list[dict] = []
+    added_count = updated_count = unchanged_count = removed_count = enabled_count = disabled_count = 0
+
+    if clean_plan["add"]:
+        result = source_registry.import_channels(
+            clean_plan["add"],
+            registry_path,
+            dry_run=False,
+            topics=[clean_topic],
+            input_path="source assistant confirmation",
+        )
+        added_count += int(result.get("added_count") or 0)
+        updated_count += int(result.get("updated_count") or 0)
+        unchanged_count += int(result.get("unchanged_count") or 0)
+        for source in (result.get("sources") or []) + (result.get("updated_sources") or []) + (result.get("unchanged_sources") or []):
+            if isinstance(source, dict):
+                preview_sources.append(_desk_source_record(source))
+
+    payload = source_registry.load_registry(registry_path, missing_ok=True)
+    existing = {str(source.get("source_id")): source for source in payload.get("sources", []) if isinstance(source, dict)}
+
+    for source_id in clean_plan["disable"]:
+        source = existing.get(source_id)
+        if not source:
+            continue
+        disabled_count += 1
+        updated = source_registry.update_source_enabled(registry_path, source_id=source_id, enabled=False)
+        preview_sources.append(_desk_source_record(updated))
+
+    for source_id in clean_plan["enable"]:
+        source = existing.get(source_id)
+        if not source:
+            continue
+        enabled_count += 1
+        updated = source_registry.update_source_enabled(registry_path, source_id=source_id, enabled=True)
+        preview_sources.append(_desk_source_record(updated))
+
+    removable_ids = [source_id for source_id in clean_plan["remove"] if source_id in existing]
+    removed_count += len(removable_ids)
+    for source_id in removable_ids:
+        preview_sources.append(_desk_source_record(existing[source_id]))
+    if removable_ids:
+        source_registry.remove_sources(registry_path, source_ids=removable_ids)
+
+    return _source_operation_payload(
+        action="assistant",
+        topic=clean_topic,
+        dry_run=False,
+        added_count=added_count,
+        updated_count=updated_count,
+        unchanged_count=unchanged_count,
+        removed_count=removed_count,
+        enabled_count=enabled_count,
+        disabled_count=disabled_count,
+        preview_sources=preview_sources[:12],
+        resolved_plan=clean_plan,
+        title="Source plan applied",
+        detail="Signal Desk updated the local source registry from the confirmed plan.",
     )
 
 

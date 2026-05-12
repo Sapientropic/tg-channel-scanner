@@ -645,15 +645,18 @@ Webhook and Mini App flows are intentionally out of this local contract until
 the hosted HTTPS boundary is designed.
 
 Signal Desk `Settings` can also install starter sources, import pasted sources,
-and apply bounded source assistant plans. The browser body is limited to the
-documented fields; source registry paths are fixed to `.tgcs/sources.json`,
-preview is no-write, and import reuses `source_registry.py` normalization, topic
-merge, duplicate handling, and validation. The same Settings view can list saved
-sources, filter them by topic, toggle only their `enabled` state, retag sources,
-and remove validated source ids. External AI source planning is opt-in and can
-only return existing source ids to pause/resume/remove. Signal Desk writes only
-the fixed workspace-local registry and never accepts command strings, argv,
-registry paths, raw Telegram message data, or tokens from the browser.
+and apply bounded source assistant plans. Preview responses include a sanitized
+resolved source plan; Apply posts that resolved plan back so the confirmed
+change is the same change the user reviewed, even when AI source planning helped
+choose saved sources. The browser body is limited to the documented fields;
+source registry paths are fixed to `.tgcs/sources.json`, preview is no-write,
+and import reuses `source_registry.py` normalization, topic merge, duplicate
+handling, and validation. The same Settings view can list saved sources, filter
+them by topic, toggle only their `enabled` state, retag sources, and remove
+validated source ids. External AI source planning is opt-in and can only return
+existing source ids to pause/resume/remove. Signal Desk writes only the fixed
+workspace-local registry and never accepts command strings, argv, registry
+paths, raw Telegram message data, or tokens from the browser.
 
 ## Human Login Boundary
 

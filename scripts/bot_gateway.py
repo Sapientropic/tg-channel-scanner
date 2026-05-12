@@ -41,6 +41,7 @@ BOT_ALLOWED_CHAT_IDS_ENV = "TGCS_BOT_ALLOWED_CHAT_IDS"
 BOT_API_TIMEOUT_SECONDS = 20
 BOT_POLL_TIMEOUT_SECONDS = 30
 MAX_TELEGRAM_MESSAGE_LENGTH = 3900
+PENDING_SOURCE_PLAN_TTL_SECONDS = 15 * 60
 
 BOT_COMMANDS = [
     {"command": "start", "description": "Show the T-Sense bot menu"},
@@ -78,8 +79,8 @@ class BotIntent:
 @dataclass
 class PendingSourcePlan:
     chat_id: str
-    instruction: str
     topic: str
+    resolved_plan: dict[str, list[str]]
     created_at: float
 
 
@@ -503,15 +504,8 @@ def source_plan_preview(instruction: str, topic: str) -> tuple[str, dict[str, An
     return "\n".join(lines), result
 
 
-def apply_source_plan(instruction: str, topic: str) -> str:
-    result = dashboard_server.run_source_assistant(
-        {
-            "instruction": instruction,
-            "topic": topic,
-            "dry_run": False,
-            "confirm_external_ai": True,
-        }
-    )
+def apply_source_plan(resolved_plan: dict[str, list[str]], topic: str) -> str:
+    result = dashboard_server.apply_source_assistant_resolved_plan(resolved_plan, topic)
     return "\n".join(
         [
             result.get("title") or "Source plan applied",
@@ -528,15 +522,33 @@ class BotGateway:
         db_path: Path = DEFAULT_DB_PATH,
         use_llm: bool = True,
         allowed: set[str] | None = None,
+        extra_allowed: list[str] | None = None,
     ):
         self.api = api
         self.db_path = db_path
         self.use_llm = use_llm
-        self.allowed = allowed if allowed is not None else allowed_chat_ids(db_path)
+        self.extra_allowed = list(extra_allowed or [])
+        self.fixed_allowed = allowed is not None
+        self.allowed = allowed if allowed is not None else allowed_chat_ids(db_path, self.extra_allowed)
         self.pending_source_plans: dict[str, PendingSourcePlan] = {}
 
     def refresh_allowed(self) -> None:
-        self.allowed = allowed_chat_ids(self.db_path)
+        if not self.fixed_allowed:
+            self.allowed = allowed_chat_ids(self.db_path, self.extra_allowed)
+
+    def chat_is_allowed(self, chat_id: str) -> bool:
+        self.refresh_allowed()
+        return chat_is_allowed(chat_id, allowed=self.allowed)
+
+    def prune_pending_source_plans(self) -> None:
+        now = time.time()
+        expired = [
+            plan_id
+            for plan_id, plan in self.pending_source_plans.items()
+            if now - plan.created_at > PENDING_SOURCE_PLAN_TTL_SECONDS
+        ]
+        for plan_id in expired:
+            self.pending_source_plans.pop(plan_id, None)
 
     def dispatch_intent(self, chat_id: str, intent: BotIntent) -> None:
         if intent.action == "help":
@@ -570,11 +582,13 @@ class BotGateway:
             if operation_count <= 0:
                 self.api.send_message(chat_id, preview)
                 return
+            resolved_plan = result.get("resolved_plan") if isinstance(result.get("resolved_plan"), dict) else {}
             plan_id = secrets.token_urlsafe(8)
+            self.prune_pending_source_plans()
             self.pending_source_plans[plan_id] = PendingSourcePlan(
                 chat_id=chat_id,
-                instruction=intent.instruction,
                 topic=intent.topic,
+                resolved_plan=resolved_plan,
                 created_at=time.time(),
             )
             self.api.send_message(
@@ -586,14 +600,14 @@ class BotGateway:
         self.api.send_message(chat_id, help_text(), reply_markup=main_menu_keyboard())
 
     def handle_text(self, chat_id: str, text: str) -> None:
-        if not chat_is_allowed(chat_id, allowed=self.allowed):
+        if not self.chat_is_allowed(chat_id):
             self.api.send_message(chat_id, unauthorized_text(), reply_markup=main_menu_keyboard())
             return
         intent = route_text_to_intent(text, use_llm=self.use_llm)
         self.dispatch_intent(chat_id, intent)
 
     def handle_callback(self, chat_id: str, callback_query_id: str, data: str) -> None:
-        if not chat_is_allowed(chat_id, allowed=self.allowed):
+        if not self.chat_is_allowed(chat_id):
             self.api.answer_callback_query(callback_query_id, "Open Signal Desk Settings to authorize this chat.")
             self.api.send_message(chat_id, unauthorized_text())
             return
@@ -614,13 +628,14 @@ class BotGateway:
             self.dispatch_intent(chat_id, BotIntent(action="scan", profile_id=data.split(":", 1)[1] or "jobs-fast"))
             return
         if data.startswith("sources_apply:"):
+            self.prune_pending_source_plans()
             plan_id = data.split(":", 1)[1]
             plan = self.pending_source_plans.get(plan_id)
             if not plan or plan.chat_id != chat_id:
                 self.api.answer_callback_query(callback_query_id, "Source plan expired.")
                 return
             self.api.answer_callback_query(callback_query_id, "Applying source plan")
-            self.api.send_message(chat_id, apply_source_plan(plan.instruction, plan.topic))
+            self.api.send_message(chat_id, apply_source_plan(plan.resolved_plan, plan.topic))
             self.pending_source_plans.pop(plan_id, None)
             return
         self.api.answer_callback_query(callback_query_id, "Unsupported action")
@@ -678,8 +693,7 @@ def run_loop(args: argparse.Namespace) -> int:
     if not args.skip_menu:
         api.set_my_commands()
     extra_allowed = args.allow_chat_id or []
-    allowed = allowed_chat_ids(Path(args.db), extra_allowed)
-    gateway = BotGateway(api, db_path=Path(args.db), use_llm=not args.no_llm, allowed=allowed)
+    gateway = BotGateway(api, db_path=Path(args.db), use_llm=not args.no_llm, extra_allowed=extra_allowed)
     state_path = Path(args.state)
     state = load_state(state_path)
     offset = state.get("offset") if isinstance(state.get("offset"), int) else None

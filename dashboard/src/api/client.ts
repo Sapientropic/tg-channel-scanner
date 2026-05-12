@@ -408,12 +408,14 @@ export async function applySourceAssistant(
   instruction: string,
   topic: string,
   confirmExternalAi = false,
+  resolvedPlan?: SourceImportResult["resolved_plan"],
 ): Promise<SourceImportResult> {
   const payload = await postJson("/api/desk/sources/assistant", {
     instruction,
     topic,
     dry_run: false,
     confirm_external_ai: confirmExternalAi,
+    ...(resolvedPlan ? { resolved_plan: resolvedPlan } : {}),
   });
   const result = sanitizeSourceImportResult(payload.result);
   if (!result) {

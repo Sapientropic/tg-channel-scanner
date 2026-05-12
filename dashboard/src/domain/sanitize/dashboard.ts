@@ -396,10 +396,23 @@ export function sanitizeSourceImportResult(value: unknown): SourceImportResult |
     source_count: nonNegativeIntegerOrDefault(value.source_count, 0),
     registry_path: registryPath,
     preview_sources: sanitizeSourceImportPreviewSources(value.preview_sources),
+    resolved_plan: sanitizeResolvedSourcePlan(value.resolved_plan),
     preview_truncated_count: nonNegativeIntegerOrDefault(value.preview_truncated_count, 0),
   };
   assignOptionalStrings(result, value, ["title", "detail", "next_action", "finished_at"]);
   return result;
+}
+
+function sanitizeResolvedSourcePlan(value: unknown): SourceImportResult["resolved_plan"] {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+  return {
+    add: stringArray(value.add),
+    remove: stringArray(value.remove),
+    disable: stringArray(value.disable),
+    enable: stringArray(value.enable),
+  };
 }
 
 export function sanitizeDeskSourcesResult(value: unknown): DeskSourcesResult | null {

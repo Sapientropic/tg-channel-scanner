@@ -1505,14 +1505,14 @@ class DashboardServerGitTests(unittest.TestCase):
                 preview = dashboard_server.run_source_assistant(
                     {"instruction": "add @remote_jobs; remove @old_jobs", "topic": "jobs", "dry_run": True}
                 )
-                applied = dashboard_server.run_source_assistant(
-                    {"instruction": "add @remote_jobs; remove @old_jobs", "topic": "jobs", "dry_run": False}
-                )
+                applied = dashboard_server.apply_source_assistant_resolved_plan(preview["resolved_plan"], "jobs")
                 listed = dashboard_server.desk_sources()
 
         self.assertTrue(preview["dry_run"])
         self.assertEqual(preview["added_count"], 1)
         self.assertEqual(preview["removed_count"], 1)
+        self.assertEqual(preview["resolved_plan"]["add"], ["remote_jobs"])
+        self.assertEqual(preview["resolved_plan"]["remove"], ["telegram:old_jobs"])
         self.assertTrue(applied["written"])
         self.assertEqual(listed["source_count"], 1)
         self.assertEqual(listed["sources"][0]["channel"], "remote_jobs")
@@ -1554,6 +1554,8 @@ class DashboardServerGitTests(unittest.TestCase):
         self.assertTrue(ai_preview["llm_used"])
         self.assertEqual(ai_preview["removed_count"], 1)
         self.assertEqual(ai_preview["disabled_count"], 1)
+        self.assertEqual(ai_preview["resolved_plan"]["remove"], ["telegram:old_jobs"])
+        self.assertEqual(ai_preview["resolved_plan"]["disable"], ["telegram:web3_jobs"])
         self.assertTrue(applied["written"])
         self.assertEqual(listed["source_count"], 1)
         self.assertFalse(listed["sources"][0]["enabled"])

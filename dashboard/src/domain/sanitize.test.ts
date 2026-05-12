@@ -340,6 +340,12 @@ describe("dashboard state sanitizers", () => {
           { label: " remote_jobs ", source_id: " telegram:remote_jobs ", token: "secret" },
           { label: "", source_id: "bad" },
         ],
+        resolved_plan: {
+          add: [" remote_jobs ", 12],
+          remove: [" telegram:old_jobs "],
+          disable: [" telegram:spam_jobs "],
+          enable: [" telegram:paused_jobs "],
+        },
         title: " Source preview ready ",
         detail: " Review first. ",
         command: "tgcs sources import private.txt",
@@ -358,10 +364,19 @@ describe("dashboard state sanitizers", () => {
       source_count: 3,
       registry_path: ".tgcs/sources.json",
       preview_sources: [{ label: "remote_jobs", source_id: "telegram:remote_jobs" }],
+      resolved_plan: {
+        add: ["remote_jobs"],
+        remove: ["telegram:old_jobs"],
+        disable: ["telegram:spam_jobs"],
+        enable: ["telegram:paused_jobs"],
+      },
       preview_truncated_count: 8,
+      action: undefined,
       llm_used: false,
       title: "Source preview ready",
       detail: "Review first.",
+      next_action: undefined,
+      finished_at: undefined,
     });
     expect(sanitizeSourceImportResult({ topic: "jobs" })).toBeNull();
   });

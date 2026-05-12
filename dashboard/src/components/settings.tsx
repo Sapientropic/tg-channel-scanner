@@ -124,7 +124,12 @@ export function SettingsView({
   importSources: (sources: string, topic: string) => Promise<SourceImportResult>;
   importStarterSources: (topic: string) => Promise<SourceImportResult>;
   previewSourceAssistant: (instruction: string, topic: string, confirmExternalAi?: boolean) => Promise<SourceImportResult>;
-  applySourceAssistant: (instruction: string, topic: string, confirmExternalAi?: boolean) => Promise<SourceImportResult>;
+  applySourceAssistant: (
+    instruction: string,
+    topic: string,
+    confirmExternalAi?: boolean,
+    resolvedPlan?: SourceImportResult["resolved_plan"],
+  ) => Promise<SourceImportResult>;
   setSourceEnabled: (sourceId: string, enabled: boolean) => Promise<void>;
   removeSource: (sourceId: string) => Promise<void>;
   setSourceTopics: (sourceId: string, topics: string[]) => Promise<void>;
@@ -970,7 +975,12 @@ function SourceImportPanel({
   importSources: (sources: string, topic: string) => Promise<SourceImportResult>;
   importStarterSources: (topic: string) => Promise<SourceImportResult>;
   previewSourceAssistant: (instruction: string, topic: string, confirmExternalAi?: boolean) => Promise<SourceImportResult>;
-  applySourceAssistant: (instruction: string, topic: string, confirmExternalAi?: boolean) => Promise<SourceImportResult>;
+  applySourceAssistant: (
+    instruction: string,
+    topic: string,
+    confirmExternalAi?: boolean,
+    resolvedPlan?: SourceImportResult["resolved_plan"],
+  ) => Promise<SourceImportResult>;
   busy: boolean;
   hasSavedSources: boolean;
 }) {
@@ -982,10 +992,19 @@ function SourceImportPanel({
   const [previewKey, setPreviewKey] = useState("");
   const currentKey = `${sources.trim()}\n${topic.trim().toLowerCase() || "jobs"}`;
   const assistantKey = `${assistantText.trim()}\n${topic.trim().toLowerCase() || "jobs"}\n${assistantExternalAi ? "ai" : "local"}`;
+  const assistantOperationCount = result
+    ? result.added_count + result.updated_count + (result.removed_count ?? 0) + (result.enabled_count ?? 0) + (result.disabled_count ?? 0)
+    : 0;
   const canPreview = sources.trim().length > 0;
   const canImport = canPreview && previewKey === currentKey && result?.dry_run === true;
   const canAssistantPreview = assistantText.trim().length > 0;
-  const canAssistantApply = canAssistantPreview && assistantPreviewKey === assistantKey && result?.dry_run === true && result.action === "assistant";
+  const canAssistantApply =
+    canAssistantPreview &&
+    assistantPreviewKey === assistantKey &&
+    result?.dry_run === true &&
+    result.action === "assistant" &&
+    assistantOperationCount > 0 &&
+    !!result.resolved_plan;
   const previewSources = result?.preview_sources ?? [];
   return (
     <details className="table-section source-import-panel source-import-details" open={!hasSavedSources}>
@@ -1054,7 +1073,7 @@ function SourceImportPanel({
           <button
             className="text-button"
             disabled={busy || !canAssistantApply}
-            onClick={() => void applySourceAssistant(assistantText, topic, assistantExternalAi).catch(() => undefined)}
+            onClick={() => void applySourceAssistant(assistantText, topic, assistantExternalAi, result?.resolved_plan).catch(() => undefined)}
             type="button"
           >
             <Save size={15} />

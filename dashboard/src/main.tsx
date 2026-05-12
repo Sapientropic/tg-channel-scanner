@@ -692,11 +692,16 @@ function App() {
     }
   }
 
-  async function applySourceAssistant(instruction: string, topic: string, confirmExternalAi = false) {
+  async function applySourceAssistant(
+    instruction: string,
+    topic: string,
+    confirmExternalAi = false,
+    resolvedPlan?: SourceImportResult["resolved_plan"],
+  ) {
     setBusy(true);
     setNotice(null);
     try {
-      const result = await applySourceAssistantRequest(instruction, topic, confirmExternalAi);
+      const result = await applySourceAssistantRequest(instruction, topic, confirmExternalAi, resolvedPlan);
       setSourceImportResult(result);
       await refresh();
       await refreshDeskSources();

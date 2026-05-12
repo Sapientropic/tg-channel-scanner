@@ -115,6 +115,12 @@ export type SourceImportResult = {
     label: string;
     source_id: string;
   }>;
+  resolved_plan?: {
+    add: string[];
+    remove: string[];
+    disable: string[];
+    enable: string[];
+  };
   preview_truncated_count: number;
   action?: string;
   llm_used?: boolean;
