@@ -577,3 +577,46 @@ Next:
 
 - Commit this checkpoint, then continue with the next dashboard/API hardening
   candidate rather than expanding the Bot feature surface.
+
+## Slice 15: Profile Draft-Note Fixture Alignment
+
+Status: completed.
+
+Root Cause:
+
+- The backend full suite exposed one failure in
+  `test_profile_draft_note_http_endpoint_creates_reviewable_patch`.
+- The failing test registered a profile file under a temporary directory while
+  Slice 12 correctly changed Dashboard-sourced profile writes to require paths
+  inside `monitor_state.PROJECT_ROOT`.
+- The production rejection was correct; the positive HTTP test fixture was
+  still modeling the pre-hardening contract.
+
+Actions:
+
+- Scoped the positive draft-note HTTP test with
+  `patch.object(monitor_state, "PROJECT_ROOT", root)` so the temporary profile
+  is inside the test workspace.
+- Kept the negative outside-workspace test intact.
+
+Verification:
+
+- `python -m pytest tests/test_dashboard_server.py::DashboardServerGitTests::test_profile_draft_note_http_endpoint_creates_reviewable_patch tests/test_monitor_state.py::MonitorStateTests::test_dashboard_profile_patch_refuses_db_path_outside_project`
+  passed: `2 passed`.
+- `python -m pytest -q` passed:
+  `447 passed, 2 skipped, 112 subtests passed`.
+
+Reviewer Gate:
+
+- This is a deterministic fixture correction after a full-suite failure; no
+  production behavior was loosened.
+
+Residual Risk:
+
+- Existing direct-handler tests rely on lightweight fake handlers. The POST
+  integrity tests still cover real header preflight separately.
+
+Next:
+
+- Commit this checkpoint, then continue with a dashboard/API contract hardening
+  slice.

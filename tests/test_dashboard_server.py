@@ -2276,13 +2276,14 @@ class DashboardServerGitTests(unittest.TestCase):
                     self.status = status
                     self.payload = payload
 
-            handler = FakeHandler()
-            dashboard_server.DashboardHandler.do_POST(handler)
-            conn = monitor_state.connect(db_path)
-            try:
-                patches = monitor_state.dashboard_snapshot(conn)["profile_patch_suggestions"]
-            finally:
-                conn.close()
+            with patch.object(monitor_state, "PROJECT_ROOT", root):
+                handler = FakeHandler()
+                dashboard_server.DashboardHandler.do_POST(handler)
+                conn = monitor_state.connect(db_path)
+                try:
+                    patches = monitor_state.dashboard_snapshot(conn)["profile_patch_suggestions"]
+                finally:
+                    conn.close()
 
         self.assertEqual(handler.status, HTTPStatus.OK)
         self.assertEqual(handler.payload["patch"]["status"], "pending")
