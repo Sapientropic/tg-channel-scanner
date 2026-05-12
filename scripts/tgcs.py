@@ -882,6 +882,26 @@ def run_delivery(args: argparse.Namespace) -> int:
     return _run(cmd)
 
 
+def run_bot(args: argparse.Namespace) -> int:
+    cmd: list[str | Path] = [_python(), _script("bot_gateway.py"), args.bot_command]
+    if args.bot_command == "run":
+        if args.db:
+            cmd.extend(["--db", _root_path(args.db)])
+        if args.state:
+            cmd.extend(["--state", _root_path(args.state)])
+        for chat_id in args.allow_chat_id or []:
+            cmd.extend(["--allow-chat-id", chat_id])
+        if args.poll_timeout:
+            cmd.extend(["--poll-timeout", str(args.poll_timeout)])
+        if args.install_menu:
+            cmd.append("--install-menu")
+        if args.skip_menu:
+            cmd.append("--skip-menu")
+        if args.no_llm:
+            cmd.append("--no-llm")
+    return _run(cmd)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="tgcs",
@@ -1021,6 +1041,20 @@ def build_parser() -> argparse.ArgumentParser:
     delivery_test.add_argument("--delivery-mode", choices=("dry-run", "live"), default="dry-run")
     delivery_test.add_argument("--format", choices=("human", "json"), default="human")
     delivery_test.set_defaults(func=run_delivery)
+
+    bot = subparsers.add_parser("bot", help="Run the local Telegram Bot gateway.")
+    bot_subparsers = bot.add_subparsers(dest="bot_command", required=True)
+    bot_run = bot_subparsers.add_parser("run", help="Poll Telegram Bot updates and run safe local actions.")
+    bot_run.add_argument("--db")
+    bot_run.add_argument("--state")
+    bot_run.add_argument("--allow-chat-id", action="append", default=[])
+    bot_run.add_argument("--poll-timeout", type=int, default=0)
+    bot_run.add_argument("--install-menu", action="store_true", help="Install the bot command menu before polling; this is now the default.")
+    bot_run.add_argument("--skip-menu", action="store_true", help="Skip command menu installation before polling.")
+    bot_run.add_argument("--no-llm", action="store_true")
+    bot_run.set_defaults(func=run_bot)
+    bot_menu = bot_subparsers.add_parser("install-menu", help="Install the Telegram Bot command menu.")
+    bot_menu.set_defaults(func=run_bot)
 
     return parser
 

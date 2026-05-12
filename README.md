@@ -74,6 +74,17 @@ normal user does not have to edit TOML, copy JSON, or remember CLI commands.
 Signal Desk is still local-first. It does not store raw Telegram messages,
 sessions, API keys, or bot tokens in dashboard state.
 
+After saving a Telegram bot token and chat in Settings, you can also run the
+local Bot Gateway:
+
+```bash
+./tgcs bot run
+```
+
+The bot can show status, run dry scans, summarize the latest results, and
+preview source changes. It installs its Telegram command menu on start, and
+source changes still require an Apply confirmation.
+
 ## Quick Start
 
 Requirements:

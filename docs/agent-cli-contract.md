@@ -107,6 +107,8 @@ tgcs dashboard --no-build
 tgcs feedback export
 tgcs schedule print --profile-id jobs-fast --interval-minutes 15 --delivery-mode dry-run
 tgcs delivery test telegram-bot --chat-id 123456
+tgcs bot install-menu
+tgcs bot run
 ```
 
 `tgcs demo` renders the offline fixture report to `output/demo-report.html`
@@ -136,6 +138,15 @@ auto-select the next free port through 8799. An explicit `--port` is strict and
 fails with a human-readable error when occupied. `--no-build` skips asset
 building for packaged/offline environments or custom static asset handling.
 `--open` opens Signal Desk in the default browser after the server starts.
+`tgcs bot install-menu` registers the Telegram Bot command menu with the saved
+bot token. `tgcs bot run` installs that menu by default and starts a local
+long-polling gateway. Bot messages are mapped to fixed local actions only:
+status, latest, profiles, sources summary, Source assistant preview/apply, and
+dry-run monitor scans. The gateway never accepts shell, file paths, argv,
+tokens, raw Telegram message text, or live delivery commands from Telegram.
+Allowed chats come from
+`TGCS_BOT_ALLOWED_CHAT_IDS`, explicit `--allow-chat-id`, or enabled Signal Desk
+delivery targets in `.tgcs/tgcs.db`.
 `Signal Desk.bat` is the Windows no-command-line launcher. `./signal-desk` is
 the macOS/Linux app-like launcher; it runs setup on first launch, initializes
 the jobs starter when local defaults are missing, then starts
@@ -629,6 +640,9 @@ Signal Desk may detect the default private chat id from Telegram Bot
 `getUpdates` after the user has messaged the bot, or from the existing local
 Telegram session user id. High-level summaries must continue to avoid rendering
 raw chat ids.
+The local Bot Gateway also uses `getUpdates` for ordinary desktop operation.
+Webhook and Mini App flows are intentionally out of this local contract until
+the hosted HTTPS boundary is designed.
 
 Signal Desk `Settings` can also install starter sources, import pasted sources,
 and apply bounded source assistant plans. The browser body is limited to the

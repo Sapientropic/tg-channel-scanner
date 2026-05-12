@@ -320,13 +320,16 @@ Remaining work before calling v0.5 done:
 
 - Treat each profile as a durable monitoring task with its own schedule,
   working hours, source filters, alert rules, and delivery targets.
+- Harden the local Telegram Bot Gateway as the no-dashboard control surface:
+  command menu, dry-run scans, latest results, source assistant, and authorized
+  chat handling should survive ordinary desktop use.
 - Continue hardening follow-up-to-profile UX around already-collected local
   notes: make it obvious which accepted diff affected the next run and keep
   rollback/reapply boundaries visible.
 - Make setup and packaging less brittle on Windows: one obvious install/check
   path, clearer Telegram source import guidance, and fewer manual rerun steps.
-- Add optional webhook, email, or Telegram Saved Messages adapters only after the
-  private Telegram Bot path proves stable in real use.
+- Add optional email or Telegram Saved Messages adapters only after the private
+  Telegram Bot path proves stable in real use.
 - Decide whether source-health trends need deeper history, or whether current
   source actions are enough for v0.5.
 
@@ -336,6 +339,7 @@ Deferred from v0.5 unless user evidence requires it:
 - Snooze and mute-similar review actions.
 - Rich source-health trend analysis beyond actionable warnings.
 - Hosted, team, or multi-user dashboard features.
+- Cloud Telegram webhook, Telegram Mini App, and hosted HTTPS bot control.
 - True per-source scan watermarks.
 
 Exit criteria:
@@ -357,6 +361,9 @@ Planned work:
 - Provide `pipx`, `uvx`, and Docker installation paths.
 - Harden the local dashboard for packaging, backup/restore, and small trusted
   team use.
+- Design the second-stage hosted Telegram surface: webhook receiver, Mini App
+  shell, auth model, encrypted tenant storage, and a clean handoff from local
+  Signal Desk state.
 - Add encrypted config/session guidance and backup/restore docs.
 - Support multi-profile batch runs from the same channel registry.
 - Add team-safe runbooks for shared profiles, local deployment, and third-party

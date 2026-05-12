@@ -70,6 +70,14 @@ TOML、复制 JSON 或背 CLI 命令开始。
 Signal Desk 保持 local-first：dashboard 状态不会保存 Telegram 原文、session、
 API key 或 bot token。
 
+保存 Telegram bot token 和 chat 后，也可以开本地 Bot Gateway：
+
+```bash
+./tgcs bot run
+```
+
+启动时会自动安装 Telegram 命令菜单。Bot 可查看状态、跑 dry scan、看最新结果、预览 source 变更；删除/暂停这类变更仍需要点击 Apply 确认。
+
 ## 快速开始
 
 环境要求：

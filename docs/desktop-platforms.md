@@ -59,6 +59,22 @@ Headless Linux sessions, missing DBus/user services, or unavailable keyring
 backends may not support local saving. In that case Signal Desk should report
 that local storage is unavailable and ask for environment variables instead.
 
+## Local Bot Gateway
+
+After saving a Telegram bot token and chat target in Signal Desk Settings, a
+desktop user can run:
+
+```bash
+./tgcs bot run
+```
+
+This installs the Telegram command menu on start and then uses Bot API long
+polling from the local machine. Commands and natural-language messages are
+mapped to fixed actions only: status, latest results, profile/source summaries,
+dry-run scans, and confirmed Source assistant plans. The gateway needs local
+Signal Desk state and does not make T-Sense available while the computer or
+process is offline.
+
 ## Auto Scan
 
 Signal Desk only installs or removes its fixed `jobs-fast` dry-run task after an
