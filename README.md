@@ -26,17 +26,18 @@
 
 T-Sense reads Telegram channels you already have access to, scores the messages
 against a Markdown profile, and gives you a local workflow for reviewing what
-matters. The current product center is **Signal Desk**: a browser dashboard for
-setup, scanning, review, profile tuning, run health, and settings.
+matters. It works as a general signal workflow with built-in templates for
+market/news tracking, airdrops, research leads, competitor monitoring, and
+developer opportunities.
 
-The first supported lane is developer opportunities: remote jobs, contracts,
-paid engineering requests, and other time-sensitive posts that get buried in
-Telegram channels.
+**Signal Desk** is the local browser dashboard inside T-Sense. It handles setup,
+scanning, review, profile tuning, run health, and settings without turning the
+normal user path into a CLI checklist.
 
 ## Demo
 
 The 49-second demo video shows the T-Sense flow from noisy channels to a ranked
-Signal Desk/report workflow.
+local signal brief.
 
 <p align="center">
   <a href="docs/demo.mp4"><strong>Watch the T-Sense demo video</strong></a>
@@ -114,8 +115,8 @@ chmod +x setup.sh tgcs
 ## Profiles
 
 Profiles are Markdown files that describe what counts as signal. They can
-include target roles, keywords, rejection rules, languages, source priorities,
-and reporting preferences.
+include topics, tracked entities, keywords, rejection rules, languages, source
+priorities, and reporting preferences.
 
 You can create and adjust profiles from Signal Desk:
 
@@ -124,13 +125,17 @@ You can create and adjust profiles from Signal Desk:
 - edit matching rules directly;
 - apply profile suggestions generated from confirmed review feedback.
 
-The built-in starter focuses on developer opportunities. Additional templates
-cover market/news tracking, airdrops, research leads, and competitor monitoring.
+Built-in templates cover market/news tracking, airdrops, research leads,
+competitor monitoring, and developer opportunities. `market-news` is the default
+starter; `jobs-fast` is available when you specifically want the developer
+opportunity lane.
 
 ## Reports
 
-Every scan can produce a standalone HTML report with cards, source links,
-decision labels, diagnostics, and run metadata.
+Every scan can produce a standalone dark-theme HTML report with cards, source
+links, decision labels, diagnostics, and run metadata. Report titles and labels
+come from the active profile, so a market brief, research brief, and job report
+do not need to look like the same workflow.
 
 <table>
   <tr>
@@ -153,9 +158,9 @@ The short `tgcs` command remains the compatible CLI for humans and smoke tests:
 
 ```bash
 ./tgcs demo
-./tgcs doctor --profile jobs
+./tgcs doctor --profile market-news
 ./tgcs login
-./tgcs monitor run --profile-id jobs-fast --delivery-mode dry-run
+./tgcs monitor run --profile-id market-news --delivery-mode dry-run
 ./tgcs dashboard --open
 ```
 
@@ -166,10 +171,10 @@ content in local artifacts, not in prompts, logs, or public docs.
 Common lower-level commands:
 
 ```bash
-python scripts/source_registry.py import-list channel_lists/jobs.txt \
-  --source-registry .tgcs/sources.json --topic jobs --format json
+python scripts/source_registry.py import-list channel_lists/example.txt \
+  --source-registry .tgcs/sources.json --topic market-news --format json
 
-python scripts/monitor.py run --profile-id jobs-fast \
+python scripts/monitor.py run --profile-id market-news \
   --delivery-mode dry-run --format json
 
 python scripts/monitor.py feedback-export \

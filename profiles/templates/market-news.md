@@ -37,6 +37,8 @@ fields:
   - name: why
   - name: follow_up
   - name: source
+  - name: action
+    values: [Act, Review, Skip]
 
 ## Extraction Prompt
 system_prompt: |
