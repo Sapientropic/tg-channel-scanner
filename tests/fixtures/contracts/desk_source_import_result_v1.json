@@ -1,0 +1,34 @@
+{
+  "schema_version": "desk_source_import_result_v1",
+  "dry_run": true,
+  "written": false,
+  "topic": " jobs ",
+  "added_count": 2,
+  "updated_count": 1,
+  "unchanged_count": 0,
+  "removed_count": 3,
+  "enabled_count": 4,
+  "disabled_count": 5,
+  "source_count": 14,
+  "registry_path": " .tgcs/sources.json ",
+  "preview_sources": [
+    {
+      "label": " remote_jobs ",
+      "source_id": " telegram:remote_jobs ",
+      "token": "SECRET_SHOULD_NOT_RENDER"
+    }
+  ],
+  "resolved_plan": {
+    "add": [" remote_jobs "],
+    "remove": [" telegram:old_jobs "],
+    "disable": [" telegram:spam_jobs "],
+    "enable": [" telegram:paused_jobs "]
+  },
+  "preview_truncated_count": 1,
+  "action": "assistant_apply",
+  "llm_used": true,
+  "title": " Source plan ready ",
+  "detail": " Review first. ",
+  "next_action": "Apply reviewed changes.",
+  "finished_at": "2026-05-13T00:00:00Z"
+}

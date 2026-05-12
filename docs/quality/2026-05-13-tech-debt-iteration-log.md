@@ -217,3 +217,39 @@ Next:
 
 - Continue with stale duplicate sanitizer drift and source-import/action result
   fixture coverage.
+
+## Slice 5: Source Import Sanitizer Drift
+
+Status: completed.
+
+Actions:
+
+- Added `tests/fixtures/contracts/desk_source_import_result_v1.json`.
+- Added sanitizer coverage proving the public barrel, the canonical desk module,
+  and the legacy dashboard module preserve the same `desk_source_import_result_v1`
+  semantics for `removed_count`, `enabled_count`, `disabled_count`, `action`, and
+  `llm_used`.
+- Changed `sanitize/dashboard.ts` source-import sanitizer to delegate to the
+  canonical desk sanitizer instead of keeping a stale implementation.
+
+Verification:
+
+- `npm test -- sanitize` passed: `1` file, `27` tests.
+- `npm run typecheck` passed.
+
+Reviewer Gate:
+
+- Addresses the concrete stale sanitizer drift called out in Cicero P1. Broader
+  shared primitive extraction remains intentionally deferred until more fixture
+  coverage is in place.
+
+Residual Risk:
+
+- Other legacy Desk sanitizer exports still exist in `sanitize/dashboard.ts`;
+  they are not used by the barrel, but should be either delegated or deleted in
+  a later structural cleanup once fixtures cover them.
+
+Next:
+
+- Commit this sanitizer drift checkpoint, then continue with artifact path
+  validation and/or feedback export path hardening.

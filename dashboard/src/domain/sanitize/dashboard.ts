@@ -26,6 +26,7 @@ import type {
   SourceStat,
   ValidationSummary,
 } from "../types";
+import { sanitizeSourceImportResult as sanitizeDeskSourceImportResult } from "./desk";
 
 export const emptyDashboardState: DashboardState = {
   profiles: [],
@@ -430,30 +431,7 @@ export function sanitizeDeliveryTestResult(value: unknown): DeliveryTestResult |
 }
 
 export function sanitizeSourceImportResult(value: unknown): SourceImportResult | null {
-  if (!isRecord(value)) {
-    return null;
-  }
-  const topic = optionalString(value.topic);
-  const registryPath = optionalString(value.registry_path);
-  if (!topic || !registryPath) {
-    return null;
-  }
-  const result: SourceImportResult = {
-    schema_version: value.schema_version === "desk_source_import_result_v1" ? value.schema_version : undefined,
-    dry_run: value.dry_run === true,
-    written: value.written === true,
-    topic,
-    added_count: nonNegativeIntegerOrDefault(value.added_count, 0),
-    updated_count: nonNegativeIntegerOrDefault(value.updated_count, 0),
-    unchanged_count: nonNegativeIntegerOrDefault(value.unchanged_count, 0),
-    source_count: nonNegativeIntegerOrDefault(value.source_count, 0),
-    registry_path: registryPath,
-    preview_sources: sanitizeSourceImportPreviewSources(value.preview_sources),
-    resolved_plan: sanitizeResolvedSourcePlan(value.resolved_plan),
-    preview_truncated_count: nonNegativeIntegerOrDefault(value.preview_truncated_count, 0),
-  };
-  assignOptionalStrings(result, value, ["title", "detail", "next_action", "finished_at"]);
-  return result;
+  return sanitizeDeskSourceImportResult(value);
 }
 
 function sanitizeResolvedSourcePlan(value: unknown): SourceImportResult["resolved_plan"] {
