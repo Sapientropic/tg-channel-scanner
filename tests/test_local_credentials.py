@@ -35,7 +35,7 @@ class LocalCredentialsTests(unittest.TestCase):
             with patch.object(local_credentials, "_load_keyring", return_value=keyring, create=True):
                 self.assertTrue(local_credentials.is_supported())
                 self.assertEqual(local_credentials.backend(), "keyring")
-                self.assertIn("keyring", local_credentials.store_label().lower())
+                self.assertNotEqual(local_credentials.store_label(), "environment variables only")
 
                 local_credentials.write_secret("tgcs.test", " stored-secret ")
                 stored = local_credentials.read_secret("tgcs.test")

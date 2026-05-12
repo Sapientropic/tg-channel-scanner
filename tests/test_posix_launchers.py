@@ -54,6 +54,7 @@ class PosixLauncherTests(unittest.TestCase):
             self.assertEqual(modes.get(rel_path), "100755", rel_path)
 
     @unittest.skipUnless(shutil.which("bash"), "bash is required for POSIX launcher syntax checks")
+    @unittest.skipIf(os.name == "nt", "POSIX syntax checks run on Linux/macOS CI")
     def test_posix_launchers_pass_bash_syntax_check(self):
         subprocess.run(
             ["bash", "-n", *SHELL_SYNTAX_FILES],

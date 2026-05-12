@@ -427,8 +427,15 @@ class DashboardServerGitTests(unittest.TestCase):
 
     def test_schedule_install_dry_run_blocks_non_windows(self):
         with patch.object(dashboard_server.sys, "platform", "linux"):
-            with patch.object(dashboard_server, "_run_scheduler_command") as run_mock:
-                result = dashboard_server.run_desk_action("schedule_install_dry_run", body={"confirm": True})
+            with patch.dict(dashboard_server.os.environ, {"XDG_RUNTIME_DIR": ""}, clear=False):
+                with patch.object(
+                    dashboard_server,
+                    "shutil",
+                    SimpleNamespace(which=lambda name: "/usr/bin/systemctl" if name == "systemctl" else None),
+                    create=True,
+                ):
+                    with patch.object(dashboard_server, "_run_scheduler_command") as run_mock:
+                        result = dashboard_server.run_desk_action("schedule_install_dry_run", body={"confirm": True})
 
         run_mock.assert_not_called()
         self.assertEqual(result["status"], "blocked")

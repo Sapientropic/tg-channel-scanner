@@ -77,7 +77,7 @@ describe("dashboard display helpers", () => {
   });
 
   it("formats run artifact links and labels", () => {
-    const run = { run_id: "run-1", profile_id: "jobs-fast", status: "complete", started_at: "2026-05-09T08:00:00+08:00" };
+    const run = { run_id: "run-1", profile_id: "jobs-fast", status: "complete", started_at: "2026-05-09T08:00:00" };
     const artifact = { path: "reports/jobs fast.html", category: "daily_report" };
     expect(runDisplayTitle(run)).toBe("Jobs Fast · 05-09");
     expect(runDisplayTitle({ ...run, display_name: "Evening sweep" })).toBe("Evening sweep · 05-09");
