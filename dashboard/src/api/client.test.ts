@@ -1,14 +1,20 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  checkGitUpdates,
+  clearFeedbackDecisions,
+  createProfileFromBrief,
   errorMessage,
   detectDeskDeliveryChatId,
+  exportFeedback,
+  generateFeedbackProfileSuggestions,
   loadDashboardState,
   loadDeskActions,
   loadDeskAiSettingsStatus,
   loadDeskSources,
   normalizeDashboardError,
   previewSourceAssistant,
+  pullLatestGit,
   runDeskAction,
   saveDeskDeliveryTarget,
   testDeskDeliveryTarget,
@@ -214,6 +220,90 @@ describe("dashboard API contract validation", () => {
 
     await expect(detectDeskDeliveryChatId("telegram-bot-default")).rejects.toThrow(
       "Invalid notification chat detection response",
+    );
+  });
+
+  it("throws on schema-less Git mutation results instead of accepting status-shaped payloads", async () => {
+    mockJsonResponse({
+      git: {
+        status: "behind",
+        message: "1 upstream commit available.",
+        branch: "main",
+        ahead: 0,
+        behind: 1,
+        dirty: false,
+        dirty_count: 0,
+        pull_allowed: true,
+        checked_at: "2026-05-13T00:00:00Z",
+      },
+    });
+
+    await expect(checkGitUpdates()).rejects.toThrow("Invalid git status response");
+
+    mockJsonResponse({
+      git: {
+        schema_version: "git_update_status_v0",
+        status: "up_to_date",
+        message: "Local branch is up to date.",
+        branch: "main",
+        ahead: 0,
+        behind: 0,
+        dirty: false,
+        dirty_count: 0,
+        pull_allowed: false,
+        checked_at: "2026-05-13T00:00:00Z",
+      },
+    });
+
+    await expect(pullLatestGit()).rejects.toThrow("Invalid git status response");
+  });
+
+  it("throws on schema-less feedback mutation results instead of accepting plausible counters", async () => {
+    mockJsonResponse({
+      export: {
+        feedback_count: 1,
+        output_path: "output/feedback/review-feedback.jsonl",
+      },
+    });
+
+    await expect(exportFeedback()).rejects.toThrow("Invalid feedback export response");
+
+    mockJsonResponse({
+      suggestions: {
+        created_count: 1,
+        existing_count: 0,
+        skipped_count: 0,
+      },
+    });
+
+    await expect(generateFeedbackProfileSuggestions()).rejects.toThrow(
+      "Invalid feedback profile suggestions response",
+    );
+
+    mockJsonResponse({
+      feedback: {
+        schema_version: "feedback_clear_result_v1",
+        cleared_count: -1,
+      },
+    });
+
+    await expect(clearFeedbackDecisions()).rejects.toThrow("Invalid feedback clear response");
+  });
+
+  it("throws on schema-less profile creation results instead of trusting profile-shaped payloads", async () => {
+    mockJsonResponse({
+      profile: {
+        profile_id: "jobs-fast",
+        display_name: "Jobs Fast",
+        profile_path: "profiles/jobs-fast.md",
+        created: true,
+        detail: "Created profile.",
+        next_action: "Review the draft.",
+      },
+    });
+
+    await expect(createProfileFromBrief({ brief: "Track remote TypeScript roles." })).rejects.toThrow(
+      "Invalid profile creation response",
     );
   });
 });

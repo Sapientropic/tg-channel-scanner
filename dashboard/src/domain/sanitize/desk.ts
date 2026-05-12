@@ -10,6 +10,7 @@ import type {
   DeskTelegramStatus,
   DeliveryChatDetectionResult,
   DeliveryTestResult,
+  FeedbackClearResult,
   FeedbackExportResult,
   FeedbackProfileSuggestionsResult,
   GitUpdateStatus,
@@ -18,7 +19,7 @@ import type {
 } from "../types";
 
 export function sanitizeGitUpdateStatus(value: unknown): GitUpdateStatus | null {
-  if (!isRecord(value)) {
+  if (!isRecord(value) || value.schema_version !== "git_update_status_v1") {
     return null;
   }
   const status = optionalString(value.status);
@@ -45,7 +46,12 @@ export function sanitizeGitUpdateStatus(value: unknown): GitUpdateStatus | null 
 }
 
 export function sanitizeFeedbackExportResult(value: unknown): FeedbackExportResult | null {
-  if (!isRecord(value) || typeof value.output_path !== "string" || !value.output_path.trim()) {
+  if (
+    !isRecord(value) ||
+    value.schema_version !== "feedback_export_result_v1" ||
+    typeof value.output_path !== "string" ||
+    !value.output_path.trim()
+  ) {
     return null;
   }
   const outputPath = sanitizeLocalRelativePath(value.output_path);
@@ -90,7 +96,7 @@ function sanitizeLocalRelativePath(value: string): string | null {
 }
 
 export function sanitizeFeedbackProfileSuggestionsResult(value: unknown): FeedbackProfileSuggestionsResult | null {
-  if (!isRecord(value)) {
+  if (!isRecord(value) || value.schema_version !== "feedback_profile_suggestions_result_v1") {
     return null;
   }
   const createdCount = value.created_count;
@@ -121,8 +127,22 @@ export function sanitizeFeedbackProfileSuggestionsResult(value: unknown): Feedba
   };
 }
 
+export function sanitizeFeedbackClearResult(value: unknown): FeedbackClearResult | null {
+  if (!isRecord(value) || value.schema_version !== "feedback_clear_result_v1") {
+    return null;
+  }
+  const clearedCount = nonNegativeInteger(value.cleared_count);
+  if (clearedCount === null) {
+    return null;
+  }
+  return {
+    schema_version: "feedback_clear_result_v1",
+    cleared_count: clearedCount,
+  };
+}
+
 export function sanitizeProfileCreateResult(value: unknown): ProfileCreateResult | null {
-  if (!isRecord(value)) {
+  if (!isRecord(value) || value.schema_version !== "desk_profile_create_result_v1") {
     return null;
   }
   const profileId = optionalString(value.profile_id);
@@ -132,7 +152,7 @@ export function sanitizeProfileCreateResult(value: unknown): ProfileCreateResult
     return null;
   }
   return {
-    schema_version: value.schema_version === "desk_profile_create_result_v1" ? value.schema_version : undefined,
+    schema_version: "desk_profile_create_result_v1",
     profile_id: profileId,
     display_name: displayName,
     profile_path: profilePath,

@@ -560,8 +560,13 @@ export type FeedbackProfileSuggestionsResult = {
   generated_at?: string;
 };
 
+export type FeedbackClearResult = {
+  schema_version: "feedback_clear_result_v1";
+  cleared_count: number;
+};
+
 export type ProfileCreateResult = {
-  schema_version?: "desk_profile_create_result_v1";
+  schema_version: "desk_profile_create_result_v1";
   profile_id: string;
   display_name: string;
   profile_path: string;

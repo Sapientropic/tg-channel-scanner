@@ -11,10 +11,12 @@ import {
   sanitizeDeliveryChatDetectionResult,
   sanitizeDeliveryTestResult,
   sanitizeDashboardState,
+  sanitizeFeedbackClearResult,
   sanitizeFeedbackExportResult,
   sanitizeFeedbackProfileSuggestionsResult,
   sanitizeGitUpdateStatus,
   sanitizeInboxCards,
+  sanitizeProfileCreateResult,
   sanitizeSourceImportResult,
 } from "./sanitize";
 import {
@@ -693,6 +695,7 @@ describe("dashboard state sanitizers", () => {
   it("sanitizes action API response envelopes before view state updates", () => {
     expect(
       sanitizeGitUpdateStatus({
+        schema_version: "git_update_status_v1",
         status: " behind ",
         message: "  needs pull  ",
         branch: " main ",
@@ -720,11 +723,25 @@ describe("dashboard state sanitizers", () => {
       pull_allowed: false,
       checked_at: "2026-05-10T09:00:00+08:00",
     });
+    expect(
+      sanitizeGitUpdateStatus({
+        status: "behind",
+        message: "missing schema",
+        branch: "main",
+        ahead: 0,
+        behind: 1,
+        dirty: false,
+        dirty_count: 0,
+        pull_allowed: true,
+        checked_at: "2026-05-10T09:00:00+08:00",
+      }),
+    ).toBeNull();
     expect(sanitizeGitUpdateStatus({ message: "missing status", branch: "main" })).toBeNull();
     expect(sanitizeGitUpdateStatus({ status: " ", branch: "main" })).toBeNull();
     expect(sanitizeGitUpdateStatus({ status: "behind", branch: " " })).toBeNull();
     expect(
       sanitizeGitUpdateStatus({
+        schema_version: "git_update_status_v1",
         status: "clean",
         message: 42,
         branch: "main",
@@ -750,6 +767,7 @@ describe("dashboard state sanitizers", () => {
     });
     expect(
       sanitizeFeedbackExportResult({
+        schema_version: "feedback_export_result_v1",
         feedback_count: 2,
         output_path: " output/feedback/review-feedback.jsonl ",
         changed_since_last_export: true,
@@ -762,16 +780,39 @@ describe("dashboard state sanitizers", () => {
       changed_since_last_export: true,
       exported_at: "2026-05-10T00:00:00Z",
     });
-    expect(sanitizeFeedbackExportResult({ feedback_count: 0, output_path: "out.jsonl" })).toEqual({
+    expect(
+      sanitizeFeedbackExportResult({ schema_version: "feedback_export_result_v1", feedback_count: 0, output_path: "out.jsonl" }),
+    ).toEqual({
       schema_version: "feedback_export_result_v1",
       feedback_count: 0,
       output_path: "out.jsonl",
     });
-    expect(sanitizeFeedbackExportResult({ feedback_count: 1, output_path: 42 })).toBeNull();
-    expect(sanitizeFeedbackExportResult({ feedback_count: Number.NaN, output_path: "output/feedback/review-feedback.jsonl" })).toBeNull();
-    expect(sanitizeFeedbackExportResult({ feedback_count: -1, output_path: "output/feedback/review-feedback.jsonl" })).toBeNull();
-    expect(sanitizeFeedbackExportResult({ feedback_count: 1.5, output_path: "output/feedback/review-feedback.jsonl" })).toBeNull();
-    expect(sanitizeFeedbackExportResult({ feedback_count: 1, output_path: "   " })).toBeNull();
+    expect(sanitizeFeedbackExportResult({ feedback_count: 1, output_path: "output/feedback/review-feedback.jsonl" })).toBeNull();
+    expect(sanitizeFeedbackExportResult({ schema_version: "feedback_export_result_v1", feedback_count: 1, output_path: 42 })).toBeNull();
+    expect(
+      sanitizeFeedbackExportResult({
+        schema_version: "feedback_export_result_v1",
+        feedback_count: Number.NaN,
+        output_path: "output/feedback/review-feedback.jsonl",
+      }),
+    ).toBeNull();
+    expect(
+      sanitizeFeedbackExportResult({
+        schema_version: "feedback_export_result_v1",
+        feedback_count: -1,
+        output_path: "output/feedback/review-feedback.jsonl",
+      }),
+    ).toBeNull();
+    expect(
+      sanitizeFeedbackExportResult({
+        schema_version: "feedback_export_result_v1",
+        feedback_count: 1.5,
+        output_path: "output/feedback/review-feedback.jsonl",
+      }),
+    ).toBeNull();
+    expect(
+      sanitizeFeedbackExportResult({ schema_version: "feedback_export_result_v1", feedback_count: 1, output_path: "   " }),
+    ).toBeNull();
     for (const output_path of [
       "C:/Users/Administrator/private/review-feedback.jsonl",
       "C:\\Users\\Administrator\\private\\review-feedback.jsonl",
@@ -780,12 +821,17 @@ describe("dashboard state sanitizers", () => {
       "file:///tmp/review-feedback.jsonl",
       "output/feedback/review\nfeedback.jsonl",
     ]) {
-      expect(sanitizeFeedbackExportResult({ feedback_count: 1, output_path })).toBeNull();
-      expect(sanitizeDeskModuleFeedbackExportResult({ feedback_count: 1, output_path })).toBeNull();
-      expect(sanitizeDashboardModuleFeedbackExportResult({ feedback_count: 1, output_path })).toBeNull();
+      expect(sanitizeFeedbackExportResult({ schema_version: "feedback_export_result_v1", feedback_count: 1, output_path })).toBeNull();
+      expect(
+        sanitizeDeskModuleFeedbackExportResult({ schema_version: "feedback_export_result_v1", feedback_count: 1, output_path }),
+      ).toBeNull();
+      expect(
+        sanitizeDashboardModuleFeedbackExportResult({ schema_version: "feedback_export_result_v1", feedback_count: 1, output_path }),
+      ).toBeNull();
     }
     expect(
       sanitizeDashboardModuleFeedbackExportResult({
+        schema_version: "feedback_export_result_v1",
         feedback_count: 2,
         output_path: " output\\feedback\\review-feedback.jsonl ",
       }),
@@ -796,6 +842,7 @@ describe("dashboard state sanitizers", () => {
     });
     expect(
       sanitizeFeedbackProfileSuggestionsResult({
+        schema_version: "feedback_profile_suggestions_result_v1",
         created_count: 1,
         existing_count: 2,
         skipped_count: 0,
@@ -814,7 +861,48 @@ describe("dashboard state sanitizers", () => {
       detail: "Profile drafts ready",
       generated_at: "2026-05-10T00:00:00Z",
     });
-    expect(sanitizeFeedbackProfileSuggestionsResult({ created_count: -1, existing_count: 0, skipped_count: 0 })).toBeNull();
+    expect(sanitizeFeedbackProfileSuggestionsResult({ created_count: 1, existing_count: 0, skipped_count: 0 })).toBeNull();
+    expect(
+      sanitizeFeedbackProfileSuggestionsResult({
+        schema_version: "feedback_profile_suggestions_result_v1",
+        created_count: -1,
+        existing_count: 0,
+        skipped_count: 0,
+      }),
+    ).toBeNull();
+    expect(sanitizeFeedbackClearResult({ schema_version: "feedback_clear_result_v1", cleared_count: 2 })).toEqual({
+      schema_version: "feedback_clear_result_v1",
+      cleared_count: 2,
+    });
+    expect(sanitizeFeedbackClearResult({ cleared_count: 2 })).toBeNull();
+    expect(sanitizeFeedbackClearResult({ schema_version: "feedback_clear_result_v1", cleared_count: 1.5 })).toBeNull();
+    expect(
+      sanitizeProfileCreateResult({
+        schema_version: "desk_profile_create_result_v1",
+        profile_id: " jobs-fast ",
+        display_name: " Jobs Fast ",
+        profile_path: " profiles/jobs-fast.md ",
+        created: true,
+        detail: " Created profile ",
+        next_action: " Review it ",
+      }),
+    ).toEqual({
+      schema_version: "desk_profile_create_result_v1",
+      profile_id: "jobs-fast",
+      display_name: "Jobs Fast",
+      profile_path: "profiles/jobs-fast.md",
+      created: true,
+      detail: "Created profile",
+      next_action: "Review it",
+      created_at: undefined,
+    });
+    expect(
+      sanitizeProfileCreateResult({
+        profile_id: "jobs-fast",
+        display_name: "Jobs Fast",
+        profile_path: "profiles/jobs-fast.md",
+      }),
+    ).toBeNull();
   });
 
   it("sanitizes Desk action payloads without trusting backend-only fields", () => {

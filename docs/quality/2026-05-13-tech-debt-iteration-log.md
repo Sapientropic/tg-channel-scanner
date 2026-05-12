@@ -795,3 +795,47 @@ Residual Risk:
 Next:
 
 - Commit this checkpoint, then continue with remaining mutation result gates.
+
+## Slice 21: Git, Feedback, and Profile Mutation Result Gates
+
+Status: completed.
+
+Actions:
+
+- Required `git_update_status_v1` before accepting Git check/pull responses.
+- Required `feedback_export_result_v1`,
+  `feedback_profile_suggestions_result_v1`, and `feedback_clear_result_v1`
+  before accepting feedback mutation results.
+- Added a typed `FeedbackClearResult` sanitizer with non-negative integer
+  validation for `cleared_count`.
+- Required `desk_profile_create_result_v1` before accepting profile creation
+  results and made the frontend type reflect that required schema.
+- Added client and sanitizer regressions for schema-less, wrong-schema, and
+  plausible-but-invalid mutation payloads.
+
+Verification:
+
+- `npm test -- client sanitize` passed: `2` files, `46` tests.
+- `npm run typecheck` passed.
+- `npm test` passed: `13` files, `124` tests.
+- Exported the staged index to a temporary tree to verify this checkpoint
+  without unrelated working-tree WIP: `npm test -- client sanitize` passed
+  (`2` files, `44` tests), `npm run typecheck` passed, and `npm test` passed
+  (`13` files, `119` tests).
+
+Reviewer Gate:
+
+- Addresses Bernoulli's remaining schema-less mutation findings for Git,
+  feedback export/profile suggestions/clear, and profile creation.
+
+Residual Risk:
+
+- Scheduler, Telegram, notification token, and some long-lived status payloads
+  still rely on softer sanitizer gates. Those are lower mutation risk but remain
+  the next hardening candidates.
+
+Next:
+
+- Commit this checkpoint, then continue with status-surface gates:
+  scheduler, Telegram, notification token, and Bot Gateway if its WIP surface
+  is stable enough to isolate safely.

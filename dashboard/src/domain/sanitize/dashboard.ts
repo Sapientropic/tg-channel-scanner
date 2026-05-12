@@ -67,7 +67,7 @@ export function sanitizeDashboardState(value: unknown): DashboardState {
 }
 
 export function sanitizeGitUpdateStatus(value: unknown): GitUpdateStatus | null {
-  if (!isRecord(value)) {
+  if (!isRecord(value) || value.schema_version !== "git_update_status_v1") {
     return null;
   }
   const status = optionalString(value.status);

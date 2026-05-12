@@ -9,6 +9,7 @@ export {
   sanitizeDeskSchedulerStatus,
   sanitizeDeskSourcesResult,
   sanitizeDeskTelegramStatus,
+  sanitizeFeedbackClearResult,
   sanitizeFeedbackExportResult,
   sanitizeFeedbackProfileSuggestionsResult,
   sanitizeGitUpdateStatus,

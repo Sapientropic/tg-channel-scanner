@@ -9,6 +9,7 @@ import {
   sanitizeDeskTelegramStatus,
   sanitizeDeliveryChatDetectionResult,
   sanitizeDeliveryTestResult,
+  sanitizeFeedbackClearResult,
   sanitizeFeedbackExportResult,
   sanitizeFeedbackProfileSuggestionsResult,
   sanitizeGitUpdateStatus,
@@ -133,6 +134,7 @@ export async function createProfileFromBrief(payload: {
   source_base64?: string;
 }): Promise<ProfileCreateResult> {
   const resultPayload = await postJson("/api/profiles/create", payload);
+  assertSchemaVersion(resultPayload.profile, "desk_profile_create_result_v1", "Invalid profile creation response");
   const result = sanitizeProfileCreateResult(resultPayload.profile);
   if (!result) {
     throw new Error("Invalid profile creation response");
@@ -142,6 +144,7 @@ export async function createProfileFromBrief(payload: {
 
 export async function checkGitUpdates(): Promise<GitUpdateStatus> {
   const payload = await postJson("/api/git/check-updates", {});
+  assertSchemaVersion(payload.git, "git_update_status_v1", "Invalid git status response");
   const git = sanitizeGitUpdateStatus(payload.git);
   if (!git) {
     throw new Error("Invalid git status response");
@@ -151,6 +154,7 @@ export async function checkGitUpdates(): Promise<GitUpdateStatus> {
 
 export async function pullLatestGit(): Promise<GitUpdateStatus> {
   const payload = await postJson("/api/git/pull-latest", { confirm: true });
+  assertSchemaVersion(payload.git, "git_update_status_v1", "Invalid git status response");
   const git = sanitizeGitUpdateStatus(payload.git);
   if (!git) {
     throw new Error("Invalid git status response");
@@ -160,6 +164,7 @@ export async function pullLatestGit(): Promise<GitUpdateStatus> {
 
 export async function exportFeedback(): Promise<FeedbackExportResult> {
   const payload = await postJson("/api/feedback/export", {});
+  assertSchemaVersion(payload.export, "feedback_export_result_v1", "Invalid feedback export response");
   const result = sanitizeFeedbackExportResult(payload.export);
   if (!result) {
     throw new Error("Invalid feedback export response");
@@ -169,6 +174,7 @@ export async function exportFeedback(): Promise<FeedbackExportResult> {
 
 export async function generateFeedbackProfileSuggestions(): Promise<FeedbackProfileSuggestionsResult> {
   const payload = await postJson("/api/feedback/profile-suggestions", {});
+  assertSchemaVersion(payload.suggestions, "feedback_profile_suggestions_result_v1", "Invalid feedback profile suggestions response");
   const result = sanitizeFeedbackProfileSuggestionsResult(payload.suggestions);
   if (!result) {
     throw new Error("Invalid feedback profile suggestions response");
@@ -178,8 +184,9 @@ export async function generateFeedbackProfileSuggestions(): Promise<FeedbackProf
 
 export async function clearFeedbackDecisions(): Promise<number> {
   const payload = await postJson("/api/feedback/clear", {});
-  const feedback = payload.feedback as Record<string, unknown> | undefined;
-  if (!feedback || typeof feedback !== "object" || typeof feedback.cleared_count !== "number") {
+  assertSchemaVersion(payload.feedback, "feedback_clear_result_v1", "Invalid feedback clear response");
+  const feedback = sanitizeFeedbackClearResult(payload.feedback);
+  if (!feedback) {
     throw new Error("Invalid feedback clear response");
   }
   return feedback.cleared_count;
