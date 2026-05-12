@@ -184,7 +184,7 @@ export type DeskAiProviderStatus = {
 };
 
 export type DeskAiSettingsStatus = {
-  schema_version?: "desk_ai_settings_status_v1";
+  schema_version: "desk_ai_settings_status_v1";
   configured_count: number;
   local_store_supported: boolean;
   local_store_backend?: string;

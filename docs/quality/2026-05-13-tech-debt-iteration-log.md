@@ -691,3 +691,39 @@ Residual Risk:
 Next:
 
 - Commit this checkpoint, then run full frontend verification again.
+
+## Slice 18: AI Settings Schema Gate
+
+Status: completed.
+
+Actions:
+
+- Made `DeskAiSettingsStatus` require `desk_ai_settings_status_v1`.
+- Tightened the AI settings sanitizer so `{}` or schema-only payloads no longer
+  become a plausible "no providers configured" state.
+- Required core AI settings fields before rendering: non-negative integer
+  `configured_count`, boolean `local_store_supported`, string `platform`,
+  string `detail`, and a provider list.
+- Added API client and sanitizer tests for empty, schema-only, and invalid-count
+  AI settings payloads.
+
+Verification:
+
+- `npm test -- sanitize client settings` passed: `4` files, `49` tests.
+- `npm run typecheck` passed.
+
+Reviewer Gate:
+
+- Addresses Bernoulli's highest-risk finding: AI settings was the clearest case
+  where contract drift could be misread as a valid unconfigured state.
+
+Residual Risk:
+
+- Provider entries are still sanitized by required provider fields and dropped
+  individually when malformed. That keeps one bad provider from blanking the
+  entire settings panel.
+
+Next:
+
+- Commit this checkpoint, then continue with action/result contract gates:
+  `runDeskAction`, delivery test, and chat detection.

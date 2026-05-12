@@ -356,16 +356,21 @@ export function sanitizeDeskNotificationTokenStatus(value: unknown): DeskNotific
 }
 
 export function sanitizeDeskAiSettingsStatus(value: unknown): DeskAiSettingsStatus | null {
-  if (!isRecord(value)) {
+  if (!isRecord(value) || value.schema_version !== "desk_ai_settings_status_v1") {
     return null;
   }
-  const configuredCount = nonNegativeIntegerOrDefault(value.configured_count, 0);
+  const configuredCount = nonNegativeInteger(value.configured_count);
+  const platform = optionalString(value.platform);
+  const detail = optionalString(value.detail);
+  if (configuredCount === null || typeof value.local_store_supported !== "boolean" || !platform || !detail || !Array.isArray(value.providers)) {
+    return null;
+  }
   const sanitized: DeskAiSettingsStatus = {
-    schema_version: value.schema_version === "desk_ai_settings_status_v1" ? value.schema_version : undefined,
+    schema_version: "desk_ai_settings_status_v1",
     configured_count: configuredCount,
     local_store_supported: value.local_store_supported === true,
-    platform: optionalString(value.platform) ?? "",
-    detail: optionalString(value.detail) ?? "",
+    platform,
+    detail,
     providers: sanitizeDeskAiProviders(value.providers),
     checked_at: optionalString(value.checked_at),
   };
@@ -602,6 +607,10 @@ function numberOrDefault(value: unknown, fallback: number) {
 
 function nonNegativeIntegerOrDefault(value: unknown, fallback: number) {
   return typeof value === "number" && Number.isInteger(value) && value >= 0 ? value : fallback;
+}
+
+function nonNegativeInteger(value: unknown) {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0 ? value : null;
 }
 
 function assignOptionalNumbers<T extends object>(target: T, record: Record<string, unknown>, fields: string[]) {

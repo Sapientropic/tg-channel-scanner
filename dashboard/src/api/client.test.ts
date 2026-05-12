@@ -4,6 +4,7 @@ import {
   errorMessage,
   loadDashboardState,
   loadDeskActions,
+  loadDeskAiSettingsStatus,
   loadDeskSources,
   normalizeDashboardError,
   previewSourceAssistant,
@@ -108,5 +109,17 @@ describe("dashboard API contract validation", () => {
     await expect(saveDeskDeliveryTarget("telegram-bot-default", "123456", true)).rejects.toThrow(
       "Invalid notification target response",
     );
+  });
+
+  it("throws on empty AI settings payloads instead of rendering an unconfigured state", async () => {
+    mockJsonResponse({ ai: {} });
+
+    await expect(loadDeskAiSettingsStatus()).rejects.toThrow("Invalid AI API settings response");
+  });
+
+  it("throws on incomplete AI settings payloads with only a schema version", async () => {
+    mockJsonResponse({ ai: { schema_version: "desk_ai_settings_status_v1" } });
+
+    await expect(loadDeskAiSettingsStatus()).rejects.toThrow("Invalid AI API settings response");
   });
 });

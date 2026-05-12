@@ -244,6 +244,18 @@ describe("dashboard state sanitizers", () => {
         },
       ],
     });
+    expect(sanitizeDeskAiSettingsStatus({})).toBeNull();
+    expect(sanitizeDeskAiSettingsStatus({ schema_version: "desk_ai_settings_status_v1" })).toBeNull();
+    expect(
+      sanitizeDeskAiSettingsStatus({
+        schema_version: "desk_ai_settings_status_v1",
+        configured_count: Number.NaN,
+        local_store_supported: true,
+        platform: "win32",
+        detail: "Bad count.",
+        providers: [],
+      }),
+    ).toBeNull();
   });
 
   it("preserves explicit null run artifacts but omits malformed artifacts", () => {
