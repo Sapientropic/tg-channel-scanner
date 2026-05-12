@@ -2566,6 +2566,87 @@ class DashboardServerGitTests(unittest.TestCase):
         self.assertEqual(handler.status, HTTPStatus.OK)
         self.assertEqual(handler.payload["result"]["action_id"], "monitor_jobs_dry_run")
 
+    def test_post_mutations_require_json_content_type_before_action(self):
+        class FakeHandler:
+            path = "/api/desk/actions/monitor_jobs_dry_run/run"
+            client_address = ("127.0.0.1", 51000)
+            headers = {"Content-Type": "text/plain", "Host": "127.0.0.1:8765"}
+            status = None
+            payload = None
+
+            def _read_json_body(self):
+                raise AssertionError("non-JSON POST should be rejected before body parsing")
+
+            def _json(self, status, payload):
+                self.status = status
+                self.payload = payload
+
+        with patch.object(dashboard_server, "run_desk_action") as run_mock:
+            handler = FakeHandler()
+            dashboard_server.DashboardHandler.do_POST(handler)
+
+        run_mock.assert_not_called()
+        self.assertEqual(handler.status, HTTPStatus.BAD_REQUEST)
+        self.assertIn("application/json", handler.payload["error"])
+
+    def test_post_mutations_reject_non_loopback_origin_before_action(self):
+        class FakeHandler:
+            path = "/api/desk/actions/monitor_jobs_dry_run/run"
+            client_address = ("127.0.0.1", 51000)
+            headers = {
+                "Content-Type": "application/json",
+                "Host": "127.0.0.1:8765",
+                "Origin": "https://example.com",
+            }
+            status = None
+            payload = None
+
+            def _read_json_body(self):
+                raise AssertionError("cross-origin POST should be rejected before body parsing")
+
+            def _json(self, status, payload):
+                self.status = status
+                self.payload = payload
+
+        with patch.object(dashboard_server, "run_desk_action") as run_mock:
+            handler = FakeHandler()
+            dashboard_server.DashboardHandler.do_POST(handler)
+
+        run_mock.assert_not_called()
+        self.assertEqual(handler.status, HTTPStatus.BAD_REQUEST)
+        self.assertIn("local dashboard", handler.payload["error"])
+
+    def test_post_mutations_accept_json_from_loopback_same_port_origin(self):
+        class FakeHandler:
+            path = "/api/desk/actions/monitor_jobs_dry_run/run"
+            client_address = ("127.0.0.1", 51000)
+            headers = {
+                "Content-Type": "application/json; charset=utf-8",
+                "Host": "127.0.0.1:8765",
+                "Origin": "http://localhost:8765",
+            }
+            status = None
+            payload = None
+
+            def _read_json_body(self):
+                return {"confirm": True}
+
+            def _json(self, status, payload):
+                self.status = status
+                self.payload = payload
+
+        with patch.object(
+            dashboard_server,
+            "run_desk_action",
+            return_value={"schema_version": "desk_action_result_v1", "action_id": "monitor_jobs_dry_run", "status": "success"},
+        ) as run_mock:
+            handler = FakeHandler()
+            dashboard_server.DashboardHandler.do_POST(handler)
+
+        run_mock.assert_called_once()
+        self.assertEqual(handler.status, HTTPStatus.OK)
+        self.assertEqual(handler.payload["result"]["status"], "success")
+
     def test_markdown_report_artifact_renders_as_mobile_html(self):
         with tempfile.TemporaryDirectory() as tmp:
             report = Path(tmp) / "report.md"

@@ -431,3 +431,39 @@ Residual Risk:
 Next:
 
 - Commit this checkpoint, then run a wider backend checkpoint.
+
+## Slice 11: Dashboard POST Request Boundary
+
+Status: in progress.
+
+Actions:
+
+- Added a unified POST preflight that requires `application/json`.
+- Added Origin/Referer checks: when present, POST mutation requests must come
+  from an HTTP loopback URL on the same local port.
+- Kept existing direct-handler unit tests compatible while exercising the real
+  header boundary with focused tests.
+
+Verification:
+
+- `python -m pytest tests/test_dashboard_server.py::DashboardServerGitTests::test_desk_action_run_endpoint_uses_requested_action_id tests/test_dashboard_server.py::DashboardServerGitTests::test_post_mutations_require_json_content_type_before_action tests/test_dashboard_server.py::DashboardServerGitTests::test_post_mutations_reject_non_loopback_origin_before_action tests/test_dashboard_server.py::DashboardServerGitTests::test_post_mutations_accept_json_from_loopback_same_port_origin tests/test_dashboard_server.py::DashboardServerGitTests::test_telegram_post_endpoints_require_loopback_client tests/test_dashboard_server.py::DashboardServerGitTests::test_local_state_mutation_endpoints_require_loopback_client`
+  passed: `6 passed`.
+- `git diff --check` reported only pre-existing CRLF normalization warnings in
+  unrelated WIP files.
+
+Reviewer Gate:
+
+- Addresses the CSRF-style localhost mutation risk called out by the read-only
+  audit: loopback client address alone is not enough when a browser can POST to
+  `127.0.0.1`.
+
+Residual Risk:
+
+- Requests without Origin/Referer are allowed if they are JSON; this preserves
+  non-browser local clients and direct tests. The browser threat path is covered
+  by content-type plus origin/referer checks.
+
+Next:
+
+- Commit this checkpoint, run a wider backend checkpoint, then continue with
+  the next bot/dashboard hardening slice.

@@ -3878,6 +3878,46 @@ class DashboardHandler(BaseHTTPRequestHandler):
             raise ValueError("JSON body must be an object.")
         return payload
 
+    def _require_post_request_integrity(self) -> None:
+        if not hasattr(self, "headers"):
+            return
+        content_type = str(self.headers.get("Content-Type") or "").split(";", 1)[0].strip().lower()
+        if content_type != "application/json":
+            raise ValueError("Signal Desk POST requests require application/json.")
+        for header_name in ("Origin", "Referer"):
+            header_value = str(self.headers.get(header_name) or "").strip()
+            if header_value and not DashboardHandler._is_loopback_same_port_url(self, header_value):
+                raise ValueError("Signal Desk POST requests must originate from the local dashboard.")
+
+    def _is_loopback_same_port_url(self, value: str) -> bool:
+        try:
+            parsed = urlparse(value)
+            source_port = parsed.port or (80 if parsed.scheme == "http" else 443 if parsed.scheme == "https" else None)
+        except ValueError:
+            return False
+        if parsed.scheme != "http" or not parsed.hostname or not is_loopback_address(parsed.hostname):
+            return False
+        request_port = DashboardHandler._request_host_port(self)
+        return request_port is None or source_port == request_port
+
+    def _request_host_port(self) -> int | None:
+        host = str(self.headers.get("Host") or "").strip() if hasattr(self, "headers") else ""
+        if host:
+            try:
+                parsed = urlparse(f"//{host}")
+                if parsed.port is not None:
+                    return parsed.port
+            except ValueError:
+                return None
+        server = getattr(self, "server", None)
+        address = getattr(server, "server_address", None)
+        if isinstance(address, tuple) and len(address) >= 2:
+            try:
+                return int(address[1])
+            except (TypeError, ValueError):
+                return None
+        return None
+
     def _connect(self):
         return monitor_state.connect(self.db_path)
 
@@ -3940,6 +3980,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:  # noqa: N802
         parsed = urlparse(self.path)
         try:
+            DashboardHandler._require_post_request_integrity(self)
             body = self._read_json_body()
             if parsed.path.startswith("/api/desk/actions/") and parsed.path.endswith("/run"):
                 DashboardHandler._require_loopback_access(self, "Desk actions")
