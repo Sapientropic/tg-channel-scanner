@@ -323,6 +323,14 @@ describe("dashboard state sanitizers", () => {
     const state = sanitizeDashboardState({
       delivery_targets: [
         {
+          target_id: "legacy-target",
+          type: "telegram_bot",
+          enabled: true,
+          config: { chat_id: "999999", bot_token: "secret" },
+          updated_at: "2026-05-10T00:00:00Z",
+        },
+        {
+          schema_version: "delivery_target_v1",
           target_id: "telegram-bot-default",
           type: "telegram_bot",
           enabled: true,
@@ -363,6 +371,7 @@ describe("dashboard state sanitizers", () => {
         ?.last_export_path,
     ).toBe("output/feedback/review-feedback.jsonl");
     expect(state.setup_status).toEqual({ checks: [{ check_id: "profiles", label: "Profiles", status: "active" }] });
+    expect(state.delivery_targets).toHaveLength(1);
     expect(state.delivery_targets[0].config).toEqual({ chat_id: "123456" });
     expect(JSON.stringify(state.delivery_targets)).not.toContain("secret");
   });

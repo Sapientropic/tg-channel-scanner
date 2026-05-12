@@ -7,6 +7,7 @@ import {
   loadDeskSources,
   normalizeDashboardError,
   previewSourceAssistant,
+  saveDeskDeliveryTarget,
 } from "./client";
 
 function mockJsonResponse(payload: unknown) {
@@ -91,5 +92,21 @@ describe("dashboard API contract validation", () => {
     });
 
     await expect(previewSourceAssistant("add @remote_jobs", "jobs")).rejects.toThrow("Invalid source assistant response");
+  });
+
+  it("throws on schema-less delivery target payloads instead of accepting sanitizer fallback", async () => {
+    mockJsonResponse({
+      target: {
+        target_id: "telegram-bot-default",
+        type: "telegram_bot",
+        enabled: true,
+        config: { chat_id: "123456" },
+        updated_at: "2026-05-10T00:00:00Z",
+      },
+    });
+
+    await expect(saveDeskDeliveryTarget("telegram-bot-default", "123456", true)).rejects.toThrow(
+      "Invalid notification target response",
+    );
   });
 });

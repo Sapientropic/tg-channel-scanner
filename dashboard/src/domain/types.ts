@@ -266,6 +266,7 @@ export type RunDayBucket = {
 };
 
 export type DeliveryTarget = {
+  schema_version: "delivery_target_v1";
   target_id: string;
   type: string;
   enabled: boolean;

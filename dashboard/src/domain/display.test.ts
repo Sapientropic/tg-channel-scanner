@@ -58,6 +58,7 @@ describe("dashboard display helpers", () => {
   it("formats delivery targets without view dependencies", () => {
     expect(
       deliveryTargetName({
+        schema_version: "delivery_target_v1",
         target_id: "tg",
         type: "telegram_bot",
         enabled: true,
@@ -67,6 +68,7 @@ describe("dashboard display helpers", () => {
     ).toBe("Telegram Bot");
     expect(
       deliveryTargetDetail({
+        schema_version: "delivery_target_v1",
         target_id: "tg",
         type: "telegram_bot",
         enabled: true,

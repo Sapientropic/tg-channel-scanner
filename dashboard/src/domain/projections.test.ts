@@ -26,7 +26,16 @@ describe("dashboard projections", () => {
     const dashboard = state({
       profiles: [{ profile_id: "jobs-fast", enabled: true, updated_at: "2026-05-09T00:00:00Z" }],
       runs: [{ run_id: "run-1", profile_id: "jobs-fast", status: "complete", started_at: "2026-05-09T00:00:00Z", alert_count: 2 }],
-      delivery_targets: [{ target_id: "tg", type: "telegram_bot", enabled: true, config: {}, updated_at: "2026-05-09T00:00:00Z" }],
+      delivery_targets: [
+        {
+          schema_version: "delivery_target_v1",
+          target_id: "tg",
+          type: "telegram_bot",
+          enabled: true,
+          config: {},
+          updated_at: "2026-05-09T00:00:00Z",
+        },
+      ],
       profile_patch_suggestions: [{ patch_id: "p1", profile_id: "jobs-fast", note: "x", status: "pending", diff_text: "+x", created_at: "2026-05-09T00:00:00Z" }],
       source_stats: [{ channel: "jobs", card_count: 4, high_count: 2, medium_count: 1, low_count: 1, pending_count: 1, handled_count: 3, false_positive_count: 0, alert_count: 1, high_rate: 0.5 }],
       source_insights: [{ kind: "promote", channel: "jobs", label: "Promote", reason: "Good", priority: 1, stats: { channel: "jobs", card_count: 4, high_count: 2, medium_count: 1, low_count: 1, pending_count: 1, handled_count: 3, false_positive_count: 0, alert_count: 1, high_rate: 0.5 } }],

@@ -656,3 +656,38 @@ Next:
 
 - Commit this checkpoint, then run broader frontend verification and continue
   with the next highest-value contract or sanitizer hardening target.
+
+## Slice 17: Delivery Target Schema Gate
+
+Status: completed.
+
+Actions:
+
+- Made `DeliveryTarget` require `delivery_target_v1` on the frontend type.
+- Changed the dashboard state sanitizer to drop schema-less delivery targets
+  before rendering notification target configuration.
+- Added client coverage proving a schema-less notification target mutation
+  response throws instead of being accepted through sanitizer fallback.
+- Updated display/projection/action test fixtures to use the current
+  `delivery_target_v1` contract.
+
+Verification:
+
+- `npm test -- sanitize client display projections actions` passed: `5` files,
+  `64` tests.
+- `npm run typecheck` passed.
+
+Reviewer Gate:
+
+- Extends API contract hardening to a notification/chat-id related surface,
+  where schema drift could otherwise quietly affect local delivery controls.
+
+Residual Risk:
+
+- Historical dashboard state payloads without `delivery_target_v1` will no
+  longer render delivery targets. This matches the current backend contract and
+  is preferable to rendering ambiguous notification configuration.
+
+Next:
+
+- Commit this checkpoint, then run full frontend verification again.

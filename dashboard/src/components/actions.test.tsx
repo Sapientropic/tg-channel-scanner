@@ -47,6 +47,7 @@ function schedulerStatus(installed: boolean): DeskSchedulerStatus {
 
 function deliveryTarget(overrides: Partial<DeliveryTarget>): DeliveryTarget {
   return {
+    schema_version: "delivery_target_v1",
     target_id: "telegram-bot-default",
     type: "telegram_bot",
     enabled: false,
