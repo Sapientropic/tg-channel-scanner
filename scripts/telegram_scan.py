@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import getpass
 import sys
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -253,6 +254,47 @@ def _print_progress(args, text: str, *, error: bool = False) -> None:
     print(text, file=stream)
 
 
+@dataclass
+class SourceScanOutcome:
+    index: int
+    scan_source: ScanSource
+    result: ChannelResult | None = None
+    error: Exception | None = None
+
+
+def _display_name_for_entity(channel_name: str, entity) -> str:
+    if not channel_name.lstrip("-").isdigit():
+        return channel_name
+    title = getattr(entity, "title", None) or getattr(entity, "first_name", None)
+    return str(title) if title else channel_name
+
+
+async def _scan_one_source(
+    *,
+    args,
+    client: TelegramClient,
+    scan_source: ScanSource,
+    index: int,
+    cutoff: datetime,
+    ocr: OcrConfig | None,
+) -> SourceScanOutcome:
+    channel_name = scan_source.channel
+    _print_progress(args, f"[{index}] Reading: {channel_name}")
+    try:
+        entity = await resolve_entity(client, channel_name)
+        result = await read_channel(
+            client=client,
+            entity=entity,
+            channel_name=_display_name_for_entity(channel_name, entity),
+            cutoff=cutoff,
+            max_limit=args.max_limit,
+            ocr=ocr,
+        )
+    except Exception as exc:
+        return SourceScanOutcome(index=index, scan_source=scan_source, error=exc)
+    return SourceScanOutcome(index=index, scan_source=scan_source, result=result)
+
+
 
 async def _run_scan(args) -> int:
     json_mode = agent_cli.is_json_format(args)
@@ -401,48 +443,70 @@ async def _run_scan(args) -> int:
     failed_channels: list[str] = []
     incomplete_channels: list[str] = []
     source_health: list[dict] = []
+    scan_concurrency = max(1, int(getattr(args, "scan_concurrency", 1) or 1))
+    start_lock = asyncio.Lock()
+    next_start_at = 0.0
+
+    async def wait_for_rate_limit() -> None:
+        nonlocal next_start_at
+        delay = float(getattr(args, "delay", 0) or 0)
+        if delay <= 0:
+            return
+        loop = asyncio.get_running_loop()
+        async with start_lock:
+            now = loop.time()
+            wait_seconds = max(0.0, next_start_at - now)
+            next_start_at = max(now, next_start_at) + delay
+        if wait_seconds:
+            await asyncio.sleep(wait_seconds)
+
+    semaphore = asyncio.Semaphore(scan_concurrency)
+
+    async def run_bounded_source(index: int, scan_source: ScanSource) -> SourceScanOutcome:
+        async with semaphore:
+            # Telegram rate limits are account-wide. Even when source reads run
+            # concurrently, keep starts paced by --delay so raising concurrency
+            # does not silently turn a first-run catch-up into a request burst.
+            await wait_for_rate_limit()
+            return await _scan_one_source(
+                args=args,
+                client=client,
+                scan_source=scan_source,
+                index=index,
+                cutoff=cutoff,
+                ocr=ocr,
+            )
 
     with errors_path.open("w", encoding="utf-8", newline="\n") as errors:
-        for index, scan_source in enumerate(sources, start=1):
-            channel_name = scan_source.channel
-            _print_progress(args, f"[{index}] Reading: {channel_name}")
-            try:
-                entity = await resolve_entity(client, channel_name)
-                # Use title for display if channel_name is a bare numeric ID
-                display_name = channel_name
-                if channel_name.lstrip("-").isdigit():
-                    title = getattr(entity, "title", None) or getattr(entity, "first_name", None)
-                    if title:
-                        display_name = title
-                result = await read_channel(
-                    client=client,
-                    entity=entity,
-                    channel_name=display_name,
-                    cutoff=cutoff,
-                    max_limit=args.max_limit,
-                    ocr=ocr,
-                )
-            except ScanError as exc:
-                failures += 1
-                failed_channels.append(channel_name)
-                errors.write(f"[{channel_name}] ERROR: {exc}\n")
-                source_health.append(_health_from_failure(scan_source, exc))
-                _print_progress(
-                    args,
-                    f"  Failed: {channel_name} (see {errors_path.name})",
-                    error=True,
-                )
-            except Exception as exc:
-                failures += 1
-                failed_channels.append(channel_name)
-                errors.write(f"[{channel_name}] ERROR: {exc}\n")
-                source_health.append(_health_from_failure(scan_source, exc))
-                _print_progress(
-                    args,
-                    f"  Failed: {channel_name}: {exc} (see {errors_path.name})",
-                    error=True,
-                )
-            else:
+        pending_outcomes: dict[int, SourceScanOutcome] = {}
+        next_outcome_index = 1
+        tasks = [
+            asyncio.create_task(run_bounded_source(index, scan_source))
+            for index, scan_source in enumerate(sources, start=1)
+        ]
+        for completed in asyncio.as_completed(tasks):
+            outcome = await completed
+            pending_outcomes[outcome.index] = outcome
+            while next_outcome_index in pending_outcomes:
+                outcome = pending_outcomes.pop(next_outcome_index)
+                next_outcome_index += 1
+                scan_source = outcome.scan_source
+                channel_name = scan_source.channel
+                if outcome.error:
+                    failures += 1
+                    failed_channels.append(channel_name)
+                    errors.write(f"[{channel_name}] ERROR: {outcome.error}\n")
+                    source_health.append(_health_from_failure(scan_source, outcome.error))
+                    _print_progress(
+                        args,
+                        f"  Failed: {channel_name}: {outcome.error} (see {errors_path.name})",
+                        error=True,
+                    )
+                    continue
+
+                result = outcome.result
+                if result is None:
+                    continue
                 written = write_jsonl(output_path, result.messages)
                 total_written += written
                 total_ocr += result.ocr_count
@@ -473,10 +537,6 @@ async def _run_scan(args) -> int:
                     f"  {written} messages kept from {result.raw_count} rows "
                     f"(limit {result.limit}){ocr_info}",
                 )
-
-            if index < len(channels) and args.delay:
-                await asyncio.sleep(args.delay)
-
     await client.disconnect()
     completed_at = datetime.now(UTC)
     metadata = build_scan_metadata(
@@ -498,6 +558,7 @@ async def _run_scan(args) -> int:
     )
     if registry_payload is not None:
         metadata["source_registry_source_count"] = len(registry_payload.get("sources", []))
+    metadata["scan_concurrency"] = scan_concurrency
     write_scan_metadata(meta_path, metadata)
 
     _print_progress(args, "---")

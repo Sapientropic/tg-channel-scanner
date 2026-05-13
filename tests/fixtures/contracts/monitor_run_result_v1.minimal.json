@@ -16,7 +16,9 @@
   },
   "semantic": {
     "max_messages": null,
-    "max_tokens": null
+    "max_tokens": null,
+    "batch_size": null,
+    "concurrency": 1
   },
   "diagnostics": [
     {

@@ -7,6 +7,9 @@
   "scan_window": {
     "hours": 24
   },
+  "scan": {
+    "concurrency": 1
+  },
   "source_filters": {
     "topics": ["market-news"],
     "source_ids": []
@@ -16,7 +19,9 @@
   },
   "semantic": {
     "max_messages": null,
-    "max_tokens": null
+    "max_tokens": null,
+    "batch_size": null,
+    "concurrency": 1
   },
   "alert_schedule": {
     "mode": "all_day",

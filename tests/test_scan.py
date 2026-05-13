@@ -342,6 +342,79 @@ class ScanTests(unittest.TestCase):
         self.assertEqual(created["api_hash"], "hash")
         self.assertEqual(created["flood_sleep_threshold"], 42)
 
+    def test_run_scan_uses_bounded_source_concurrency_and_writes_source_order(self):
+        class FakeClient:
+            def __init__(self, session, api_id, api_hash, *, flood_sleep_threshold):
+                pass
+
+            async def connect(self):
+                return None
+
+            async def is_user_authorized(self):
+                return True
+
+            async def disconnect(self):
+                return None
+
+        active = 0
+        max_active = 0
+
+        with tempfile.TemporaryDirectory() as tmp:
+            channel_list = Path(tmp) / "channels.txt"
+            channel_list.write_text("jobs_a\njobs_b\njobs_c\n", encoding="utf-8")
+            output_dir = Path(tmp) / "output"
+            output_path = output_dir / "scan.jsonl"
+            parser = scan.build_parser()
+            args = parser.parse_args(
+                [
+                    str(channel_list),
+                    "--output-dir",
+                    str(output_dir),
+                    "--output",
+                    str(output_path),
+                    "--delay",
+                    "0",
+                    "--scan-concurrency",
+                    "2",
+                ]
+            )
+
+            async def fake_resolve_entity(client, channel_name):
+                return f"entity:{channel_name}"
+
+            async def fake_read_channel(**kwargs):
+                nonlocal active, max_active
+                active += 1
+                max_active = max(max_active, active)
+                try:
+                    await asyncio.sleep(0.01)
+                    channel = kwargs["channel_name"]
+                    return scan.ChannelResult(
+                        channel=channel,
+                        messages=[{"channel": channel, "id": len(channel)}],
+                        raw_count=1,
+                        skipped_missing_date=0,
+                        limit=kwargs["max_limit"],
+                        incomplete=False,
+                        ocr_count=0,
+                        stderr="",
+                    )
+                finally:
+                    active -= 1
+
+            with patch.object(scan, "load_config", return_value=scan.ScannerConfig(1, "hash", "session")):
+                with patch.object(scan, "StringSession", return_value="fake-session"):
+                    with patch.object(scan, "TelegramClient", FakeClient):
+                        with patch.object(scan, "resolve_entity", side_effect=fake_resolve_entity):
+                            with patch.object(scan, "read_channel", side_effect=fake_read_channel):
+                                exit_code = asyncio.run(scan._run_scan(args))
+
+            rows = [json.loads(line) for line in output_path.read_text(encoding="utf-8").splitlines()]
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(max_active, 2)
+        self.assertEqual([row["channel"] for row in rows], ["jobs_a", "jobs_b", "jobs_c"])
+
     def test_run_scan_fails_empty_channel_list(self):
         class FakeClient:
             def __init__(self, session, api_id, api_hash, *, flood_sleep_threshold):

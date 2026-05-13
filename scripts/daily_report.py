@@ -62,6 +62,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--model")
     parser.add_argument("--max-messages", type=int)
     parser.add_argument("--max-tokens", type=int)
+    parser.add_argument("--scan-concurrency", type=int)
+    parser.add_argument("--scan-delay", type=float)
+    parser.add_argument("--semantic-batch-size", type=int)
+    parser.add_argument("--semantic-concurrency", type=int)
     parser.add_argument(
         "--extractor",
         choices=("auto", "llm", "agent"),
@@ -118,6 +122,10 @@ def main(argv: list[str] | None = None) -> int:
     else:
         scan_cmd.extend([str(args.channel_list), str(args.hours)])
     scan_cmd.extend(["--output-dir", str(args.output_dir), "--output", str(scan_file)])
+    if args.scan_concurrency:
+        scan_cmd.extend(["--scan-concurrency", str(args.scan_concurrency)])
+    if args.scan_delay is not None:
+        scan_cmd.extend(["--delay", str(args.scan_delay)])
     if args.allow_incomplete:
         scan_cmd.append("--allow-incomplete")
     if json_mode:
@@ -172,6 +180,10 @@ def main(argv: list[str] | None = None) -> int:
         report_cmd.extend(["--max-messages", str(args.max_messages)])
     if args.max_tokens:
         report_cmd.extend(["--max-tokens", str(args.max_tokens)])
+    if args.semantic_batch_size:
+        report_cmd.extend(["--semantic-batch-size", str(args.semantic_batch_size)])
+    if args.semantic_concurrency:
+        report_cmd.extend(["--semantic-concurrency", str(args.semantic_concurrency)])
     if args.extractor:
         report_cmd.extend(["--extractor", args.extractor])
     if args.items_json:

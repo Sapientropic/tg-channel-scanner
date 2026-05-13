@@ -22,8 +22,12 @@ DEFAULT_FAST_JOBS_PROFILE_ID = "jobs-fast"
 DEFAULT_FAST_JOBS_SCAN_WINDOW_HOURS = 2
 DEFAULT_FAST_JOBS_INTERVAL_MINUTES = 15
 DEFAULT_FAST_JOBS_ALERT_MAX_AGE_MINUTES = 60
-DEFAULT_FAST_JOBS_SEMANTIC_MAX_MESSAGES = 20
+DEFAULT_FAST_JOBS_SEMANTIC_MAX_MESSAGES = 40
 DEFAULT_FAST_JOBS_SEMANTIC_MAX_TOKENS = 6000
+DEFAULT_FAST_JOBS_SCAN_CONCURRENCY = 3
+DEFAULT_FAST_JOBS_SCAN_DELAY_SECONDS = 0.2
+DEFAULT_FAST_JOBS_SEMANTIC_BATCH_SIZE = 20
+DEFAULT_FAST_JOBS_SEMANTIC_CONCURRENCY = 2
 DEFAULT_FAST_JOBS_PREFILTER_KEYWORDS = [
     "hiring",
     "we're hiring",
@@ -152,6 +156,10 @@ def default_config(config_path: Path) -> MonitorConfig:
         "prefilter_keywords": DEFAULT_FAST_JOBS_PREFILTER_KEYWORDS,
         "semantic_max_messages": DEFAULT_FAST_JOBS_SEMANTIC_MAX_MESSAGES,
         "semantic_max_tokens": DEFAULT_FAST_JOBS_SEMANTIC_MAX_TOKENS,
+        "scan_concurrency": DEFAULT_FAST_JOBS_SCAN_CONCURRENCY,
+        "scan_delay_seconds": DEFAULT_FAST_JOBS_SCAN_DELAY_SECONDS,
+        "semantic_batch_size": DEFAULT_FAST_JOBS_SEMANTIC_BATCH_SIZE,
+        "semantic_concurrency": DEFAULT_FAST_JOBS_SEMANTIC_CONCURRENCY,
     }
     target = {
         "id": "telegram-bot-default",
@@ -205,6 +213,14 @@ def load_config(config_path: Path, root: Path | None = None) -> MonitorConfig:
             item.setdefault("semantic_max_messages", base_profile["semantic_max_messages"])
         if "semantic_max_tokens" in base_profile:
             item.setdefault("semantic_max_tokens", base_profile["semantic_max_tokens"])
+        if "scan_concurrency" in base_profile:
+            item.setdefault("scan_concurrency", base_profile["scan_concurrency"])
+        if "scan_delay_seconds" in base_profile:
+            item.setdefault("scan_delay_seconds", base_profile["scan_delay_seconds"])
+        if "semantic_batch_size" in base_profile:
+            item.setdefault("semantic_batch_size", base_profile["semantic_batch_size"])
+        if "semantic_concurrency" in base_profile:
+            item.setdefault("semantic_concurrency", base_profile["semantic_concurrency"])
         item.setdefault("prefilter_enabled", False)
         profiles[str(item["id"])] = item
     raw_targets = payload.get("delivery")

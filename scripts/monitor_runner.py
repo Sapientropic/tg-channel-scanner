@@ -41,6 +41,10 @@ try:
     from scripts.monitor_prefilter import (
         keyword_prefilter_matches,
         prefilter_keywords,
+        scan_concurrency,
+        scan_delay_seconds,
+        semantic_batch_size,
+        semantic_concurrency,
         semantic_max_messages,
         semantic_max_tokens,
         write_prefiltered_scan,
@@ -80,6 +84,10 @@ except ModuleNotFoundError:
     from scripts.monitor_prefilter import (
         keyword_prefilter_matches,
         prefilter_keywords,
+        scan_concurrency,
+        scan_delay_seconds,
+        semantic_batch_size,
+        semantic_concurrency,
         semantic_max_messages,
         semantic_max_tokens,
         write_prefiltered_scan,
@@ -156,6 +164,8 @@ def report_command_for_scan_input(
     run_id: str,
     max_messages: int | None = None,
     max_tokens: int | None = None,
+    batch_size: int | None = None,
+    semantic_concurrency_value: int | None = None,
 ) -> list[str | Path]:
     report_title = report_title_for_profile(profile_file, profile_id)
     report_output, html_output = report_output_paths(
@@ -188,6 +198,10 @@ def report_command_for_scan_input(
         cmd.extend(["--max-messages", str(max_messages)])
     if max_tokens:
         cmd.extend(["--max-tokens", str(max_tokens)])
+    if batch_size:
+        cmd.extend(["--semantic-batch-size", str(batch_size)])
+    if semantic_concurrency_value:
+        cmd.extend(["--semantic-concurrency", str(semantic_concurrency_value)])
     return cmd
 
 
@@ -198,6 +212,8 @@ def scan_command(
     source_args: list[str],
     hours: int,
     allow_incomplete: bool,
+    concurrency: int | None = None,
+    delay_seconds: float | None = None,
 ) -> list[str | Path]:
     scan_output = run_dir / "scan.jsonl"
     cmd: list[str | Path] = [
@@ -215,6 +231,10 @@ def scan_command(
     ]
     if allow_incomplete:
         cmd.append("--allow-incomplete")
+    if concurrency:
+        cmd.extend(["--scan-concurrency", str(concurrency)])
+    if delay_seconds is not None:
+        cmd.extend(["--delay", str(delay_seconds)])
     return cmd
 
 
@@ -233,6 +253,10 @@ def daily_report_command(
     run_id: str,
     max_messages: int | None = None,
     max_tokens: int | None = None,
+    scan_concurrency_value: int | None = None,
+    scan_delay_seconds_value: float | None = None,
+    batch_size: int | None = None,
+    semantic_concurrency_value: int | None = None,
 ) -> list[str | Path]:
     report_title = report_title_for_profile(profile_file, profile_id)
     report_output, _ = report_output_paths(
@@ -269,6 +293,14 @@ def daily_report_command(
         cmd.extend(["--max-messages", str(max_messages)])
     if max_tokens:
         cmd.extend(["--max-tokens", str(max_tokens)])
+    if scan_concurrency_value:
+        cmd.extend(["--scan-concurrency", str(scan_concurrency_value)])
+    if scan_delay_seconds_value is not None:
+        cmd.extend(["--scan-delay", str(scan_delay_seconds_value)])
+    if batch_size:
+        cmd.extend(["--semantic-batch-size", str(batch_size)])
+    if semantic_concurrency_value:
+        cmd.extend(["--semantic-concurrency", str(semantic_concurrency_value)])
     return cmd
 
 
@@ -497,6 +529,10 @@ def run_profile(args: argparse.Namespace) -> int:
     items: list[dict[str, Any]] = []
     semantic_limit = semantic_max_messages(profile)
     token_limit = semantic_max_tokens(profile)
+    source_scan_concurrency = scan_concurrency(profile)
+    source_scan_delay_seconds = scan_delay_seconds(profile)
+    batch_limit = semantic_batch_size(profile)
+    semantic_concurrency_limit = semantic_concurrency(profile)
 
     if args.scan_input:
         cmd = report_command_for_scan_input(
@@ -510,6 +546,8 @@ def run_profile(args: argparse.Namespace) -> int:
             run_id=current_run_id,
             max_messages=semantic_limit,
             max_tokens=token_limit,
+            batch_size=batch_limit,
+            semantic_concurrency_value=semantic_concurrency_limit,
         )
         commands_executed.append(cmd)
         exit_code, payload, stderr = run_json_command(cmd)
@@ -532,6 +570,8 @@ def run_profile(args: argparse.Namespace) -> int:
                 source_args=source_args,
                 hours=scan_window_hours,
                 allow_incomplete=args.allow_incomplete,
+                concurrency=source_scan_concurrency,
+                delay_seconds=source_scan_delay_seconds,
             )
             raw_scan_path = run_dir / "scan.jsonl"
             scan_path = raw_scan_path
@@ -578,6 +618,8 @@ def run_profile(args: argparse.Namespace) -> int:
                         run_id=current_run_id,
                         max_messages=semantic_limit,
                         max_tokens=token_limit,
+                        batch_size=batch_limit,
+                        semantic_concurrency_value=semantic_concurrency_limit,
                     )
                     commands_executed.append(cmd)
                     exit_code, payload, stderr = run_json_command(cmd)
@@ -600,6 +642,10 @@ def run_profile(args: argparse.Namespace) -> int:
                 run_id=current_run_id,
                 max_messages=semantic_limit,
                 max_tokens=token_limit,
+                scan_concurrency_value=source_scan_concurrency,
+                scan_delay_seconds_value=source_scan_delay_seconds,
+                batch_size=batch_limit,
+                semantic_concurrency_value=semantic_concurrency_limit,
             )
             commands_executed.append(cmd)
             exit_code, payload, stderr = run_json_command(cmd)
@@ -701,6 +747,15 @@ def run_profile(args: argparse.Namespace) -> int:
     if errors_path.exists():
         artifacts.append(artifact(errors_path, "scan_errors", profile_id=args.profile_id, run_id=current_run_id))
     llm_payload = report_data.get("llm") or llm_from_agent_error(payload)
+    semantic_manifest = {
+        "max_messages": semantic_limit,
+        "max_tokens": token_limit,
+        "batch_size": batch_limit,
+        "concurrency": semantic_concurrency_limit or 1,
+    }
+    scan_manifest = {"concurrency": source_scan_concurrency or 1}
+    if source_scan_delay_seconds is not None:
+        scan_manifest["delay_seconds"] = source_scan_delay_seconds
     manifest = {
         "schema_version": RUN_MANIFEST_SCHEMA_VERSION,
         "run_id": current_run_id,
@@ -710,12 +765,13 @@ def run_profile(args: argparse.Namespace) -> int:
         "source_registry_path": relative_to_root(source_registry) if source_registry.exists() else None,
         "source_registry_hash": file_hash(source_registry) if source_registry.exists() else None,
         "scan_window": {"hours": scan_window_hours},
+        "scan": scan_manifest,
         "source_filters": {
             "topics": profile.get("source_topics") or profile.get("topics") or [],
             "source_ids": profile.get("source_ids") or [],
         },
         "alert_rule": alert_rule_for_profile(profile),
-        "semantic": {"max_messages": semantic_limit, "max_tokens": token_limit},
+        "semantic": semantic_manifest,
         "alert_schedule": {
             "mode": profile.get("alert_schedule_mode") or "work_hours",
             "delivery_enabled": delivery_enabled,
@@ -753,7 +809,7 @@ def run_profile(args: argparse.Namespace) -> int:
         "review_card_count": len(cards),
         "alert_count": alert_count,
         "prefilter": prefilter_context,
-        "semantic": {"max_messages": semantic_limit, "max_tokens": token_limit},
+        "semantic": semantic_manifest,
         "diagnostics": manifest_diagnostics,
         "llm": llm_payload,
         "delivery_attempts": [event["delivery_attempt"] for event in alert_events],
@@ -856,8 +912,12 @@ dashboard_visible = true
 prefilter_enabled = true
 # Keep high-frequency alert batches bounded; use a separate backfill/audit lane
 # if you need exhaustive semantic extraction over a larger catch-up window.
-semantic_max_messages = 20
+scan_concurrency = 3
+scan_delay_seconds = 0.2
+semantic_max_messages = 40
 semantic_max_tokens = 6000
+semantic_batch_size = 20
+semantic_concurrency = 2
 prefilter_keywords = [
   "hiring",
   "we're hiring",

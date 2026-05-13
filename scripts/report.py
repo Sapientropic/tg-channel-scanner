@@ -212,6 +212,18 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--model", default=DEFAULT_MODEL, help=f"Model name (default: {DEFAULT_MODEL})")
     parser.add_argument("--max-messages", type=positive_int, default=DEFAULT_MAX_MESSAGES)
     parser.add_argument("--max-tokens", type=positive_int, default=0, help="Max tokens for LLM response (0 = no limit)")
+    parser.add_argument(
+        "--semantic-batch-size",
+        type=positive_int,
+        default=0,
+        help="Split LLM extraction into batches of this many messages (0 = single request).",
+    )
+    parser.add_argument(
+        "--semantic-concurrency",
+        type=positive_int,
+        default=1,
+        help="Maximum LLM extraction batches to run concurrently.",
+    )
     parser.add_argument("--redact-contact-info", action="store_true")
     parser.add_argument("--output", help="Save report to file (default: print to stdout)")
     parser.add_argument("--html", action="store_true", help="Output HTML instead of Markdown")
@@ -424,6 +436,8 @@ def main(argv: list[str] | None = None, *, extract_jobs_override=None) -> int:
                     max_messages=args.max_messages,
                     max_tokens=args.max_tokens,
                     profile_config=profile_config,
+                    semantic_batch_size=args.semantic_batch_size,
+                    semantic_concurrency=args.semantic_concurrency,
                 )
                 raw_jobs = extraction.items
                 llm_metadata = extraction.llm

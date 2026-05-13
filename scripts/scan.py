@@ -42,6 +42,7 @@ except ModuleNotFoundError:
 DEFAULT_HOURS = _scan_config.DEFAULT_HOURS
 DEFAULT_MAX_LIMIT = _scan_config.DEFAULT_MAX_LIMIT
 DEFAULT_DELAY_SECONDS = _scan_config.DEFAULT_DELAY_SECONDS
+DEFAULT_SCAN_CONCURRENCY = _scan_config.DEFAULT_SCAN_CONCURRENCY
 DEFAULT_MAX_FLOOD_WAIT_SECONDS = _scan_config.DEFAULT_MAX_FLOOD_WAIT_SECONDS
 DEFAULT_XAI_BASE_URL = _scan_config.DEFAULT_XAI_BASE_URL
 DEFAULT_OPENAI_BASE_URL = _scan_config.DEFAULT_OPENAI_BASE_URL
@@ -177,10 +178,12 @@ def build_parser() -> argparse.ArgumentParser:
         allow_abbrev=False,
     )
     max_limit_type = positive_int_with_label("SCAN_MAX_LIMIT")
+    scan_concurrency_type = positive_int_with_label("SCAN_CONCURRENCY")
     delay_type = non_negative_float_with_label("SCAN_DELAY")
     max_flood_wait_type = positive_int_with_label("SCAN_MAX_FLOOD_WAIT_SECONDS")
     parser.register_env_default("SCAN_MAX_LIMIT", max_limit_type)
     parser.register_env_default("SCAN_DELAY", delay_type)
+    parser.register_env_default("SCAN_CONCURRENCY", scan_concurrency_type)
     parser.register_env_default("SCAN_MAX_FLOOD_WAIT_SECONDS", max_flood_wait_type)
     parser.add_argument(
         "channel_list",
@@ -206,6 +209,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--initial-limit", default=os.environ.get("SCAN_INITIAL_LIMIT"), help=argparse.SUPPRESS)
     parser.add_argument("--max-limit", type=max_limit_type, default=env_default("SCAN_MAX_LIMIT", DEFAULT_MAX_LIMIT))
     parser.add_argument("--delay", type=delay_type, default=env_default("SCAN_DELAY", DEFAULT_DELAY_SECONDS))
+    parser.add_argument(
+        "--scan-concurrency",
+        type=scan_concurrency_type,
+        default=env_default("SCAN_CONCURRENCY", DEFAULT_SCAN_CONCURRENCY),
+        help=f"Maximum sources to scan concurrently (default: {DEFAULT_SCAN_CONCURRENCY})",
+    )
     parser.add_argument("--output-dir", type=Path, default=Path("output"))
     parser.add_argument(
         "--output",

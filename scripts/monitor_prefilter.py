@@ -56,6 +56,44 @@ def semantic_max_tokens(profile: dict[str, Any]) -> int | None:
     return value if value > 0 else None
 
 
+def profile_positive_int(profile: dict[str, Any], key: str) -> int | None:
+    raw_value = profile.get(key)
+    if raw_value in {None, ""}:
+        return None
+    try:
+        value = int(raw_value)
+    except (TypeError, ValueError):
+        return None
+    return value if value > 0 else None
+
+
+def profile_non_negative_float(profile: dict[str, Any], key: str) -> float | None:
+    raw_value = profile.get(key)
+    if raw_value in {None, ""}:
+        return None
+    try:
+        value = float(raw_value)
+    except (TypeError, ValueError):
+        return None
+    return value if value >= 0 else None
+
+
+def scan_concurrency(profile: dict[str, Any]) -> int | None:
+    return profile_positive_int(profile, "scan_concurrency")
+
+
+def scan_delay_seconds(profile: dict[str, Any]) -> float | None:
+    return profile_non_negative_float(profile, "scan_delay_seconds")
+
+
+def semantic_batch_size(profile: dict[str, Any]) -> int | None:
+    return profile_positive_int(profile, "semantic_batch_size")
+
+
+def semantic_concurrency(profile: dict[str, Any]) -> int | None:
+    return profile_positive_int(profile, "semantic_concurrency")
+
+
 
 def message_text_for_prefilter(message: dict[str, Any]) -> str:
     pieces: list[str] = []

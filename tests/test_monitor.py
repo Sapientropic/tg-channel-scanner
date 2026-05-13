@@ -30,8 +30,12 @@ class MonitorTests(unittest.TestCase):
         self.assertIn("外包", jobs["prefilter_keywords"])
         self.assertIn("接活", jobs["prefilter_keywords"])
         self.assertIn("预算", jobs["prefilter_keywords"])
-        self.assertEqual(jobs["semantic_max_messages"], 20)
+        self.assertEqual(jobs["semantic_max_messages"], 40)
         self.assertEqual(jobs["semantic_max_tokens"], 6000)
+        self.assertEqual(jobs["scan_concurrency"], 3)
+        self.assertEqual(jobs["scan_delay_seconds"], 0.2)
+        self.assertEqual(jobs["semantic_batch_size"], 20)
+        self.assertEqual(jobs["semantic_concurrency"], 2)
 
     def test_effective_scan_hours_uses_profile_window_unless_cli_overrides(self):
         self.assertEqual(
@@ -932,8 +936,10 @@ class MonitorTests(unittest.TestCase):
                 self.assertIn("report.py", script)
                 scan_input = Path(cmd[cmd.index("--input") + 1])
                 self.assertEqual(scan_input.name, "prefiltered-scan.jsonl")
-                self.assertEqual(cmd[cmd.index("--max-messages") + 1], "20")
+                self.assertEqual(cmd[cmd.index("--max-messages") + 1], "40")
                 self.assertEqual(cmd[cmd.index("--max-tokens") + 1], "6000")
+                self.assertEqual(cmd[cmd.index("--semantic-batch-size") + 1], "20")
+                self.assertEqual(cmd[cmd.index("--semantic-concurrency") + 1], "2")
                 report_path = output_dir / "runs" / "run-prefilter-hit" / "report.md"
                 html_path = output_dir / "runs" / "run-prefilter-hit" / "report.html"
                 report_path.write_text("# Report", encoding="utf-8")
@@ -991,6 +997,155 @@ class MonitorTests(unittest.TestCase):
         self.assertEqual(manifest["prefilter"]["matched_count"], 1)
         self.assertEqual(manifest["prefilter"]["semantic_stage"], "report_ran")
         self.assertEqual(len(manifest["commands"]), 2)
+
+    def test_profile_concurrency_settings_flow_to_scan_report_and_manifest(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "profiles" / "templates").mkdir(parents=True)
+            (root / "profiles" / "templates" / "jobs.md").write_text(
+                "# Profile\n\n## Search Rules\n1. Keep jobs.\n",
+                encoding="utf-8",
+            )
+            (root / ".tgcs").mkdir()
+            config_path = root / ".tgcs" / "profiles.toml"
+            config_path.write_text(
+                "\n".join(
+                    [
+                        'schema_version = "profile_run_config_v1"',
+                        "",
+                        "[[profiles]]",
+                        'id = "jobs-fast"',
+                        'path = "profiles/templates/jobs.md"',
+                        'source_registry = ".tgcs/sources.json"',
+                        'source_topics = ["jobs"]',
+                        "prefilter_enabled = true",
+                        'prefilter_keywords = ["hiring"]',
+                        "semantic_max_messages = 60",
+                        "semantic_max_tokens = 6000",
+                        "scan_concurrency = 3",
+                        "semantic_batch_size = 20",
+                        "semantic_concurrency = 2",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            (root / ".tgcs" / "sources.json").write_text(
+                json.dumps(
+                    {
+                        "schema_version": "source_registry_v1",
+                        "sources": [
+                            {
+                                "source_id": "telegram:jobs",
+                                "username": "jobs",
+                                "topics": ["jobs"],
+                                "scan_window_hours": 24,
+                                "enabled": True,
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            output_dir = root / "output"
+            db_path = root / ".tgcs" / "tgcs.db"
+
+            def fake_run_json_command(cmd):
+                script = str(cmd[1])
+                if "scan.py" in script:
+                    self.assertEqual(cmd[cmd.index("--scan-concurrency") + 1], "3")
+                    self.assertEqual(cmd[cmd.index("--delay") + 1], "0.2")
+                    output_path = Path(cmd[cmd.index("--output") + 1])
+                    output_path.parent.mkdir(parents=True, exist_ok=True)
+                    output_path.write_text(
+                        json.dumps(
+                            {
+                                "id": 1,
+                                "channel": "jobs",
+                                "date": "2026-05-08T08:30:00Z",
+                                "text": "We are hiring a TypeScript engineer.",
+                            }
+                        )
+                        + "\n",
+                        encoding="utf-8",
+                    )
+                    output_path.with_suffix(".meta.json").write_text(
+                        json.dumps({"total_messages_collected": 1, "source_health": []}),
+                        encoding="utf-8",
+                    )
+                    return (
+                        0,
+                        {
+                            "ok": True,
+                            "data": {
+                                "output_path": str(output_path),
+                                "message_count": 1,
+                                "source_health": [],
+                            },
+                        },
+                        "",
+                    )
+                self.assertIn("report.py", script)
+                self.assertEqual(cmd[cmd.index("--semantic-batch-size") + 1], "20")
+                self.assertEqual(cmd[cmd.index("--semantic-concurrency") + 1], "2")
+                report_path = output_dir / "runs" / "run-concurrency" / "report.md"
+                html_path = output_dir / "runs" / "run-concurrency" / "report.html"
+                report_path.write_text("# Report", encoding="utf-8")
+                html_path.write_text("<html></html>", encoding="utf-8")
+                return (
+                    0,
+                    {
+                        "ok": True,
+                        "data": {
+                            "status": "complete",
+                            "report_path": str(report_path),
+                            "html_path": str(html_path),
+                            "items": [
+                                {
+                                    "topic": "TypeScript engineer",
+                                    "rating": "high",
+                                    "decision_state": {"status": "new"},
+                                    "source_message_refs": [{"channel": "jobs", "id": 1}],
+                                }
+                            ],
+                        },
+                    },
+                    "",
+                )
+
+            stdout = io.StringIO()
+            with patch.object(monitor, "PROJECT_ROOT", root):
+                with patch.object(monitor, "run_json_command", side_effect=fake_run_json_command):
+                    with patch("sys.stdout", stdout):
+                        exit_code = monitor.main(
+                            [
+                                "run",
+                                "--profile-id",
+                                "jobs-fast",
+                                "--run-id",
+                                "run-concurrency",
+                                "--config",
+                                str(config_path),
+                                "--output-dir",
+                                str(output_dir),
+                                "--db",
+                                str(db_path),
+                                "--format",
+                                "json",
+                            ]
+                        )
+
+            payload = json.loads(stdout.getvalue())
+            manifest = json.loads(
+                (output_dir / "runs" / "run-concurrency" / "run-manifest.json").read_text(encoding="utf-8")
+            )
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(manifest["scan"]["concurrency"], 3)
+        self.assertEqual(manifest["scan"]["delay_seconds"], 0.2)
+        self.assertEqual(manifest["semantic"]["batch_size"], 20)
+        self.assertEqual(manifest["semantic"]["concurrency"], 2)
+        self.assertEqual(payload["data"]["semantic"]["batch_size"], 20)
+        self.assertEqual(payload["data"]["semantic"]["concurrency"], 2)
 
     def test_prefilter_report_failure_records_llm_truncation_diagnostic(self):
         with tempfile.TemporaryDirectory() as tmp:

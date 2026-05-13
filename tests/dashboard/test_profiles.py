@@ -394,12 +394,17 @@ class DashboardProfileTests(unittest.TestCase):
             profile = handler.payload["profile"]
             profile_path = root / profile["profile_path"]
             profile_body = profile_path.read_text(encoding="utf-8")
-            config_exists = (root / ".tgcs" / "profiles.toml").exists()
+            config_path = root / ".tgcs" / "profiles.toml"
+            config_text = config_path.read_text(encoding="utf-8")
 
         self.assertEqual(handler.status, HTTPStatus.OK)
         self.assertEqual(profile["schema_version"], "desk_profile_create_result_v1")
         self.assertIn("Senior remote AI engineering roles", profile_body)
-        self.assertTrue(config_exists)
+        self.assertIn("scan_concurrency = 3", config_text)
+        self.assertIn("scan_delay_seconds = 0.2", config_text)
+        self.assertIn("semantic_max_messages = 40", config_text)
+        self.assertIn("semantic_batch_size = 20", config_text)
+        self.assertIn("semantic_concurrency = 2", config_text)
         self.assertEqual(snapshot["profiles"][0]["profile_id"], profile["profile_id"])
 
 

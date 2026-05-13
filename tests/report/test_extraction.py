@@ -1,3 +1,5 @@
+import json
+import re
 import sys
 import unittest
 from types import SimpleNamespace
@@ -247,6 +249,72 @@ system_prompt: |
         self.assertEqual(result.llm["usage"]["prompt_cache_miss_tokens"], 2)
         self.assertIn("prompt_prefix_hash", result.llm)
 
+    def test_extraction_can_split_messages_into_parallel_semantic_batches(self):
+        report = load_report_module(self)
+        captured_batches: list[list[int]] = []
+
+        class FakeCompletions:
+            def create(self, **kwargs):
+                user_prompt = kwargs["messages"][1]["content"]
+                message_ids = [int(match) for match in re.findall(r'"id":\s*(\d+)', user_prompt)]
+                captured_batches.append(message_ids)
+                first_id = message_ids[0]
+                return SimpleNamespace(
+                    choices=[
+                        SimpleNamespace(
+                            message=SimpleNamespace(
+                                content=json.dumps(
+                                    {
+                                        "jobs": [
+                                            {
+                                                "source_message_refs": [{"channel": "jobs", "id": first_id}],
+                                                "source_message_ids": [first_id],
+                                                "company": f"Company {first_id}",
+                                                "role": "Engineer",
+                                                "rating": "high",
+                                            }
+                                        ]
+                                    }
+                                )
+                            )
+                        )
+                    ],
+                    usage={
+                        "prompt_tokens": 10,
+                        "completion_tokens": 2,
+                        "total_tokens": 12,
+                        "prompt_cache_hit_tokens": 8,
+                        "prompt_cache_miss_tokens": 2,
+                    },
+                )
+
+        class FakeOpenAI:
+            def __init__(self, *, api_key, base_url):
+                self.chat = SimpleNamespace(completions=FakeCompletions())
+
+        with patch.dict("os.environ", {"DEEPSEEK_API_KEY": "sk-test"}, clear=True):
+            with patch.dict(sys.modules, {"openai": SimpleNamespace(OpenAI=FakeOpenAI)}):
+                result = report.extract_jobs_with_metadata(
+                    messages=sample_messages(),
+                    profile="Senior TypeScript roles",
+                    meta=None,
+                    base_url=report.DEFAULT_DEEPSEEK_BASE_URL,
+                    model="deepseek-v4-flash",
+                    max_messages=5,
+                    max_tokens=6000,
+                    semantic_batch_size=2,
+                    semantic_concurrency=2,
+                )
+
+        self.assertEqual(len(captured_batches), 3)
+        self.assertEqual(sorted(batch[0] for batch in captured_batches), [1, 3, 5])
+        self.assertEqual(len(result.items), 3)
+        self.assertEqual(result.llm["batch_count"], 3)
+        self.assertEqual(result.llm["batch_size"], 2)
+        self.assertEqual(result.llm["concurrency"], 2)
+        self.assertEqual(result.llm["usage"]["prompt_tokens"], 30)
+        self.assertEqual(result.llm["cache"]["hit_tokens"], 24)
+        self.assertEqual(len(result.llm["batches"]), 3)
 
     def test_minimax_m27_extraction_uses_minimax_key_and_provider_safe_request_shape(self):
         report = load_report_module(self)

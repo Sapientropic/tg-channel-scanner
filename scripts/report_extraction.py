@@ -7,6 +7,7 @@ import json
 import os
 import re
 import sys
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import UTC, datetime
 from pathlib import Path
 from time import perf_counter
@@ -454,7 +455,7 @@ def emit_agent_extraction_required(args, request_path: Path, items_output_path: 
         )
 
 
-def extract_jobs_with_metadata(
+def _extract_jobs_single_batch(
     *,
     messages: list[dict],
     profile: str,
@@ -548,6 +549,242 @@ def extract_jobs_with_metadata(
             "cache": cache_metrics_from_usage(usage),
             "prompt_prefix_hash": hashlib.sha256(system_prompt.encode("utf-8")).hexdigest()[:24],
         },
+    )
+
+
+def _semantic_batches(messages: list[dict], *, max_messages: int, batch_size: int) -> list[list[dict]]:
+    selected = sort_messages_newest_first(messages)[:max_messages]
+    if not selected:
+        return []
+    safe_batch_size = max(1, batch_size)
+    return [selected[index : index + safe_batch_size] for index in range(0, len(selected), safe_batch_size)]
+
+
+def _source_ref_key(item: dict[str, Any]) -> tuple | None:
+    refs = item.get("source_message_refs")
+    if isinstance(refs, list):
+        normalized_refs = []
+        for ref in refs:
+            if not isinstance(ref, dict):
+                continue
+            channel = str(ref.get("channel") or ref.get("source") or "").strip().casefold()
+            message_id = ref.get("id")
+            if channel and message_id is not None:
+                normalized_refs.append((channel, str(message_id)))
+        if normalized_refs:
+            return ("refs", tuple(sorted(set(normalized_refs))))
+    ids = item.get("source_message_ids")
+    if isinstance(ids, list) and ids:
+        source = str(item.get("source") or item.get("channel") or "").strip().casefold()
+        return ("legacy", source, tuple(sorted(str(message_id) for message_id in ids)))
+    company = str(item.get("company") or "").strip().casefold()
+    role = str(item.get("role") or item.get("title") or "").strip().casefold()
+    contact_or_link = str(item.get("link") or item.get("contact") or "").strip().casefold()
+    if company and role and contact_or_link:
+        return ("job", company, role, contact_or_link)
+    return None
+
+
+def _merge_unique_list(left: object, right: object) -> list:
+    merged: list[Any] = []
+    seen: set[str] = set()
+    for value in [left, right]:
+        if not isinstance(value, list):
+            continue
+        for item in value:
+            marker = json.dumps(item, ensure_ascii=False, sort_keys=True, default=str)
+            if marker in seen:
+                continue
+            merged.append(item)
+            seen.add(marker)
+    return merged
+
+
+def _has_value(value: object) -> bool:
+    if value is None:
+        return False
+    if isinstance(value, str) and value.strip() in {"", "Unknown", "Not specified"}:
+        return False
+    if isinstance(value, list) and not value:
+        return False
+    return True
+
+
+def _merge_semantic_item(existing: dict[str, Any], incoming: dict[str, Any]) -> dict[str, Any]:
+    merged = dict(existing)
+    for key, value in incoming.items():
+        if key in {"source_message_refs", "source_message_ids", "stack", "concerns"}:
+            combined = _merge_unique_list(merged.get(key), value)
+            if combined:
+                merged[key] = combined
+            continue
+        if not _has_value(merged.get(key)) and _has_value(value):
+            merged[key] = value
+    return merged
+
+
+def merge_semantic_items(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    merged: list[dict[str, Any]] = []
+    by_key: dict[tuple, int] = {}
+    for item in items:
+        key = _source_ref_key(item)
+        if key is None:
+            merged.append(item)
+            continue
+        existing_index = by_key.get(key)
+        if existing_index is None:
+            by_key[key] = len(merged)
+            merged.append(item)
+        else:
+            merged[existing_index] = _merge_semantic_item(merged[existing_index], item)
+    return merged
+
+
+def _sum_usage(batch_metadata: list[dict[str, Any]]) -> dict[str, int]:
+    totals: dict[str, int] = {}
+    for llm in batch_metadata:
+        usage = llm.get("usage")
+        if not isinstance(usage, dict):
+            continue
+        for key, value in usage.items():
+            if isinstance(value, int):
+                totals[key] = totals.get(key, 0) + value
+    return totals
+
+
+def _aggregate_cache_from_usage(usage: dict[str, int]) -> dict[str, Any]:
+    hit = int(usage.get("prompt_cache_hit_tokens") or 0)
+    miss = int(usage.get("prompt_cache_miss_tokens") or 0)
+    if not hit and not miss:
+        return cache_metrics_from_usage(usage)
+    total = hit + miss
+    return {
+        "hit_tokens": hit,
+        "miss_tokens": miss,
+        "hit_rate": round(hit / total, 4) if total else 0,
+    }
+
+
+def _batch_llm_summary(
+    *,
+    batch_metadata: list[dict[str, Any]],
+    batch_count: int,
+    batch_size: int,
+    concurrency: int,
+    latency_ms: int,
+) -> dict[str, Any]:
+    first = batch_metadata[0] if batch_metadata else {}
+    usage = _sum_usage(batch_metadata)
+    return {
+        "provider": first.get("provider"),
+        "model": first.get("model"),
+        "base_url": first.get("base_url"),
+        "thinking": first.get("thinking"),
+        "latency_ms": latency_ms,
+        "usage": usage,
+        "cache": _aggregate_cache_from_usage(usage),
+        "prompt_prefix_hash": first.get("prompt_prefix_hash"),
+        "batch_count": batch_count,
+        "batch_size": batch_size,
+        "concurrency": concurrency,
+        "batches": [
+            {
+                "index": index + 1,
+                "latency_ms": llm.get("latency_ms"),
+                "usage": llm.get("usage") if isinstance(llm.get("usage"), dict) else {},
+                "cache": llm.get("cache") if isinstance(llm.get("cache"), dict) else {},
+                "prompt_prefix_hash": llm.get("prompt_prefix_hash"),
+            }
+            for index, llm in enumerate(batch_metadata)
+        ],
+    }
+
+
+def extract_jobs_with_metadata(
+    *,
+    messages: list[dict],
+    profile: str,
+    meta: dict | None,
+    base_url: str | None,
+    model: str,
+    max_messages: int,
+    max_tokens: int = 0,
+    profile_config: ProfileConfig | None = None,
+    semantic_batch_size: int | None = None,
+    semantic_concurrency: int | None = None,
+) -> ExtractionResult:
+    batch_size = int(semantic_batch_size or 0)
+    concurrency = max(1, int(semantic_concurrency or 1))
+    if batch_size <= 0:
+        return _extract_jobs_single_batch(
+            messages=messages,
+            profile=profile,
+            meta=meta,
+            base_url=base_url,
+            model=model,
+            max_messages=max_messages,
+            max_tokens=max_tokens,
+            profile_config=profile_config,
+        )
+    batches = _semantic_batches(messages, max_messages=max_messages, batch_size=batch_size)
+    if len(batches) <= 1:
+        return _extract_jobs_single_batch(
+            messages=messages,
+            profile=profile,
+            meta=meta,
+            base_url=base_url,
+            model=model,
+            max_messages=max_messages,
+            max_tokens=max_tokens,
+            profile_config=profile_config,
+        )
+
+    started = perf_counter()
+    results: list[ExtractionResult | None] = [None] * len(batches)
+    with ThreadPoolExecutor(max_workers=min(concurrency, len(batches))) as executor:
+        future_to_index = {
+            executor.submit(
+                _extract_jobs_single_batch,
+                messages=batch,
+                profile=profile,
+                meta=meta,
+                base_url=base_url,
+                model=model,
+                max_messages=len(batch),
+                max_tokens=max_tokens,
+                profile_config=profile_config,
+            ): index
+            for index, batch in enumerate(batches)
+        }
+        for future in as_completed(future_to_index):
+            index = future_to_index[future]
+            try:
+                results[index] = future.result()
+            except ReportError as exc:
+                details = dict(exc.details) if isinstance(exc.details, dict) else {}
+                details["failed_batch_index"] = index + 1
+                details["batch_count"] = len(batches)
+                raise ReportError(
+                    str(exc),
+                    exc.raw_response,
+                    code=exc.code,
+                    next_step=exc.next_step,
+                    retryable=exc.retryable,
+                    details=details,
+                ) from exc
+    latency_ms = int((perf_counter() - started) * 1000)
+    completed_results = [result for result in results if result is not None]
+    items = merge_semantic_items([item for result in completed_results for item in result.items])
+    batch_metadata = [result.llm for result in completed_results if result.llm]
+    return ExtractionResult(
+        items=items,
+        llm=_batch_llm_summary(
+            batch_metadata=batch_metadata,
+            batch_count=len(batches),
+            batch_size=batch_size,
+            concurrency=concurrency,
+            latency_ms=latency_ms,
+        ),
     )
 
 

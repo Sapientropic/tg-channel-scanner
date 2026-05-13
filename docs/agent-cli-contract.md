@@ -360,8 +360,12 @@ alert_max_age_minutes = 60
 alert_schedule_mode = "work_hours"
 delivery_targets = ["telegram-bot-default"]
 prefilter_enabled = true
-semantic_max_messages = 20
+scan_concurrency = 3
+scan_delay_seconds = 0.2
+semantic_max_messages = 40
 semantic_max_tokens = 6000
+semantic_batch_size = 20
+semantic_concurrency = 2
 prefilter_keywords = [
   "hiring",
   "we're hiring",
@@ -430,8 +434,10 @@ chat_id = ""
     "semantic_stage": "report_ran"
   },
   "semantic": {
-    "max_messages": 20,
-    "max_tokens": 6000
+    "max_messages": 40,
+    "max_tokens": 6000,
+    "batch_size": 20,
+    "concurrency": 2
   },
   "llm": {
     "provider": "deepseek",
@@ -624,9 +630,14 @@ uses the same minimized projection for `selected_messages` so agent fallback
 work sees the same extraction surface as LLM mode.
 
 For the high-frequency `jobs-fast` lane, keep semantic batches bounded with
-`semantic_max_messages=20` and `semantic_max_tokens=6000`. Larger catch-up or
-exhaustive review should run as a backfill/audit lane so interrupt latency does
-not depend on a noisy channel burst.
+`scan_concurrency=3`, `scan_delay_seconds=0.2`,
+`semantic_max_messages=40`, `semantic_batch_size=20`,
+`semantic_concurrency=2`, and `semantic_max_tokens=6000`. First-run and
+backfill profiles may raise these further after real FloodWait/provider-limit
+testing, but they should still aggregate into one report rather than streaming
+partial alerts. Larger catch-up or exhaustive review should run as a
+backfill/audit lane so interrupt latency does not depend on a noisy channel
+burst.
 
 When `OPENAI_API_KEY` is unavailable and `DEEPSEEK_API_KEY` is set,
 `report.py` now defaults to `deepseek-v4-flash` at `https://api.deepseek.com`,

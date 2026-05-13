@@ -134,8 +134,12 @@ class TgcsCliTests(unittest.TestCase):
         self.assertIn("profile", config_text)
         self.assertIn("state_dir", config_text)
         self.assertIn("profile_run_config_v1", profiles_config_text)
-        self.assertIn("semantic_max_messages = 20", profiles_config_text)
+        self.assertIn("scan_concurrency = 3", profiles_config_text)
+        self.assertIn("scan_delay_seconds = 0.2", profiles_config_text)
+        self.assertIn("semantic_max_messages = 40", profiles_config_text)
         self.assertIn("semantic_max_tokens = 6000", profiles_config_text)
+        self.assertIn("semantic_batch_size = 20", profiles_config_text)
+        self.assertIn("semantic_concurrency = 2", profiles_config_text)
         cmd = [str(part) for part in run_mock.call_args.args[0]]
         self.assertIn("source_registry.py", cmd[1])
         self.assertIn("import-list", cmd)

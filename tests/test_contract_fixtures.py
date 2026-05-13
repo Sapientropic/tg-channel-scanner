@@ -56,6 +56,7 @@ def normalize_manifest(manifest: dict) -> dict:
         "profile_path": manifest.get("profile_path"),
         "source_registry_path": manifest.get("source_registry_path"),
         "scan_window": manifest.get("scan_window"),
+        "scan": manifest.get("scan"),
         "source_filters": manifest.get("source_filters"),
         "alert_rule": manifest.get("alert_rule"),
         "semantic": manifest.get("semantic"),
