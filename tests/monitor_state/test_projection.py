@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from scripts import dashboard_projection, monitor_state
+from scripts import dashboard_profiles, dashboard_projection, monitor_state
 
 
 class MonitorStateProjectionTests(unittest.TestCase):
@@ -14,8 +14,33 @@ class MonitorStateProjectionTests(unittest.TestCase):
         self.assertIs(monitor_state.dashboard_setup_status, dashboard_projection.dashboard_setup_status)
         self.assertIs(monitor_state.dashboard_run_projection, dashboard_projection.dashboard_run_projection)
         self.assertIs(monitor_state.dashboard_profile_projection, dashboard_projection.dashboard_profile_projection)
+        self.assertIs(dashboard_projection.dashboard_profile_projection, dashboard_profiles.dashboard_profile_projection)
+        self.assertIs(dashboard_projection.profile_matching_summary, dashboard_profiles.profile_matching_summary)
         self.assertIs(monitor_state.delivery_target_from_row, dashboard_projection.delivery_target_from_row)
         self.assertIs(monitor_state.display_profile_path, dashboard_projection.display_profile_path)
+
+    def test_dashboard_profile_helpers_respect_projection_project_root_patch(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            profile_path = root / "profiles" / "desk" / "custom.md"
+            profile_path.parent.mkdir(parents=True)
+            profile_path.write_text(
+                "\n".join(
+                    [
+                        "# Custom",
+                        "",
+                        "## Report Labels",
+                        'report_title: "Patched Root Signal Report"',
+                        "",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            with patch.object(dashboard_projection, "PROJECT_ROOT", root):
+                title = dashboard_projection.report_title_from_profile_path("profiles/desk/custom.md")
+
+        self.assertEqual(title, "Patched Root Signal Report")
 
 
     def test_dashboard_snapshot_includes_first_run_setup_status(self):

@@ -260,6 +260,26 @@ run behavior:
   targeted `ruff`/`py_compile`, `python -m ruff check .`, and full
   `python -m pytest -q`.
 
+## Progress Update: 2026-05-14 Dashboard Profile Projection Split
+
+The dashboard projection module shed the profile-facing projection boundary
+without changing dashboard state contracts:
+
+- `scripts/dashboard_profiles.py` now owns dashboard profile projection,
+  profile matching summary extraction from Markdown, display path labels,
+  profile report-title lookup, and compact profile/report labels.
+- `scripts/dashboard_projection.py` still owns snapshot assembly, run/report
+  artifact projection, delivery targets, profile patches, opportunity summary,
+  and setup status, while re-exporting the profile helpers for compatibility.
+- `tests/monitor_state/test_projection.py` now locks the
+  `monitor_state -> dashboard_projection -> dashboard_profiles` facade path,
+  including both `monitor_state.PROJECT_ROOT` and `dashboard_projection.PROJECT_ROOT`
+  monkeypatch compatibility for profile file lookup.
+- Focused and full gates passed: `python -m pytest
+  tests/monitor_state/test_projection.py tests/test_dashboard_state_contracts.py
+  -q`, `python -m pytest tests/monitor_state -q`, targeted `ruff`/`py_compile`,
+  `python -m ruff check .`, and full `python -m pytest -q`.
+
 ## Current Debt Snapshot: 2026-05-14
 
 The debt register below remains the long-form reasoning. This table is the
@@ -283,7 +303,8 @@ Large current files are still the main maintainability signal:
 | Area | File | Lines | Why It Matters |
 | --- | ---: | ---: | --- |
 | Python server | `scripts/dashboard_server.py` | 1195 | HTTP routing, state payload assembly, route-level validation, and compatibility re-exports remain in the facade after profile creation moved out. |
-| Dashboard projection | `scripts/dashboard_projection.py` | 910 | Focused projection module for dashboard snapshots, run/report artifacts, setup status, and opportunity summaries. |
+| Dashboard projection | `scripts/dashboard_projection.py` | 761 | Focused projection module for dashboard snapshots, run/report artifacts, delivery targets, profile patches, opportunity summaries, and setup status after profile projection moved out. |
+| Dashboard profile projection | `scripts/dashboard_profiles.py` | 186 | Focused profile projection module for profile labels, matching summaries, report titles, and display paths. |
 | Python monitor runner | `scripts/monitor_runner.py` | 852 | Repeated-run orchestration and manifest behavior are now a focused but still sizeable boundary after delivery target/runtime override helpers moved out. |
 | Monitor prefilter/manifest tests | `tests/monitor/test_prefilter_and_manifest.py` | 718 | Largest monitor test file after the split; scoped to expensive run/manifest paths rather than all monitor behavior. |
 | Tgcs CLI init tests | `tests/tgcs_cli/test_run_demo_init.py` | 282 | Largest CLI test file after the split; scoped to run/demo/init/quickstart/login/doctor behavior. |

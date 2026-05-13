@@ -8,7 +8,7 @@ import sys
 from pathlib import Path, PurePosixPath
 from typing import Any, Iterable
 
-from scripts import source_insights as _source_insights
+from scripts import dashboard_profiles as _dashboard_profiles, source_insights as _source_insights
 from scripts.item_display import display_item_title
 from scripts.monitor_common import (
     DELIVERY_TARGET_SCHEMA_VERSION,
@@ -20,7 +20,6 @@ from scripts.monitor_common import (
     sha256_text,
 )
 from scripts.monitor_feedback import feedback_summary, validation_summary
-from scripts.profile_schema import parse_profile_config
 from scripts.review_cards import _card_from_row, source_link_lookup_from_runs
 
 
@@ -53,12 +52,17 @@ def source_value_insights_from_stats(stats: list[dict[str, Any]]) -> list[dict[s
     return _source_insights.source_value_insights_from_stats(stats)
 
 
-def non_negative_int(value: object) -> int:
-    return _source_insights.non_negative_int(value)
+non_negative_int = _dashboard_profiles.non_negative_int
+title_case_label = _dashboard_profiles.title_case_label
+dashboard_profile_projection = _dashboard_profiles.dashboard_profile_projection
+profile_matching_summary = _dashboard_profiles.profile_matching_summary
+_markdown_sections = _dashboard_profiles._markdown_sections
+_clean_markdown_items = _dashboard_profiles._clean_markdown_items
+display_profile_path = _dashboard_profiles.display_profile_path
+report_title_from_profile_path = _dashboard_profiles.report_title_from_profile_path
+profile_display_label = _dashboard_profiles.profile_display_label
+compact_report_title = _dashboard_profiles.compact_report_title
 
-
-def title_case_label(value: str) -> str:
-    return _source_insights.title_case_label(value)
 
 def _profile_from_row(row: sqlite3.Row) -> dict[str, Any]:
     return {
@@ -69,139 +73,6 @@ def _profile_from_row(row: sqlite3.Row) -> dict[str, Any]:
         "config": parse_json(row["config_json"], {}),
         "updated_at": row["updated_at"],
     }
-
-
-def dashboard_profile_projection(profile: dict[str, Any], *, report_title: str = "") -> dict[str, Any]:
-    config = profile.get("config") if isinstance(profile.get("config"), dict) else {}
-    profile_path = str(profile.get("path") or "")
-    source_topics = config.get("source_topics")
-    if not isinstance(source_topics, list):
-        source_topics = []
-    delivery_targets = config.get("delivery_targets")
-    if not isinstance(delivery_targets, list):
-        delivery_targets = []
-    alert_schedule_mode = config.get("alert_schedule_mode")
-    return {
-        "schema_version": "dashboard_profile_v1",
-        "profile_id": profile["profile_id"],
-        "display_name": profile_display_label(str(profile["profile_id"]), profile_path=profile_path, report_title=report_title),
-        "report_display_name": report_title or f"{profile_display_label(str(profile['profile_id']), profile_path=profile_path)} Report",
-        "display_path": profile.get("display_path") or display_profile_path(profile_path),
-        "enabled": bool(profile.get("enabled")),
-        "alert_schedule_mode": alert_schedule_mode if isinstance(alert_schedule_mode, str) else "work_hours",
-        "source_topics": [str(topic) for topic in source_topics if str(topic).strip()],
-        "scan_window_hours": non_negative_int(config.get("scan_window_hours")),
-        "semantic_max_messages": non_negative_int(config.get("semantic_max_messages")),
-        "timezone": str(config.get("timezone") or ""),
-        "workdays": (
-            [str(day) for day in config.get("workdays", []) if str(day).strip()]
-            if isinstance(config.get("workdays"), list)
-            else []
-        ),
-        "work_start": str(config.get("work_start") or ""),
-        "work_end": str(config.get("work_end") or ""),
-        "work_interval_minutes": non_negative_int(config.get("work_interval_minutes")),
-        "off_hours_interval_minutes": non_negative_int(config.get("off_hours_interval_minutes")),
-        "alert_rule": str(config.get("alert_rule") or "high_new_or_changed"),
-        "alert_max_age_minutes": non_negative_int(config.get("alert_max_age_minutes")),
-        "delivery_target_count": len(delivery_targets),
-        "matching_profile": profile_matching_summary(profile_path),
-        "updated_at": profile.get("updated_at"),
-    }
-
-
-def profile_matching_summary(profile_path: str) -> dict[str, Any]:
-    """Project profile Markdown into app-readable matching rules.
-
-    The dashboard is the human surface, so it should expose the criteria the
-    scanner is actually using without forcing users into raw Markdown or YAML.
-    Keep this parser deliberately conservative: unknown sections remain in the
-    source file, while the UI shows only short bullets from stable profile
-    sections that influence matching.
-    """
-    path = Path(profile_path)
-    if not path.is_absolute():
-        path = _project_root() / path
-    try:
-        text = path.read_text(encoding="utf-8")
-    except OSError:
-        return {"schema_version": "profile_matching_profile_v1", "sections": [], "learned_preferences": []}
-    sections = _markdown_sections(text)
-    basics = _clean_markdown_items(sections.get("Basic Info", []), limit=6)
-    search_rules = _clean_markdown_items(sections.get("Search Rules", []), limit=7)
-    report_preferences = _clean_markdown_items(sections.get("Report Preferences", []), limit=5)
-    learned = _clean_markdown_items(sections.get("Follow-up Preferences", []), limit=12)
-    output_sections: list[dict[str, Any]] = []
-    for key, label, items in [
-        ("basics", "Match profile", basics),
-        ("rules", "How cards are judged", search_rules),
-        ("learned", "Learned preferences", learned),
-        ("report", "Report preferences", report_preferences),
-    ]:
-        if items:
-            output_sections.append({"key": key, "label": label, "items": items})
-    return {
-        "schema_version": "profile_matching_profile_v1",
-        "summary": basics[0] if basics else "",
-        "sections": output_sections,
-        "learned_preferences": learned,
-        "editable_text": "\n".join(f"- {item}" for item in learned),
-    }
-
-
-def _markdown_sections(text: str) -> dict[str, list[str]]:
-    sections: dict[str, list[str]] = {}
-    current = ""
-    for raw in text.splitlines():
-        line = raw.rstrip()
-        if line.startswith("## "):
-            current = line[3:].strip()
-            sections.setdefault(current, [])
-            continue
-        if current:
-            sections.setdefault(current, []).append(line)
-    return sections
-
-
-def _clean_markdown_items(lines: list[str], *, limit: int) -> list[str]:
-    items: list[str] = []
-    seen: set[str] = set()
-    for raw in lines:
-        line = raw.strip()
-        if not line:
-            continue
-        if line.startswith(("mode:", "top_level_key:", "dedup_fields:", "fields:", "system_prompt:", "report_title:", "section_", "stats_label:", "output_filename:", "profile_section_title:", "methodology_label:")):
-            continue
-        line = re.sub(r"^\d+\.\s+", "", line)
-        line = re.sub(r"^[-*]\s+", "", line)
-        line = re.sub(r"^\+\s*", "", line)
-        line = re.sub(r"\*\*([^*]+)\*\*", r"\1", line)
-        line = line.replace("`", "").strip()
-        if not line or line in {"|", "fields:"}:
-            continue
-        normalized = " ".join(line.split())
-        if not normalized or normalized.casefold() in seen:
-            continue
-        seen.add(normalized.casefold())
-        items.append(normalized)
-        if len(items) >= limit:
-            break
-    return items
-
-
-def display_profile_path(profile_path: str) -> str:
-    """Return a stable UI label without exposing machine-specific absolute paths."""
-    parts = [part for part in re.split(r"[\\/]+", profile_path) if part]
-    lowered = [part.lower() for part in parts]
-    if "profiles" in lowered:
-        index = len(lowered) - 1 - lowered[::-1].index("profiles")
-        tail = parts[index + 1 :]
-        if tail and tail[0].lower() == "templates":
-            tail = tail[1:]
-        if tail:
-            return "Profiles/" + "/".join(tail)
-    name = Path(profile_path).name if profile_path else ""
-    return f"Profiles/{name}" if name else "Profile path unavailable"
 
 
 
@@ -451,43 +322,6 @@ def report_artifact_display_path(report: dict[str, Any], *, path: str, display_n
             return f"Reports/{human_name}{suffix}"
     return f"Reports/{file_name}"
 
-
-def report_title_from_profile_path(profile_path: str) -> str:
-    if not profile_path:
-        return ""
-    path = Path(profile_path)
-    if not path.is_absolute():
-        path = _project_root() / path
-    try:
-        profile_text = path.read_text(encoding="utf-8")
-    except OSError:
-        return ""
-    if not re.search(r"^##\s+Report Labels\b", profile_text, flags=re.MULTILINE):
-        return ""
-    title = parse_profile_config(profile_text).labels.report_title.strip()
-    return title
-
-
-def profile_display_label(profile_id: str, *, profile_path: str = "", report_title: str = "") -> str:
-    title = report_title or report_title_from_profile_path(profile_path)
-    if title:
-        return compact_report_title(title)
-    return title_case_label(profile_id)
-
-
-def compact_report_title(title: str) -> str:
-    text = re.sub(r"\s+", " ", title).strip()
-    for suffix in (
-        "Signal Report",
-        "Signal Brief",
-        "Scan Report",
-        "Report",
-        "Brief",
-    ):
-        if text.casefold().endswith(suffix.casefold()):
-            text = text[: -len(suffix)].strip()
-            break
-    return text or title.strip()
 
 
 def artifact_format_from_path(path: str) -> str:
