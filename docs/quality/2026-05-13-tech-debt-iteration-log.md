@@ -1957,6 +1957,37 @@ Next:
 
 - Commit, then continue until the 14:00 stop condition.
 
+## Slice 51: Mixed Working-Tree Broad Gate
+
+Status: completed.
+
+Actions:
+
+- Ran broad gates in the main working tree after the latest committed
+  hardening slices, with the existing unrelated bot/dashboard WIP still present.
+
+Verification:
+
+- `python -m pytest -q` passed: `466` tests, `2` skipped, and `180` subtests.
+- `cd dashboard; npm test -- --run` passed: `18` test files and `136` tests.
+- `cd dashboard; npm run build` passed.
+
+Reviewer Gate:
+
+- This is useful compatibility evidence for the current desktop working tree,
+  but it does not replace the clean HEAD detached-worktree gates from Slices 41
+  and 47.
+
+Residual Risk:
+
+- Because this gate includes unrelated dirty WIP, it should not be used as
+  proof for any individual checkpoint commit.
+
+Next:
+
+- Commit this evidence checkpoint, then continue until the 14:00 stop
+  condition.
+
 ## Slice 34: `agent_extraction_request_v1` Projection Helper Extraction
 
 Status: in progress.
