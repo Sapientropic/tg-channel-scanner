@@ -35,7 +35,7 @@ Pop-Location
 Use this for monitor, dashboard server, bot gateway, and decision-state changes:
 
 ```powershell
-python -m pytest tests/test_monitor.py tests/monitor_state tests/dashboard tests/test_bot_gateway.py tests/test_bot_gateway_contracts.py tests/test_decision_intelligence.py -q
+python -m pytest tests/monitor tests/monitor_state tests/dashboard tests/test_bot_gateway.py tests/test_bot_gateway_contracts.py tests/test_decision_intelligence.py -q
 ```
 
 ## Credential-Free Desktop Smoke

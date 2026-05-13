@@ -1,15 +1,15 @@
-state: active_quality_iteration_profile_creation_split_checkpoint
+state: active_quality_iteration_monitor_test_split_checkpoint
 mode: Standard
 run_shape: continuous_until_deadline
-slice_goal: "Continue the technical-debt SPEC with high-value dashboard/backend slices, including Inbox/Runs concentration cleanup, sanitizer test ownership cleanup, and dashboard profile-creation facade cleanup, while preserving public props, review/run action names, sanitizer behavior, route contracts, and local-first privacy boundaries."
+slice_goal: "Continue the technical-debt SPEC with high-value dashboard/backend slices, including Inbox/Runs concentration cleanup, sanitizer test ownership cleanup, dashboard profile-creation facade cleanup, and monitor test concentration cleanup, while preserving public props, review/run action names, sanitizer behavior, route contracts, monitor CLI behavior, and local-first privacy boundaries."
 stop_condition: "Do not enter final closeout before 2026-05-14 14:00 Asia/Shanghai unless the user explicitly stops; if SPEC work is exhausted, research competitors/user pain points and expand ROADMAP/SPEC before continuing."
 handoff_policy: after_deadline_closeout
 continuation_policy: "Use docs/technical-debt-cleanup-spec.md as the debt authority; continue with one remaining boundary at a time and keep old facade exports until downstream callers move."
 intake_status: explicit_user_request
-gate_status: profile_creation_split_gates_passed_review_clean
+gate_status: monitor_test_split_gates_passed_review_clean
 blockers: []
 needs_human: []
-residual_risk: "This checkpoint is a backend boundary split for local profile creation. It does not change the /api/profiles/create route contract and does not exercise live Telegram, live LLM/provider behavior, Scheduler/Credential Manager, Docker packaging, frontend browser smoke, or human product acceptance."
+residual_risk: "This checkpoint is a backend test-ownership split for monitor CLI/runtime coverage. It does not change monitor implementation and does not exercise live Telegram, live LLM/provider behavior, Scheduler/Credential Manager, Docker packaging, frontend browser smoke, or human product acceptance."
 completed_slices:
   - "dashboard_server artifact helpers moved to scripts/desk_artifacts.py with dashboard_server re-export compatibility."
   - "dashboard_server git helpers moved to scripts/desk_git.py with dashboard_server wrapper compatibility."
@@ -32,6 +32,7 @@ completed_slices:
   - "Dashboard Runs split: dashboard/src/components/runs.tsx is now a 76-line composition facade; run model logic moved to dashboard/src/components/runs/model.ts, evidence rows/artifact links moved to dashboard/src/components/runs/evidence.tsx, health chart/actions moved to dashboard/src/components/runs/health-chart.tsx, and empty state moved to dashboard/src/components/runs/empty-state.tsx."
   - "Sanitizer test split: removed the 1368-line dashboard/src/domain/sanitize.test.ts and split coverage into dashboard-state, Desk actions/feedback, Desk bot/settings, Desk source/delivery, and entrypoint-compat test files."
   - "Dashboard profile creation split: scripts/desk_profiles.py now owns brief/file parsing, profile Markdown generation, TOML append, unique id selection, and DB upsert; scripts/dashboard_server.py preserves /api/profiles/create and monkeypatch-compatible facade re-exports."
+  - "Monitor test split: removed tests/test_monitor.py and moved its 22 tests into tests/monitor/test_config_helpers.py, test_runtime_overrides.py, test_feedback_export.py, and test_prefilter_and_manifest.py."
 verification:
   - "python -m pytest tests/dashboard -q -> 149 passed, 71 subtests passed"
   - "python -m pytest tests/monitor_state -q -> 81 passed, 24 subtests passed"
@@ -66,6 +67,12 @@ verification:
   - "python -m pytest tests/dashboard -q -> 150 passed, 71 subtests passed"
   - "python -m pytest -q -> 495 passed, 2 skipped, 195 subtests passed"
   - "git diff --check -> passed for the profile creation split working tree"
+  - "python -m pytest tests/monitor -q -> 22 passed"
+  - "python -m ruff check tests/monitor -> passed"
+  - "Monitor test split migration check -> old tests/test_monitor.py had 22 test methods, new tests/monitor files have 22 with no missing/extra/duplicate test names."
+  - "python -m pytest -q -> 495 passed, 2 skipped, 195 subtests passed"
+  - "Updated medium backend gate: python -m pytest tests/monitor tests/monitor_state tests/dashboard tests/test_bot_gateway.py tests/test_bot_gateway_contracts.py tests/test_decision_intelligence.py -q -> 296 passed, 101 subtests passed"
+  - "git diff --check -> passed for the monitor test split working tree"
 reviewer_status:
   - "Explorer review of the proposed split recommended a搬运式拆分: keep InboxView as facade, move filters/backlog, review-card/actions/source refs, and setup checklist into focused submodules."
   - "Post-diff reviewer found no blocking issues. Remaining risks were untracked new files, SSR-only test coverage, and preserving existing link sanitizer boundaries; untracked files are included in the checkpoint plan and the browser smoke covers the main interaction path."
@@ -73,6 +80,7 @@ reviewer_status:
   - "Sanitizer test split reviewers found no blocking issues. They confirmed no production sanitizer diff, 29 old tests mapped to 29 new tests, entrypoint compatibility and fixture coverage preserved, and full dashboard tests/build passed in reviewer checks."
   - "Reviewer P3 import-boundary feedback was addressed by pruning legacy broad imports, unused validCard constants, unused fixture imports, and unnecessary vi/afterEach hooks from focused sanitizer test files."
   - "Profile creation split reviewer found no route-contract or product-behavior blocker. P2 feedback about private helper/constant monkeypatch compatibility was addressed with facade-aware helper/constant resolution in scripts/desk_profiles.py and regression tests for patched helper, patched delivery target id, and patched max text length."
+  - "Monitor test split reviewer found full migration integrity: 22 old tests mapped to 22 new tests, AST method bodies matched, ruff passed, and pytest default discovery includes tests/monitor. P1/P2 feedback was addressed by staging the untracked tests/monitor directory and updating docs/testing.md away from the deleted tests/test_monitor.py path."
 operator_checks:
   - "Docker Desktop 4.65.0 / engine 29.2.1 reachable after startup; docker build -t tgcs-local-smoke:<temp> . -> exit 0"
   - "Docker demo container -> exit 0, generated one demo report in a temporary mounted output directory; temporary directory and image removed."
@@ -82,10 +90,9 @@ operator_checks:
   - "Live Windows Task Scheduler dry-run task with random name -> install exit 0, status installed, remove exit 0, final status not_installed."
   - "Live Windows Credential Manager smoke -> random secret write/read/delete passed; post-delete read returned empty."
   - "Live LLM structured call -> provider=deepseek, model=deepseek-v4-flash, JSON response status=TGCS_LIVE_LLM_OK, total_tokens=58."
-next_action: "Stage scripts/desk_profiles.py, dashboard_server facade changes, profile tests, and docs; commit the backend boundary checkpoint, then continue with the next high-value SPEC slice instead of closing out."
+next_action: "Stage tests/monitor directory plus tests/test_monitor.py deletion and docs, commit the monitor test-ownership checkpoint, then continue with the next high-value SPEC slice instead of closing out."
 candidate_slices:
-  - "Split tests/test_monitor.py into focused monitor CLI/runtime test files if behavior-oriented grouping stays clear."
   - "Investigate tests/test_tgcs_cli.py schedule/packaging sections as the next test concentration target."
   - "Consider profile runtime/review-patch server helpers only when those route areas change next."
-last_update: "2026-05-14T06:40:24+08:00"
+last_update: "2026-05-14T06:48:22+08:00"
 checkpoint_ready: true
