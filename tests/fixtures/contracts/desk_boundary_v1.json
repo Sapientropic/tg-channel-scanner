@@ -1,0 +1,202 @@
+{
+  "schema_version": "desk_boundary_contract_fixture_v1",
+  "desk_actions": {
+    "schema_version": "desk_actions_v1",
+    "actions": [
+      {
+        "schema_version": "desk_action_v1",
+        "action_id": "sources_probe_access",
+        "group": "Sources",
+        "title": "Check source access",
+        "detail": "Test whether enabled sources can be resolved and read by the local Telegram session. Message text is not stored.",
+        "run_mode": "execute",
+        "display_command": "Signal Desk source access check",
+        "next_action": "Pause inaccessible sources or run a practice scan after access looks healthy."
+      },
+      {
+        "schema_version": "desk_action_v1",
+        "action_id": "monitor_jobs_dry_run",
+        "group": "Run",
+        "title": "Run fresh practice scan",
+        "detail": "Fetch latest source messages and create local Review cards without sending Telegram alerts.",
+        "run_mode": "execute",
+        "display_command": "tgcs monitor run --profile-id jobs-fast --delivery-mode dry-run",
+        "next_action": "Review the new cards or open the generated report."
+      },
+      {
+        "schema_version": "desk_action_v1",
+        "action_id": "schedule_install_dry_run",
+        "group": "Schedule",
+        "title": "Turn on auto scan",
+        "detail": "Create a Windows Task Scheduler task for local practice scans. It sends no live alerts.",
+        "run_mode": "confirm_execute",
+        "display_command": "Windows Task Scheduler: jobs-fast dry-run",
+        "next_action": "Signal Desk will run local practice scans automatically every 15 minutes."
+      },
+      {
+        "schema_version": "desk_action_v1",
+        "action_id": "login_human",
+        "group": "Human takeover",
+        "title": "Terminal login fallback",
+        "detail": "Use the terminal login only if the built-in Desk login cannot complete on this machine.",
+        "run_mode": "needs_human",
+        "display_command": "tgcs login",
+        "next_action": "Run tgcs login in a trusted terminal, then return to Signal Desk and check again."
+      },
+      {
+        "schema_version": "desk_action_v1",
+        "action_id": "live_delivery_human",
+        "group": "Human takeover",
+        "title": "Live delivery",
+        "detail": "Live Telegram Bot delivery requires an intentional chat target and local token in Settings.",
+        "run_mode": "needs_human",
+        "display_command": "tgcs delivery test telegram-bot --delivery-mode live --chat-id <chat_id>",
+        "next_action": "Save the token and chat id in Settings only when you intend to send live messages."
+      }
+    ]
+  },
+  "desk_action_result": {
+    "schema_version": "desk_action_result_v1",
+    "action_id": "monitor_jobs_dry_run",
+    "status": "success",
+    "title": "Practice scan complete",
+    "detail": "Report ready.",
+    "display_command": "tgcs monitor run --profile-id jobs-fast --delivery-mode dry-run",
+    "exit_code": 0,
+    "artifact_path": "output/runs/run-desk-contract/report.html",
+    "next_action": "Open the generated report."
+  },
+  "desk_sources": {
+    "schema_version": "desk_sources_v1",
+    "source_count": 2,
+    "enabled_count": 1,
+    "topics": ["jobs", "watch"],
+    "registry_path": ".tgcs/sources.json",
+    "sources": [
+      {
+        "schema_version": "desk_source_v1",
+        "source_id": "telegram:jobs_good",
+        "label": "Jobs Good",
+        "channel": "jobs_good",
+        "enabled": true,
+        "topics": ["jobs"],
+        "priority": "high",
+        "scan_window_hours": 2
+      },
+      {
+        "schema_version": "desk_source_v1",
+        "source_id": "telegram:jobs_noise",
+        "label": "Jobs Noise",
+        "channel": "jobs_noise",
+        "enabled": false,
+        "topics": ["jobs", "watch"],
+        "priority": "low",
+        "scan_window_hours": 24
+      }
+    ]
+  },
+  "frontend_input": {
+    "desk_actions": {
+      "schema_version": "desk_actions_v1",
+      "actions": [
+        {
+          "schema_version": "desk_action_v1",
+          "action_id": "monitor_jobs_dry_run",
+          "group": "Run",
+          "title": "Run fresh practice scan",
+          "detail": "Fetch latest source messages and create local Review cards without sending Telegram alerts.",
+          "run_mode": "execute",
+          "display_command": "tgcs monitor run --profile-id jobs-fast --delivery-mode dry-run",
+          "next_action": "Review the new cards or open the generated report.",
+          "argv": ["tgcs", "monitor", "run"],
+          "token": "SECRET_DESK_BOUNDARY_TOKEN_SHOULD_NOT_SURFACE"
+        }
+      ]
+    },
+    "desk_action_result": {
+      "schema_version": "desk_action_result_v1",
+      "action_id": "monitor_jobs_dry_run",
+      "status": "success",
+      "title": "Practice scan complete",
+      "detail": "Report ready.",
+      "display_command": "tgcs monitor run --profile-id jobs-fast --delivery-mode dry-run",
+      "exit_code": 0,
+      "artifact_path": "output/runs/run-desk-contract/report.html",
+      "next_action": "Open the generated report.",
+      "finished_at": "2026-05-13T00:00:00Z",
+      "stdout": "SECRET_DESK_BOUNDARY_TOKEN_SHOULD_NOT_SURFACE C:/Users/Administrator/private/run.log",
+      "stderr": "--private-argv"
+    },
+    "desk_sources": {
+      "schema_version": "desk_sources_v1",
+      "source_count": 2,
+      "enabled_count": 1,
+      "topics": ["jobs", "watch"],
+      "registry_path": ".tgcs/sources.json",
+      "sources": [
+        {
+          "schema_version": "desk_source_v1",
+          "source_id": "telegram:jobs_good",
+          "label": "Jobs Good",
+          "channel": "jobs_good",
+          "enabled": true,
+          "topics": ["jobs"],
+          "priority": "high",
+          "scan_window_hours": 2,
+          "token": "SECRET_DESK_BOUNDARY_TOKEN_SHOULD_NOT_SURFACE"
+        }
+      ]
+    }
+  },
+  "frontend_expected": {
+    "desk_actions": [
+      {
+        "schema_version": "desk_action_v1",
+        "action_id": "monitor_jobs_dry_run",
+        "group": "Run",
+        "title": "Run fresh practice scan",
+        "detail": "Fetch latest source messages and create local Review cards without sending Telegram alerts.",
+        "run_mode": "execute",
+        "display_command": "tgcs monitor run --profile-id jobs-fast --delivery-mode dry-run",
+        "next_action": "Review the new cards or open the generated report."
+      }
+    ],
+    "desk_action_result": {
+      "schema_version": "desk_action_result_v1",
+      "action_id": "monitor_jobs_dry_run",
+      "status": "success",
+      "title": "Practice scan complete",
+      "detail": "Report ready.",
+      "display_command": "tgcs monitor run --profile-id jobs-fast --delivery-mode dry-run",
+      "exit_code": 0,
+      "artifact_path": "output/runs/run-desk-contract/report.html",
+      "next_action": "Open the generated report.",
+      "finished_at": "2026-05-13T00:00:00Z"
+    },
+    "desk_sources": {
+      "schema_version": "desk_sources_v1",
+      "source_count": 2,
+      "enabled_count": 1,
+      "topics": ["jobs", "watch"],
+      "registry_path": ".tgcs/sources.json",
+      "sources": [
+        {
+          "schema_version": "desk_source_v1",
+          "source_id": "telegram:jobs_good",
+          "label": "Jobs Good",
+          "channel": "jobs_good",
+          "enabled": true,
+          "topics": ["jobs"],
+          "priority": "high",
+          "scan_window_hours": 2
+        }
+      ]
+    }
+  },
+  "denied_strings": [
+    "SECRET_DESK_BOUNDARY_TOKEN_SHOULD_NOT_SURFACE",
+    "C:/Users/Administrator/private/run.log",
+    "--private-argv",
+    "argv"
+  ]
+}

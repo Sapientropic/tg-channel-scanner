@@ -330,7 +330,7 @@ Next:
 
 ## Slice 8: Desk Action Artifact Contract
 
-Status: in progress.
+Status: completed.
 
 Actions:
 
@@ -1265,3 +1265,56 @@ Next:
 
 - Stage and commit this checkpoint, then continue with Desk action/source
   fixture coverage or another Phase 1 boundary.
+
+## Slice 31: Desk Boundary Fixture Coverage
+
+Status: in progress.
+
+Actions:
+
+- Added `desk_boundary_v1.json` for selected `desk_actions_v1`,
+  `desk_action_result_v1`, and `desk_sources_v1` payloads.
+- Added backend tests that compare `dashboard_server.desk_actions()`,
+  `_desk_action_result()`, and `desk_sources()` against the fixture while
+  proving `argv`, `artifact_keys`, `timeout`, local absolute paths, and secret
+  markers do not surface.
+- Added a focused Vitest file that imports the same fixture and verifies
+  `sanitizeDeskActions()`, `sanitizeDeskActionResult()`, and
+  `sanitizeDeskSourcesResult()` drop backend-only or private fields.
+
+Verification:
+
+- `python -m pytest tests/test_desk_contract_fixtures.py -q` passed:
+  `3` tests and `4` subtests.
+- `python -m ruff check tests/test_desk_contract_fixtures.py` passed.
+- `cd dashboard; npm test -- --run desk-contract-fixtures` passed:
+  `1` test file and `1` test.
+- Broader related backend gate passed:
+  `python -m pytest tests/test_desk_contract_fixtures.py tests/test_dashboard_server.py -k "desk_actions or desk_source or desk_action_result" -q`
+  passed `19` tests, `14` subtests, `127` deselected.
+- Broader related frontend gate passed:
+  `cd dashboard; npm test -- --run desk-contract-fixtures sanitize client`
+  passed `3` test files and `50` tests.
+- `git diff --check -- tests/fixtures/contracts/desk_boundary_v1.json tests/test_desk_contract_fixtures.py dashboard/src/domain/desk-contract-fixtures.test.ts`
+  passed.
+- Staged snapshot verification passed after checking out the index to a temp
+  directory and reusing only `dashboard/node_modules`: backend passed `19`
+  tests, `116` deselected, `14` subtests; frontend passed `3` test files and
+  `48` tests.
+
+Reviewer Gate:
+
+- This implements Rawls' third fixture-group recommendation. The fixture locks
+  action ids, run modes, display-command safety, action-result artifact path
+  shape, and saved-source library shape without snapshotting every route.
+
+Residual Risk:
+
+- The Desk action fixture intentionally covers a representative subset of
+  high-risk action modes rather than every action. Existing broader
+  `test_dashboard_server.py` tests remain the wider route behavior net.
+
+Next:
+
+- Commit this checkpoint, then continue with the next high-value Phase 1
+  boundary.
