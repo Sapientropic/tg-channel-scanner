@@ -10,15 +10,11 @@ from pathlib import Path
 from typing import Any
 
 try:
-    from scripts import agent_cli, delivery, monitor_execution, monitor_state
+    from scripts import agent_cli, delivery, monitor_execution, monitor_manifest, monitor_state
     from scripts.monitor_artifacts import (
         annotate_items_with_source_freshness,
-        artifact,
         diagnostics_from_scan_meta,
-        file_hash,
         load_scan_meta,
-        report_title_for_profile,
-        scan_sidecar_paths,
     )
     from scripts.monitor_config import (
         DEFAULT_DASHBOARD_URL,
@@ -45,15 +41,11 @@ except ModuleNotFoundError:
     PROJECT_ROOT = Path(__file__).resolve().parent.parent
     if str(PROJECT_ROOT) not in sys.path:
         sys.path.insert(0, str(PROJECT_ROOT))
-    from scripts import agent_cli, delivery, monitor_execution, monitor_state
+    from scripts import agent_cli, delivery, monitor_execution, monitor_manifest, monitor_state
     from scripts.monitor_artifacts import (
         annotate_items_with_source_freshness,
-        artifact,
         diagnostics_from_scan_meta,
-        file_hash,
         load_scan_meta,
-        report_title_for_profile,
-        scan_sidecar_paths,
     )
     from scripts.monitor_config import (
         DEFAULT_DASHBOARD_URL,
@@ -427,96 +419,74 @@ def run_profile(args: argparse.Namespace) -> int:
         manifest_diagnostics = command_error_diagnostics or diagnostics_from_scan_meta(
             load_scan_meta(raw_scan_path or scan_path, run_dir)
         )
-    artifacts = []
-    report_title = report_title_for_profile(profile_file, args.profile_id)
-    if raw_scan_path and raw_scan_path.exists() and raw_scan_path != scan_path:
-        artifacts.append(artifact(raw_scan_path, "raw_scan", profile_id=args.profile_id, run_id=current_run_id))
-    for path, kind in ((scan_path, "scan"), (report_path, "report_markdown"), (html_path, "report_html")):
-        if path and path.exists():
-            artifacts.append(
-                artifact(
-                    path,
-                    kind,
-                    profile_id=args.profile_id,
-                    run_id=current_run_id,
-                    report_title=report_title,
-                )
-            )
-    meta_path, errors_path = scan_sidecar_paths(raw_scan_path or scan_path, run_dir)
-    if meta_path.exists():
-        artifacts.append(artifact(meta_path, "scan_meta", profile_id=args.profile_id, run_id=current_run_id))
-    if errors_path.exists():
-        artifacts.append(artifact(errors_path, "scan_errors", profile_id=args.profile_id, run_id=current_run_id))
+    artifacts = monitor_manifest.collect_run_artifacts(
+        profile_file=profile_file,
+        profile_id=args.profile_id,
+        run_id=current_run_id,
+        run_dir=run_dir,
+        scan_path=scan_path,
+        raw_scan_path=raw_scan_path,
+        report_path=report_path,
+        html_path=html_path,
+    )
     llm_payload = report_data.get("llm") or llm_from_agent_error(payload)
-    semantic_manifest = {
-        "max_messages": semantic_limit,
-        "max_tokens": token_limit,
-        "batch_size": batch_limit,
-        "concurrency": semantic_concurrency_limit or 1,
-    }
-    scan_manifest = {"concurrency": source_scan_concurrency or 1}
-    if source_scan_delay_seconds is not None:
-        scan_manifest["delay_seconds"] = source_scan_delay_seconds
-    manifest = {
-        "schema_version": RUN_MANIFEST_SCHEMA_VERSION,
-        "run_id": current_run_id,
-        "profile_id": args.profile_id,
-        "profile_path": relative_to_root(profile_file),
-        "profile_hash": file_hash(profile_file),
-        "source_registry_path": relative_to_root(source_registry) if source_registry.exists() else None,
-        "source_registry_hash": file_hash(source_registry) if source_registry.exists() else None,
-        "scan_window": {"hours": scan_window_hours},
-        "scan": scan_manifest,
-        "source_filters": {
-            "topics": profile.get("source_topics") or profile.get("topics") or [],
-            "source_ids": profile.get("source_ids") or [],
-        },
-        "alert_rule": alert_rule_for_profile(profile),
-        "semantic": semantic_manifest,
-        "alert_schedule": {
-            "mode": profile.get("alert_schedule_mode") or "work_hours",
-            "delivery_enabled": delivery_enabled,
-            "suppressed_reason": "" if delivery_enabled else delivery_suppressed_reason,
-        },
-        "prefilter": prefilter_context,
-        "status": status,
-        "started_at": started_at,
-        "completed_at": completed_at,
-        "artifacts": artifacts,
-        "report_status": status,
-        "alert_count": alert_count,
-        "review_card_count": len(cards),
-        "diagnostics": manifest_diagnostics,
-        "error_summary": None if exit_code == 0 else {"exit_code": exit_code, "stderr": stderr[-2000:]},
-        "llm": llm_payload,
-        "delivery_attempts": [event["delivery_attempt"] for event in alert_events],
-        "command": [str(part) for part in cmd],
-        "commands": [[str(part) for part in command] for command in commands_executed],
-    }
-    manifest_path = run_dir / "run-manifest.json"
-    manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    semantic_manifest = monitor_manifest.semantic_manifest(
+        max_messages=semantic_limit,
+        max_tokens=token_limit,
+        batch_size=batch_limit,
+        concurrency=semantic_concurrency_limit,
+    )
+    scan_manifest = monitor_manifest.scan_manifest(
+        concurrency=source_scan_concurrency,
+        delay_seconds=source_scan_delay_seconds,
+    )
+    manifest = monitor_manifest.build_run_manifest(
+        run_id=current_run_id,
+        profile_id=args.profile_id,
+        profile=profile,
+        profile_file=profile_file,
+        source_registry=source_registry,
+        scan_window_hours=scan_window_hours,
+        scan=scan_manifest,
+        semantic=semantic_manifest,
+        delivery_enabled=delivery_enabled,
+        delivery_suppressed_reason=delivery_suppressed_reason,
+        prefilter_context=prefilter_context,
+        status=status,
+        started_at=started_at,
+        completed_at=completed_at,
+        artifacts=artifacts,
+        alert_count=alert_count,
+        review_card_count=len(cards),
+        diagnostics=manifest_diagnostics,
+        exit_code=exit_code,
+        stderr=stderr,
+        llm_payload=llm_payload,
+        alert_events=alert_events,
+        command=cmd,
+        commands_executed=commands_executed,
+    )
+    manifest_path = monitor_manifest.write_run_manifest(run_dir, manifest)
     write_latest_pointer(output_dir, manifest_path)
     monitor_state.record_run(conn, manifest)
     conn.close()
 
-    data = {
-        "schema_version": "monitor_run_result_v1",
-        "status": status,
-        "run_id": current_run_id,
-        "manifest_path": relative_to_root(manifest_path),
-        "db_path": relative_to_root(db_path),
-        "report_path": relative_to_root(report_path) if report_path else None,
-        "html_path": relative_to_root(html_path) if html_path else None,
-        "review_card_count": len(cards),
-        "alert_count": alert_count,
-        "prefilter": prefilter_context,
-        "semantic": semantic_manifest,
-        "diagnostics": manifest_diagnostics,
-        "llm": llm_payload,
-        "delivery_attempts": [event["delivery_attempt"] for event in alert_events],
-        "extraction_request_path": report_data.get("extraction_request_path") or report_data.get("request_path"),
-        "items_output_path": report_data.get("items_output_path"),
-    }
+    data = monitor_manifest.monitor_run_result_data(
+        status=status,
+        run_id=current_run_id,
+        manifest_path=manifest_path,
+        db_path=db_path,
+        report_path=report_path,
+        html_path=html_path,
+        review_card_count=len(cards),
+        alert_count=alert_count,
+        prefilter_context=prefilter_context,
+        semantic=semantic_manifest,
+        diagnostics=manifest_diagnostics,
+        llm_payload=llm_payload,
+        alert_events=alert_events,
+        report_data=report_data,
+    )
     if agent_cli.is_json_format(args):
         if exit_code == 0:
             agent_cli.print_json(agent_cli.envelope_success(data))
