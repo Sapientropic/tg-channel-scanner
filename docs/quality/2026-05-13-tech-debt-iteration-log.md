@@ -1728,6 +1728,43 @@ Next:
 
 - Commit, then continue until the 14:00 stop condition.
 
+## Slice 44: Desk Bot Gateway Fixture Candidate Rejected
+
+Status: blocked and reverted before commit.
+
+Actions:
+
+- Tried to add a shared `desk_bot_gateway_status_v1` fixture for backend and
+  frontend status privacy.
+- Mixed working-tree tests passed because the current dirty WIP already
+  contains Bot Gateway status implementation.
+- Staged snapshot verification failed because clean HEAD does not yet contain
+  the corresponding `dashboard_server.py` Bot Gateway status function. The
+  candidate would have made the committed branch red.
+- Removed the new fixture/test files and did not stage the unrelated Bot
+  Gateway WIP.
+
+Verification:
+
+- Mixed worktree exploratory checks passed, but staged snapshot failed on
+  missing clean-HEAD implementation. The candidate was rejected on that basis.
+
+Reviewer Gate:
+
+- This is a useful future slice only after the Bot Gateway implementation files
+  are intentionally brought into the branch as a coherent checkpoint.
+
+Residual Risk:
+
+- The uncommitted Bot Gateway WIP still exists in the working tree and is not
+  part of clean HEAD. Do not add tests that depend on it until that WIP is
+  explicitly scoped and committed.
+
+Next:
+
+- Continue with clean-HEAD-backed slices only, or leave Bot Gateway fixture
+  coverage for the future Bot Gateway implementation checkpoint.
+
 ## Slice 34: `agent_extraction_request_v1` Projection Helper Extraction
 
 Status: in progress.
