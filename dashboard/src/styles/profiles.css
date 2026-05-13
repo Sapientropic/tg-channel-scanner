@@ -738,8 +738,8 @@
 .profile-runtime-settings {
   box-sizing: border-box;
   display: grid;
-  grid-template-columns: minmax(230px, 0.8fr) minmax(260px, 1fr) minmax(190px, 0.42fr);
-  align-items: end;
+  grid-template-columns: minmax(190px, 0.7fr) minmax(340px, 1.25fr) minmax(210px, 0.72fr) minmax(190px, 0.45fr);
+  align-items: stretch;
   gap: 8px;
   min-width: 0;
   width: 100%;
@@ -763,6 +763,48 @@
   min-width: 0;
 }
 
+.profile-runtime-schedule {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  min-width: 0;
+}
+
+.profile-runtime-weekdays {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+  padding: 8px;
+  border: 1px solid color-mix(in oklch, var(--signal-high) 20%, transparent);
+  background: color-mix(in oklch, var(--ink) 28%, transparent);
+}
+
+.profile-weekday-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  min-width: 0;
+}
+
+.profile-runtime-settings .profile-weekday-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.profile-runtime-settings .profile-weekday-toggle input {
+  width: 16px;
+  min-height: 16px;
+  flex: 0 0 auto;
+  padding: 0;
+}
+
 .profile-runtime-settings label {
   display: grid;
   grid-template-columns: 1fr;
@@ -776,7 +818,13 @@
 }
 
 .profile-preference-note {
+  grid-column: 1 / span 3;
   overflow: hidden;
+}
+
+.profile-runtime-actions {
+  grid-column: 4;
+  grid-row: 1 / span 2;
 }
 
 .profile-field-title {
@@ -787,6 +835,7 @@
 }
 
 .profile-runtime-settings label span,
+.profile-runtime-weekdays legend,
 .profile-runtime-settings small {
   color: var(--muted);
   font-size: 11px;
@@ -834,7 +883,8 @@
   display: block;
 }
 
-.profile-runtime-settings input {
+.profile-runtime-settings input,
+.profile-runtime-settings select {
   width: 100%;
   min-width: 0;
   max-width: 100%;
@@ -867,6 +917,7 @@
 }
 
 .profile-runtime-settings input:focus-visible,
+.profile-runtime-settings select:focus-visible,
 .profile-preference-note textarea:focus-visible {
   border-color: var(--amber);
   box-shadow: 0 0 0 2px color-mix(in oklch, var(--signal-medium) 18%, transparent);
@@ -905,7 +956,6 @@
 
 .profile-runtime-actions {
   display: grid;
-  grid-template-columns: 1fr;
   align-self: stretch;
   gap: 8px;
   min-width: 0;

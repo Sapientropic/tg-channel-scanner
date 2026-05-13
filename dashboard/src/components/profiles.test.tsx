@@ -165,14 +165,48 @@ describe("ProfilesView", () => {
   });
 
   it("validates profile scan setting edits before save", () => {
-    expect(runtimeSettingsSaveState(2, 20, "2", "20")).toMatchObject({ canSave: false });
-    expect(runtimeSettingsSaveState(2, 20, "5", "35")).toMatchObject({
+    const current = {
+      scan_window_hours: 2,
+      semantic_max_messages: 20,
+      timezone: "Asia/Shanghai",
+      workdays: ["mon", "tue", "wed", "thu", "fri"],
+      work_start: "09:00",
+      work_end: "18:00",
+      work_interval_minutes: 15,
+      off_hours_interval_minutes: 60,
+      alert_rule: "high_new_or_changed",
+      alert_max_age_minutes: 60,
+    };
+    const draft = {
+      scanWindowText: "2",
+      itemLimitText: "20",
+      timezoneText: "Asia/Shanghai",
+      workdays: ["mon", "tue", "wed", "thu", "fri"],
+      workStartText: "09:00",
+      workEndText: "18:00",
+      workIntervalText: "15",
+      offHoursIntervalText: "60",
+      alertRule: "high_new_or_changed",
+      alertMaxAgeText: "60",
+    };
+    expect(runtimeSettingsSaveState(current, draft)).toMatchObject({ canSave: false, settings: {} });
+    expect(runtimeSettingsSaveState(current, { ...draft, scanWindowText: "5", itemLimitText: "35" })).toMatchObject({
       canSave: true,
-      scan_window_hours: 5,
-      semantic_max_messages: 35,
+      settings: {
+        scan_window_hours: 5,
+        semantic_max_messages: 35,
+      },
     });
-    expect(runtimeSettingsSaveState(2, 20, "0", "35")).toMatchObject({ canSave: false });
-    expect(runtimeSettingsSaveState(2, 20, "5", "501")).toMatchObject({ canSave: false });
-    expect(runtimeSettingsSaveState(2, 20, "six", "35")).toMatchObject({ canSave: false });
+    expect(runtimeSettingsSaveState(current, { ...draft, alertRule: "high_new_only", workdays: ["mon", "wed", "fri"] })).toMatchObject({
+      canSave: true,
+      settings: {
+        alert_rule: "high_new_only",
+        workdays: ["mon", "wed", "fri"],
+      },
+    });
+    expect(runtimeSettingsSaveState(current, { ...draft, timezoneText: "../secret" })).toMatchObject({ canSave: false });
+    expect(runtimeSettingsSaveState(current, { ...draft, workStartText: "25:00" })).toMatchObject({ canSave: false });
+    expect(runtimeSettingsSaveState(current, { ...draft, workIntervalText: "0" })).toMatchObject({ canSave: false });
+    expect(runtimeSettingsSaveState(current, { ...draft, alertMaxAgeText: "10081" })).toMatchObject({ canSave: false });
   });
 });

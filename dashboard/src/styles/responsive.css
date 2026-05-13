@@ -888,6 +888,17 @@
     grid-template-columns: 1fr;
   }
 
+  .profile-runtime-schedule {
+    grid-template-columns: 1fr;
+  }
+
+  .profile-runtime-weekdays,
+  .profile-preference-note,
+  .profile-runtime-actions {
+    grid-column: auto;
+    grid-row: auto;
+  }
+
   .profile-drafts-toggle {
     grid-template-columns: minmax(0, 1fr) auto;
   }

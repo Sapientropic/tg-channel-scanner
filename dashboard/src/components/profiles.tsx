@@ -628,21 +628,83 @@ function ProfileRuntimeSettingsControl({
 }) {
   const currentScanWindow = typeof profile.scan_window_hours === "number" ? profile.scan_window_hours : 24;
   const currentItemLimit = typeof profile.semantic_max_messages === "number" ? profile.semantic_max_messages : 20;
+  const currentTimezone = profile.timezone || "";
+  const currentWorkdays = normalizeWeekdays(profile.workdays);
+  const currentWorkStart = profile.work_start || "";
+  const currentWorkEnd = profile.work_end || "";
+  const currentWorkInterval = typeof profile.work_interval_minutes === "number" ? profile.work_interval_minutes : undefined;
+  const currentOffHoursInterval = typeof profile.off_hours_interval_minutes === "number" ? profile.off_hours_interval_minutes : undefined;
+  const currentAlertRule = profile.alert_rule || "high_new_or_changed";
+  const currentAlertMaxAge = typeof profile.alert_max_age_minutes === "number" ? profile.alert_max_age_minutes : undefined;
   const currentPreferences = profile.matching_profile?.editable_text || "";
   const [scanWindowHours, setScanWindowHours] = useState(String(currentScanWindow));
   const [itemLimit, setItemLimit] = useState(String(currentItemLimit));
+  const [timezone, setTimezone] = useState(currentTimezone);
+  const [workdays, setWorkdays] = useState<string[]>(currentWorkdays);
+  const [workStart, setWorkStart] = useState(currentWorkStart);
+  const [workEnd, setWorkEnd] = useState(currentWorkEnd);
+  const [workInterval, setWorkInterval] = useState(currentWorkInterval ? String(currentWorkInterval) : "");
+  const [offHoursInterval, setOffHoursInterval] = useState(currentOffHoursInterval ? String(currentOffHoursInterval) : "");
+  const [alertRule, setAlertRule] = useState(currentAlertRule);
+  const [alertMaxAge, setAlertMaxAge] = useState(currentAlertMaxAge ? String(currentAlertMaxAge) : "");
   const [preferenceNote, setPreferenceNote] = useState(currentPreferences);
   const [editing, setEditing] = useState(false);
 
   useEffect(() => {
     setScanWindowHours(String(currentScanWindow));
     setItemLimit(String(currentItemLimit));
+    setTimezone(currentTimezone);
+    setWorkdays(currentWorkdays);
+    setWorkStart(currentWorkStart);
+    setWorkEnd(currentWorkEnd);
+    setWorkInterval(currentWorkInterval ? String(currentWorkInterval) : "");
+    setOffHoursInterval(currentOffHoursInterval ? String(currentOffHoursInterval) : "");
+    setAlertRule(currentAlertRule);
+    setAlertMaxAge(currentAlertMaxAge ? String(currentAlertMaxAge) : "");
     if (!editing) {
       setPreferenceNote(currentPreferences);
     }
-  }, [currentScanWindow, currentItemLimit, currentPreferences, editing]);
+  }, [
+    currentScanWindow,
+    currentItemLimit,
+    currentTimezone,
+    currentWorkdays.join(","),
+    currentWorkStart,
+    currentWorkEnd,
+    currentWorkInterval,
+    currentOffHoursInterval,
+    currentAlertRule,
+    currentAlertMaxAge,
+    currentPreferences,
+    editing,
+  ]);
 
-  const saveState = runtimeSettingsSaveState(currentScanWindow, currentItemLimit, scanWindowHours, itemLimit);
+  const saveState = runtimeSettingsSaveState(
+    {
+      scan_window_hours: currentScanWindow,
+      semantic_max_messages: currentItemLimit,
+      timezone: currentTimezone,
+      workdays: currentWorkdays,
+      work_start: currentWorkStart,
+      work_end: currentWorkEnd,
+      work_interval_minutes: currentWorkInterval,
+      off_hours_interval_minutes: currentOffHoursInterval,
+      alert_rule: currentAlertRule,
+      alert_max_age_minutes: currentAlertMaxAge,
+    },
+    {
+      scanWindowText: scanWindowHours,
+      itemLimitText: itemLimit,
+      timezoneText: timezone,
+      workdays,
+      workStartText: workStart,
+      workEndText: workEnd,
+      workIntervalText: workInterval,
+      offHoursIntervalText: offHoursInterval,
+      alertRule,
+      alertMaxAgeText: alertMaxAge,
+    },
+  );
   const normalizedPreference = preferenceNote.trim();
   const canDraftPreferences = Boolean(normalizedPreference) && normalizedPreference !== currentPreferences.trim();
 
@@ -695,6 +757,141 @@ function ProfileRuntimeSettingsControl({
           <small>per scan</small>
         </label>
       </div>
+      <div className="profile-runtime-schedule">
+        <label>
+          <span className="profile-field-title">
+            Timezone
+            <ProfileHelpTip text="IANA timezone used for work-hours scheduling." />
+          </span>
+          <input
+            aria-label={`${profile.profile_id} timezone`}
+            disabled={busy}
+            onChange={(event) => setTimezone(event.target.value)}
+            placeholder="Asia/Shanghai"
+            value={timezone}
+          />
+        </label>
+        <label>
+          <span className="profile-field-title">
+            Work starts
+            <ProfileHelpTip text="Start of the local work-hours notification window." />
+          </span>
+          <input
+            aria-label={`${profile.profile_id} work start`}
+            disabled={busy}
+            onChange={(event) => setWorkStart(event.target.value)}
+            type="time"
+            value={workStart}
+          />
+        </label>
+        <label>
+          <span className="profile-field-title">
+            Work ends
+            <ProfileHelpTip text="End of the local work-hours notification window." />
+          </span>
+          <input
+            aria-label={`${profile.profile_id} work end`}
+            disabled={busy}
+            onChange={(event) => setWorkEnd(event.target.value)}
+            type="time"
+            value={workEnd}
+          />
+        </label>
+        <label>
+          <span className="profile-field-title">
+            Work interval
+            <ProfileHelpTip text="Dry-run scheduler cadence during work hours." />
+          </span>
+          <input
+            aria-label={`${profile.profile_id} work interval minutes`}
+            disabled={busy}
+            inputMode="numeric"
+            max={1440}
+            min={1}
+            onChange={(event) => setWorkInterval(event.target.value)}
+            step={1}
+            type="number"
+            value={workInterval}
+          />
+          <small>minutes</small>
+        </label>
+        <label>
+          <span className="profile-field-title">
+            Quiet interval
+            <ProfileHelpTip text="Dry-run scheduler cadence outside work hours." />
+          </span>
+          <input
+            aria-label={`${profile.profile_id} off hours interval minutes`}
+            disabled={busy}
+            inputMode="numeric"
+            max={1440}
+            min={1}
+            onChange={(event) => setOffHoursInterval(event.target.value)}
+            step={1}
+            type="number"
+            value={offHoursInterval}
+          />
+          <small>minutes</small>
+        </label>
+        <label>
+          <span className="profile-field-title">
+            Alert rule
+            <ProfileHelpTip text="Use high-new-only for noisy profiles where changed items should not alert again." />
+          </span>
+          <select
+            aria-label={`${profile.profile_id} alert rule`}
+            disabled={busy}
+            onChange={(event) => setAlertRule(event.target.value)}
+            value={alertRule}
+          >
+            <option value="high_new_or_changed">High new or changed</option>
+            <option value="high_new_only">High new only</option>
+          </select>
+        </label>
+        <label>
+          <span className="profile-field-title">
+            Alert age
+            <ProfileHelpTip text="Maximum age for high-signal items before notifications are skipped." />
+          </span>
+          <input
+            aria-label={`${profile.profile_id} alert max age minutes`}
+            disabled={busy}
+            inputMode="numeric"
+            max={10080}
+            min={1}
+            onChange={(event) => setAlertMaxAge(event.target.value)}
+            step={1}
+            type="number"
+            value={alertMaxAge}
+          />
+          <small>minutes</small>
+        </label>
+      </div>
+      <fieldset className="profile-runtime-weekdays">
+        <legend className="profile-field-title">
+          Workdays
+          <ProfileHelpTip text="Days included in this profile's work-hours schedule." />
+        </legend>
+        <div className="profile-weekday-options">
+          {PROFILE_WEEKDAY_OPTIONS.map((day) => (
+            <label className="profile-weekday-toggle" key={day.value}>
+              <input
+                checked={workdays.includes(day.value)}
+                disabled={busy}
+                onChange={(event) => {
+                  if (event.target.checked) {
+                    setWorkdays(normalizeWeekdays([...workdays, day.value]));
+                  } else {
+                    setWorkdays(workdays.filter((value) => value !== day.value));
+                  }
+                }}
+                type="checkbox"
+              />
+              <span>{day.label}</span>
+            </label>
+          ))}
+        </div>
+      </fieldset>
       <label className="profile-preference-note">
         <span className="profile-field-title">
           Matching rules
@@ -722,8 +919,7 @@ function ProfileRuntimeSettingsControl({
               return;
             }
             setProfileRuntimeSettings(profile.profile_id, {
-              scan_window_hours: saveState.scan_window_hours,
-              semantic_max_messages: saveState.semantic_max_messages,
+              ...saveState.settings,
             });
             setEditing(false);
           }}
@@ -772,6 +968,14 @@ function ProfileRuntimeSettingsControl({
           onClick={() => {
             setScanWindowHours(String(currentScanWindow));
             setItemLimit(String(currentItemLimit));
+            setTimezone(currentTimezone);
+            setWorkdays(currentWorkdays);
+            setWorkStart(currentWorkStart);
+            setWorkEnd(currentWorkEnd);
+            setWorkInterval(currentWorkInterval ? String(currentWorkInterval) : "");
+            setOffHoursInterval(currentOffHoursInterval ? String(currentOffHoursInterval) : "");
+            setAlertRule(currentAlertRule);
+            setAlertMaxAge(currentAlertMaxAge ? String(currentAlertMaxAge) : "");
             setPreferenceNote(currentPreferences);
             setEditing(false);
           }}
@@ -874,19 +1078,146 @@ function profileNotificationLabel(profile: Profile) {
   return profile.delivery_target_count === 1 ? "1 notification" : `${profile.delivery_target_count} notifications`;
 }
 
-export function runtimeSettingsSaveState(
-  currentScanWindow: number,
-  currentItemLimit: number,
-  scanWindowText: string,
-  itemLimitText: string,
-) {
-  const scanValue = Number(scanWindowText);
-  const itemValue = Number(itemLimitText);
-  const validScan = Number.isInteger(scanValue) && scanValue >= 1 && scanValue <= 168;
-  const validItems = Number.isInteger(itemValue) && itemValue >= 1 && itemValue <= 500;
+const PROFILE_WEEKDAY_OPTIONS = [
+  { value: "mon", label: "Mon" },
+  { value: "tue", label: "Tue" },
+  { value: "wed", label: "Wed" },
+  { value: "thu", label: "Thu" },
+  { value: "fri", label: "Fri" },
+  { value: "sat", label: "Sat" },
+  { value: "sun", label: "Sun" },
+];
+
+const PROFILE_WEEKDAY_SET = new Set(PROFILE_WEEKDAY_OPTIONS.map((day) => day.value));
+const PROFILE_ALERT_RULES = new Set(["high_new_or_changed", "high_new_only"]);
+
+type RuntimeSettingsDraft = {
+  scanWindowText: string;
+  itemLimitText: string;
+  timezoneText: string;
+  workdays: string[];
+  workStartText: string;
+  workEndText: string;
+  workIntervalText: string;
+  offHoursIntervalText: string;
+  alertRule: string;
+  alertMaxAgeText: string;
+};
+
+export function runtimeSettingsSaveState(current: ProfileRuntimeSettings, draft: RuntimeSettingsDraft) {
+  const settings: ProfileRuntimeSettings = {};
+  const scanValue = parseIntegerField(draft.scanWindowText, 1, 168);
+  const itemValue = parseIntegerField(draft.itemLimitText, 1, 500);
+  const workIntervalValue = parseOptionalIntegerField(draft.workIntervalText, current.work_interval_minutes, 1, 1440);
+  const offHoursIntervalValue = parseOptionalIntegerField(draft.offHoursIntervalText, current.off_hours_interval_minutes, 1, 1440);
+  const alertMaxAgeValue = parseOptionalIntegerField(draft.alertMaxAgeText, current.alert_max_age_minutes, 1, 10080);
+  const timezone = draft.timezoneText.trim();
+  const workStart = draft.workStartText.trim();
+  const workEnd = draft.workEndText.trim();
+  const currentWorkdays = normalizeWeekdays(current.workdays);
+  const draftWorkdays = normalizeWeekdays(draft.workdays);
+  const hasWorkdayChange = currentWorkdays.join(",") !== draftWorkdays.join(",");
+  const timezoneValid = isOptionalTimezoneValid(timezone, current.timezone);
+  const workStartValid = isOptionalTimeValid(workStart, current.work_start);
+  const workEndValid = isOptionalTimeValid(workEnd, current.work_end);
+  const workdaysValid = draftWorkdays.length > 0 || currentWorkdays.length === 0;
+  const alertRule = PROFILE_ALERT_RULES.has(draft.alertRule) ? draft.alertRule : "";
+  const valid =
+    scanValue.valid &&
+    itemValue.valid &&
+    workIntervalValue.valid &&
+    offHoursIntervalValue.valid &&
+    alertMaxAgeValue.valid &&
+    timezoneValid &&
+    workStartValid &&
+    workEndValid &&
+    workdaysValid &&
+    Boolean(alertRule);
+  if (scanValue.valid && scanValue.value !== current.scan_window_hours) {
+    settings.scan_window_hours = scanValue.value;
+  }
+  if (itemValue.valid && itemValue.value !== current.semantic_max_messages) {
+    settings.semantic_max_messages = itemValue.value;
+  }
+  if (timezone && timezone !== (current.timezone || "")) {
+    settings.timezone = timezone;
+  }
+  if (hasWorkdayChange && draftWorkdays.length > 0) {
+    settings.workdays = draftWorkdays;
+  }
+  if (workStart && workStart !== (current.work_start || "")) {
+    settings.work_start = workStart;
+  }
+  if (workEnd && workEnd !== (current.work_end || "")) {
+    settings.work_end = workEnd;
+  }
+  if (workIntervalValue.valid && workIntervalValue.value !== undefined && workIntervalValue.value !== current.work_interval_minutes) {
+    settings.work_interval_minutes = workIntervalValue.value;
+  }
+  if (offHoursIntervalValue.valid && offHoursIntervalValue.value !== undefined && offHoursIntervalValue.value !== current.off_hours_interval_minutes) {
+    settings.off_hours_interval_minutes = offHoursIntervalValue.value;
+  }
+  if (alertRule && alertRule !== (current.alert_rule || "high_new_or_changed")) {
+    settings.alert_rule = alertRule;
+  }
+  if (alertMaxAgeValue.valid && alertMaxAgeValue.value !== undefined && alertMaxAgeValue.value !== current.alert_max_age_minutes) {
+    settings.alert_max_age_minutes = alertMaxAgeValue.value;
+  }
   return {
-    canSave: validScan && validItems && (scanValue !== currentScanWindow || itemValue !== currentItemLimit),
-    scan_window_hours: scanValue,
-    semantic_max_messages: itemValue,
+    canSave: valid && Object.keys(settings).length > 0,
+    settings,
   };
+}
+
+function parseIntegerField(text: string, min: number, max: number) {
+  const value = Number(text);
+  const valid = Number.isInteger(value) && value >= min && value <= max;
+  return { valid, value };
+}
+
+function parseOptionalIntegerField(text: string, current: number | undefined, min: number, max: number) {
+  const trimmed = text.trim();
+  if (!trimmed && current === undefined) {
+    return { valid: true, value: undefined };
+  }
+  const value = Number(trimmed);
+  const valid = Number.isInteger(value) && value >= min && value <= max;
+  return { valid, value };
+}
+
+function isOptionalTimezoneValid(value: string, current: string | undefined) {
+  if (!value && !current) {
+    return true;
+  }
+  return /^[A-Za-z0-9_+\-]+(?:\/[A-Za-z0-9_+\-]+)*$/.test(value) && !value.includes("..") && !value.includes("//");
+}
+
+function isOptionalTimeValid(value: string, current: string | undefined) {
+  if (!value && !current) {
+    return true;
+  }
+  if (!/^\d{2}:\d{2}$/.test(value)) {
+    return false;
+  }
+  const [hourText, minuteText] = value.split(":");
+  const hour = Number(hourText);
+  const minute = Number(minuteText);
+  return Number.isInteger(hour) && Number.isInteger(minute) && hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59;
+}
+
+function normalizeWeekdays(value: unknown) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  const normalized: string[] = [];
+  value.forEach((item) => {
+    if (typeof item !== "string") {
+      return;
+    }
+    const day = item.trim().toLowerCase().slice(0, 3);
+    if (PROFILE_WEEKDAY_SET.has(day) && !normalized.includes(day)) {
+      normalized.push(day);
+    }
+  });
+  return normalized;
 }
