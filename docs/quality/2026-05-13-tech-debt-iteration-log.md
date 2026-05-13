@@ -1765,6 +1765,39 @@ Next:
 - Continue with clean-HEAD-backed slices only, or leave Bot Gateway fixture
   coverage for the future Bot Gateway implementation checkpoint.
 
+## Slice 45: Desk Settings Mutation Client Fixture Gate
+
+Status: completed.
+
+Actions:
+
+- Extended `dashboard/src/api/client-contract-fixtures.test.ts` to reuse the
+  shared settings fixture for mutation responses too.
+- Covered `saveDeskNotificationToken()`, `clearDeskNotificationToken()`,
+  `saveDeskAiApiKey()`, and `clearDeskAiApiKey()` so status payload schema
+  drift is caught on both fetch and mutation client paths.
+
+Verification:
+
+- `cd dashboard; npm test -- --run client-contract-fixtures client desk-settings-contract-fixtures`
+  passed `3` test files and `27` tests.
+- Staged snapshot verification passed after checking out the index to a temp
+  directory: the same frontend test set passed `3` test files and `27` tests.
+
+Reviewer Gate:
+
+- This closes the residual gap left by Slice 43 for settings mutation response
+  handling without touching backend WIP.
+
+Residual Risk:
+
+- This verifies response shape and sanitizer compatibility. It does not test
+  real keyring writes or live credential storage backends.
+
+Next:
+
+- Commit, then continue until the 14:00 stop condition.
+
 ## Slice 34: `agent_extraction_request_v1` Projection Helper Extraction
 
 Status: in progress.

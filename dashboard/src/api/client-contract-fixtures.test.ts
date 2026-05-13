@@ -3,11 +3,15 @@ import deskFixture from "../../../tests/fixtures/contracts/desk_boundary_v1.json
 import settingsFixture from "../../../tests/fixtures/contracts/desk_settings_status_v1.json";
 
 import {
+  clearDeskAiApiKey,
+  clearDeskNotificationToken,
   loadDeskActions,
   loadDeskAiSettingsStatus,
   loadDeskNotificationTokenStatus,
   loadDeskSources,
   runDeskAction,
+  saveDeskAiApiKey,
+  saveDeskNotificationToken,
 } from "./client";
 
 type DeskBoundaryFixture = {
@@ -88,6 +92,31 @@ describe("dashboard API client contract fixtures", () => {
           expect.objectContaining({ provider: "deepseek", configured: true, source: "environment" }),
         ]),
       }),
+    );
+  });
+
+  it("accepts fixture-backed Desk settings mutation responses", async () => {
+    const fixture = settingsFixture as DeskSettingsFixture;
+    mockJsonResponse({ token: fixture.notification_token });
+
+    await expect(saveDeskNotificationToken("123456:ABCDEFGHIJKLMNOPQRSTUVWXYZabcdef12")).resolves.toEqual(
+      fixture.notification_token,
+    );
+
+    mockJsonResponse({ token: fixture.notification_token });
+
+    await expect(clearDeskNotificationToken()).resolves.toEqual(fixture.notification_token);
+
+    mockJsonResponse({ ai: fixture.ai_settings });
+
+    await expect(saveDeskAiApiKey("deepseek", "sk-deepseek123")).resolves.toEqual(
+      expect.objectContaining({ schema_version: "desk_ai_settings_status_v1", configured_count: 1 }),
+    );
+
+    mockJsonResponse({ ai: fixture.ai_settings });
+
+    await expect(clearDeskAiApiKey("deepseek")).resolves.toEqual(
+      expect.objectContaining({ schema_version: "desk_ai_settings_status_v1", configured_count: 1 }),
     );
   });
 });
