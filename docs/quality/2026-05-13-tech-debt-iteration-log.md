@@ -1798,6 +1798,40 @@ Next:
 
 - Commit, then continue until the 14:00 stop condition.
 
+## Slice 46: Fast Gate Fixture Index Alignment
+
+Status: completed.
+
+Actions:
+
+- Updated `docs/testing.md` fast contract/privacy gate to include
+  `tests/test_desk_settings_contracts.py`.
+- Added `desk-settings-contract-fixtures` to the frontend fast gate pattern so
+  the canonical command index stays aligned with the shared settings fixture.
+
+Verification:
+
+- `python -m pytest tests/test_contract_fixtures.py tests/test_report_contracts.py tests/test_contract_privacy_fixtures.py tests/test_dashboard_state_contracts.py tests/test_desk_contract_fixtures.py tests/test_desk_source_access_contracts.py tests/test_desk_settings_contracts.py tests/test_agent_semantic_fallback.py tests/test_report.py -q`
+  passed `58` tests and `84` subtests.
+- `cd dashboard; npm test -- --run contract-privacy-fixtures dashboard-state-contract-fixtures desk-contract-fixtures desk-source-access-contract-fixtures desk-settings-contract-fixtures client-contract-fixtures sanitize client`
+  passed `8` test files and `59` tests.
+- `git diff --check -- docs/testing.md docs/quality/task-state.md docs/quality/2026-05-13-tech-debt-iteration-log.md`
+  passed.
+
+Reviewer Gate:
+
+- This keeps the new fixture coverage discoverable through the single testing
+  authority, rather than only in the iteration log.
+
+Residual Risk:
+
+- This is a command-index update only; it does not add new runtime coverage
+  beyond the tests committed in earlier slices.
+
+Next:
+
+- Commit, then continue until the 14:00 stop condition.
+
 ## Slice 34: `agent_extraction_request_v1` Projection Helper Extraction
 
 Status: in progress.
