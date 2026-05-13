@@ -1455,6 +1455,45 @@ Next:
 - Commit this checkpoint, then add the testing-gate documentation slice
   requested by the spec.
 
+## Slice 37: Canonical Testing Gate Documentation
+
+Status: completed.
+
+Actions:
+
+- Added `docs/testing.md` as the single local authority for focused
+  contract/privacy gates, medium v0.5 backend gates, full local gates, staged
+  snapshot verification, and extra gates for layout, launchers, HTTP mutations,
+  and JSON contracts.
+- Replaced duplicated README quality-gate command lists with links to
+  `docs/testing.md` in both English and Chinese READMEs.
+- Updated the technical-debt cleanup spec's Quality Gates section to point to
+  `docs/testing.md` instead of repeating command blocks.
+
+Verification:
+
+- `git diff --check -- docs/testing.md README.md README.zh-CN.md docs/technical-debt-cleanup-spec.md docs/quality/task-state.md docs/quality/2026-05-13-tech-debt-iteration-log.md`
+  passed.
+- Staged snapshot documentation verification passed after checking out the
+  index to a temp directory: `docs/testing.md` existed, README/spec pointers
+  resolved, and duplicated full-gate command blocks were absent from README and
+  the technical-debt spec.
+
+Reviewer Gate:
+
+- This directly addresses the spec's Phase 5 documentation cleanup target and
+  Peirce's P1 concern that dirty worktree verification needs a clean
+  staged-index habit.
+
+Residual Risk:
+
+- The staged snapshot recipe is intentionally general; narrow checkpoint
+  commits should still record the exact targeted commands used for that slice.
+
+Next:
+
+- Commit, then continue until the 14:00 stop condition.
+
 ## Slice 34: `agent_extraction_request_v1` Projection Helper Extraction
 
 Status: in progress.

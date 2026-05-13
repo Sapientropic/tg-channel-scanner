@@ -227,21 +227,15 @@ python scripts/monitor.py feedback-export \
 | `templates/` | Report templates and demo fixtures used by `tgcs demo`. |
 | `docs/desktop-platforms.md` | Desktop launcher, key storage, and auto-scan platform notes. |
 | `docs/agent-cli-contract.md` | Stable JSON/CLI contract for agents. |
+| `docs/testing.md` | Canonical local testing and quality-gate commands. |
 | `docs/getting-api-credentials.md` | Telegram API credential guide. |
 | `docs/tos-risk-analysis.md` | Terms-of-service and operational risk notes. |
 
 ## Development
 
-```bash
-python -m pytest -q
-cd dashboard
-npm test -- --run
-npm run build
-```
-
-Use `python tools/quality_visual_audit.py <output-dir>` when changing dashboard
-layout. It captures Start, Review, Profiles, Runs, and Settings across desktop
-and mobile viewports and checks for horizontal overflow and small click targets.
+Use [docs/testing.md](docs/testing.md) as the canonical local testing and
+quality-gate command index. It also covers staged-index verification for dirty
+worktrees.
 
 ## License
 

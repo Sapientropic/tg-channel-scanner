@@ -457,11 +457,7 @@ Purpose: avoid cleaning debt on top of ambiguous WIP.
 Tasks:
 
 1. Decide what to do with current bot/dashboard WIP.
-2. Run and record baseline gates:
-   - `python -m pytest -q`
-   - `cd dashboard && npm test -- --run`
-   - `cd dashboard && npm run build`
-   - `git diff --check`
+2. Run and record the full local gate from `docs/testing.md`.
 3. Record the exact branch, dirty files, and untracked files in the first
    cleanup PR/commit notes.
 4. Do not refactor behavior in this phase.
@@ -594,30 +590,9 @@ Exit criteria:
 
 ## Quality Gates
 
-Every phase should run:
-
-```powershell
-python -m pytest -q
-cd dashboard
-npm test -- --run
-npm run build
-```
-
-Before merging behavior-affecting refactors, also run:
-
-```powershell
-python -m ruff check .
-git diff --check
-```
-
-When launcher files or shell scripts change, also run the matching shell syntax
-or line-ending checks from CI.
-
-When dashboard layout changes, run:
-
-```powershell
-python tools/quality_visual_audit.py <output-dir>
-```
+Canonical command groups live in `docs/testing.md`. Use that file for focused
+contract/privacy gates, medium v0.5 backend gates, full local gates, staged
+snapshot verification, launcher checks, and dashboard visual audit triggers.
 
 ## Rollback Strategy
 

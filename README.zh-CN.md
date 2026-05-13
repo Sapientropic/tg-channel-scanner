@@ -206,25 +206,14 @@ python scripts/monitor.py feedback-export \
 | `templates/` | 报告模板，以及 `tgcs demo` 使用的 demo fixture。 |
 | `docs/desktop-platforms.md` | 桌面启动器、本地 key 存储和自动扫描平台边界。 |
 | `docs/agent-cli-contract.md` | 给 agent 使用的稳定 JSON / CLI 合同。 |
+| `docs/testing.md` | 本地测试与质量门槛命令入口。 |
 | `docs/getting-api-credentials.md` | Telegram API 凭证获取指南。 |
 | `docs/tos-risk-analysis.md` | ToS 与运行风险说明。 |
 
 ## 开发验证
 
-```bash
-python -m pytest -q
-cd dashboard
-npm test -- --run
-npm run build
-```
-
-改 Dashboard 布局时，跑：
-
-```bash
-python tools/quality_visual_audit.py output/quality-review/<run-name>
-```
-
-它会截取 Start、Review、Profiles、Runs、Settings 的桌面/移动端截图，并检查横向溢出和小点击目标。
+本地测试和质量门槛命令统一看 [docs/testing.md](docs/testing.md)。其中也说明了
+dirty worktree 下如何验证 staged index。
 
 ## License
 
