@@ -1863,6 +1863,40 @@ Next:
 - Commit this evidence checkpoint, then use remaining pre-14:00 time to update
   the SPEC progress and future clean-HEAD boundaries.
 
+## Slice 48: SPEC Progress Baseline Sync
+
+Status: completed.
+
+Actions:
+
+- Updated `docs/technical-debt-cleanup-spec.md` with the current clean-HEAD
+  hardening baseline.
+- Recorded the canonical testing gate split between targeted checkout-index
+  snapshots and full detached-worktree verification.
+- Summarized newly added shared contract fixture coverage and the
+  `agent_extraction_request_v1` path-privacy boundary.
+- Captured the Bot Gateway fixture attempt as a future slice that must wait for
+  a clean implementation checkpoint.
+
+Verification:
+
+- `git diff --check -- docs/technical-debt-cleanup-spec.md docs/quality/task-state.md docs/quality/2026-05-13-tech-debt-iteration-log.md`
+  passed.
+
+Reviewer Gate:
+
+- Keeps the long-lived SPEC aligned with the actual branch state, so the next
+  agent does not need to reverse-engineer progress from the iteration log.
+
+Residual Risk:
+
+- This does not mark the whole technical-debt cleanup complete. It records the
+  v0.5 hardening baseline and leaves larger module splits for follow-up.
+
+Next:
+
+- Commit, then continue until the 14:00 stop condition.
+
 ## Slice 34: `agent_extraction_request_v1` Projection Helper Extraction
 
 Status: in progress.

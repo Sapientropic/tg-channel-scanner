@@ -25,6 +25,34 @@ Observed from the current workspace:
 - Current branch has active WIP across dashboard, bot gateway, monitor state,
   decision intelligence, tests, and untracked bot assistant design assets.
 
+## Progress Update: 2026-05-13 Hardening Iteration
+
+The current `sapientropic/v05-hardening-tech-debt-20260513` branch now has a
+clean-HEAD hardening baseline independent of unrelated dirty WIP:
+
+- Detached clean worktree gate passes: `python -m ruff check .`,
+  `python -m pytest -q` (`435` passed, `2` skipped, `180` subtests),
+  `cd dashboard; npm test -- --run` (`18` files, `131` tests), and
+  `cd dashboard; npm run build`.
+- Canonical local gate commands now live in `docs/testing.md`; full dirty
+  worktree verification must use a detached `git worktree`, while
+  checkout-index snapshots are for targeted staged checks only.
+- Shared contract fixtures now cover agent envelopes, semantic items, monitor
+  run results, run manifests, dashboard state, Desk actions/sources/results,
+  source-access summaries, settings token/AI-key status, and settings client
+  status/mutation responses.
+- `agent_extraction_request_v1` no longer serializes local input/profile/output
+  handoff paths into the copyable request document; those writable paths remain
+  in the local JSON envelope.
+- Bot Gateway status fixture coverage was attempted and rejected before commit
+  because it depended on uncommitted Bot Gateway WIP in `dashboard_server.py`.
+  Treat that as a future slice only after the implementation files are scoped
+  and committed together.
+
+The next cleanup phase should build on this baseline rather than re-litigating
+whether contract/privacy fixtures are worth keeping. New splits should either
+reuse these fixtures or add similarly shared fixtures before moving behavior.
+
 Large current files are the main maintainability signal:
 
 | Area | File | Lines | Why It Matters |
@@ -372,7 +400,8 @@ Cleanup:
   - report extraction contract
   - report rendering
 - Keep test names behavior-oriented.
-- Add a small `docs/testing.md` or README section listing fast targeted gates.
+- Keep `docs/testing.md` as the single command index for fast targeted gates,
+  staged snapshots, and clean worktree full gates.
 
 Done when:
 
