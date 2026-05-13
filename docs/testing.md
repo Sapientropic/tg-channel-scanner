@@ -37,6 +37,18 @@ Use this for monitor, dashboard server, bot gateway, and decision-state changes:
 python -m pytest tests/test_monitor.py tests/test_monitor_state.py tests/test_dashboard_server.py tests/test_bot_gateway.py tests/test_bot_gateway_contracts.py tests/test_decision_intelligence.py -q
 ```
 
+## Credential-Free Desktop Smoke
+
+Use this for launcher, setup/import, and packaging entry-point changes. These
+commands must not require Telegram login, live delivery, or LLM credentials:
+
+```powershell
+tgcs demo
+tgcs quickstart jobs --format json
+tgcs doctor --format json
+tgcs schedule print --profile-id jobs-fast --interval-minutes 15 --delivery-mode dry-run
+```
+
 ## Full Local Gate
 
 Run this before claiming broad branch health, after shared refactors, and before

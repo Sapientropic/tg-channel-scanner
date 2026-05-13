@@ -8,6 +8,9 @@
     "supported_commands": ["/status", "/latest", "/sources", "/profiles", "/scan"],
     "local_first_note": "Bot replies while the local gateway is running. Background mode starts it again at login.",
     "start_command": "./tgcs bot run",
+    "last_update_at": "2026-05-12T12:00:20Z",
+    "last_error": "TGCS_TELEGRAM_BOT_TOKEN=[redacted-secret] chat_id [redacted-chat-id] ~\\private\\bot-gateway-state.json",
+    "safe_next_action": "Bot Gateway is running.",
     "background": {
       "schema_version": "desk_bot_gateway_background_status_v1",
       "backend": "windows_schtasks",
@@ -42,6 +45,9 @@
       "supported_commands": ["/status", "/latest", "/sources", "/profiles", "/scan", 123],
       "local_first_note": "Bot replies while the local gateway is running. Background mode starts it again at login.",
       "start_command": "./tgcs bot run",
+      "last_update_at": "2026-05-12T12:00:20Z",
+      "last_error": "TGCS_TELEGRAM_BOT_TOKEN=[redacted-secret] chat_id [redacted-chat-id] ~\\private\\bot-gateway-state.json",
+      "safe_next_action": "Bot Gateway is running.",
       "background": {
         "schema_version": "desk_bot_gateway_background_status_v1",
         "backend": "windows_schtasks",

@@ -92,7 +92,7 @@ DESK_SOURCE_ASSISTANT_ALLOWED_FIELDS = {"instruction", "topic", "dry_run", "conf
 DESK_SOURCE_UPDATE_ALLOWED_FIELDS = {"enabled"}
 DESK_SOURCE_TOPIC_ALLOWED_FIELDS = {"topics"}
 PROFILE_ENABLED_ALLOWED_FIELDS = {"enabled"}
-PROFILE_RUNTIME_SETTINGS_ALLOWED_FIELDS = set(monitor_state.PROFILE_RUNTIME_SETTING_LIMITS)
+PROFILE_RUNTIME_SETTINGS_ALLOWED_FIELDS = set(monitor_state.PROFILE_RUNTIME_SETTINGS_ALLOWED)
 PROFILE_DRAFT_NOTE_ALLOWED_FIELDS = {"note"}
 PROFILE_DRAFT_NOTE_MAX_LENGTH = 2000
 PROFILE_MATCHING_PREFERENCES_ALLOWED_FIELDS = {"preferences"}
@@ -1450,6 +1450,17 @@ def desk_bot_gateway_status(conn, *, now: datetime | None = None) -> dict:
         authorized_chat_count = max(0, int(raw_count))
     except (TypeError, ValueError):
         authorized_chat_count = _enabled_telegram_bot_target_count(conn)
+    last_error = _desk_safe_result_text(state.get("last_error")) if state else ""
+    started_at = str(state.get("started_at") or "") if state else ""
+    last_poll_text = str(state.get("last_poll_at") or "") if state else ""
+    if not bool(token_status.get("configured")):
+        safe_next_action = "Save bot credentials in Settings."
+    elif gateway_status == "running":
+        safe_next_action = "Bot Gateway is running."
+    elif bool(background.get("installed")):
+        safe_next_action = "Refresh after login, or restart background mode from Settings."
+    else:
+        safe_next_action = "Run tgcs bot run locally, or turn on background mode from Settings."
 
     return {
         "schema_version": "desk_bot_gateway_status_v1",
@@ -1464,9 +1475,12 @@ def desk_bot_gateway_status(conn, *, now: datetime | None = None) -> dict:
             else "Bot replies only while tgcs bot run is running locally."
         ),
         "start_command": "./tgcs bot run",
+        "last_update_at": last_poll_text or started_at,
+        "last_error": last_error,
+        "safe_next_action": safe_next_action,
         "background": background,
-        "started_at": str(state.get("started_at") or "") if state else "",
-        "last_poll_at": str(state.get("last_poll_at") or "") if state else "",
+        "started_at": started_at,
+        "last_poll_at": last_poll_text,
     }
 
 
@@ -4779,6 +4793,13 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 patch_id = unquote(parsed.path.split("/")[3])
                 with close_after_use(self._connect()) as conn:
                     result = monitor_state.revert_profile_patch(conn, patch_id=patch_id)
+                self._json(HTTPStatus.OK, {"ok": True, "result": result})
+                return
+            if parsed.path.startswith("/api/profile-patches/") and parsed.path.endswith("/replay"):
+                DashboardHandler._require_loopback_access(self, "Profile patch actions")
+                patch_id = unquote(parsed.path.split("/")[3])
+                with close_after_use(self._connect()) as conn:
+                    result = monitor_state.replay_profile_patch(conn, patch_id=patch_id)
                 self._json(HTTPStatus.OK, {"ok": True, "result": result})
                 return
             self._json(HTTPStatus.NOT_FOUND, {"ok": False, "error": "not_found"})

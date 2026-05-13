@@ -31,6 +31,16 @@ import {
   sanitizeFeedbackExportResult as sanitizeDeskFeedbackExportResult,
   sanitizeSourceImportResult as sanitizeDeskSourceImportResult,
 } from "./desk";
+import {
+  assignOptionalNumbers,
+  isRecord,
+  nonNegativeIntegerOrDefault,
+  numberOrDefault,
+  optionalString,
+  optionalStringOrNull,
+  sanitizeNumberRecord,
+  stringArray,
+} from "./shared";
 
 export const emptyDashboardState: DashboardState = {
   profiles: [],
@@ -282,12 +292,32 @@ function sanitizeProfiles(value: unknown): Profile[] {
       enabled: typeof record.enabled === "boolean" ? record.enabled : false,
       updated_at: stringOrDefault(record.updated_at, ""),
     };
-    assignOptionalStrings(profile, record, ["display_name", "report_display_name", "display_path", "alert_schedule_mode"]);
+    assignOptionalStrings(profile, record, [
+      "display_name",
+      "report_display_name",
+      "display_path",
+      "alert_schedule_mode",
+      "timezone",
+      "work_start",
+      "work_end",
+      "alert_rule",
+    ]);
     const sourceTopics = stringArray(record.source_topics);
     if (sourceTopics.length) {
       profile.source_topics = sourceTopics;
     }
-    assignOptionalNumbers(profile, record, ["scan_window_hours", "semantic_max_messages", "delivery_target_count"]);
+    const workdays = stringArray(record.workdays);
+    if (workdays.length) {
+      profile.workdays = workdays;
+    }
+    assignOptionalNumbers(profile, record, [
+      "scan_window_hours",
+      "semantic_max_messages",
+      "work_interval_minutes",
+      "off_hours_interval_minutes",
+      "alert_max_age_minutes",
+      "delivery_target_count",
+    ]);
     const matchingProfile = sanitizeProfileMatchingProfile(record.matching_profile);
     if (matchingProfile) {
       profile.matching_profile = matchingProfile;
@@ -481,6 +511,7 @@ function sanitizeProfilePatches(value: unknown): ProfilePatch[] {
       "card_title",
       "base_profile_hash",
       "base_profile_short_hash",
+      "replayed_from_patch_id",
       "applied_at",
     ]);
     const applyReadiness = sanitizeApplyReadiness(record.apply_readiness);
@@ -880,21 +911,6 @@ function stringOrDefault(value: unknown, fallback: string) {
   return typeof value === "string" ? value : fallback;
 }
 
-function optionalString(value: unknown) {
-  if (typeof value !== "string") {
-    return undefined;
-  }
-  const trimmed = value.trim();
-  return trimmed ? trimmed : undefined;
-}
-
-function optionalStringOrNull(value: unknown) {
-  if (value === null) {
-    return null;
-  }
-  return optionalString(value);
-}
-
 function optionalHttpUrl(value: unknown) {
   const text = optionalString(value);
   if (!text) {
@@ -908,41 +924,11 @@ function optionalHttpUrl(value: unknown) {
   }
 }
 
-function numberOrDefault(value: unknown, fallback: number) {
-  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
-}
-
-function nonNegativeIntegerOrDefault(value: unknown, fallback: number) {
-  return typeof value === "number" && Number.isInteger(value) && value >= 0 ? value : fallback;
-}
-
-function stringArray(value: unknown) {
-  return Array.isArray(value)
-    ? value.flatMap((item) => {
-        if (typeof item !== "string") {
-          return [];
-        }
-        const trimmed = item.trim();
-        return trimmed ? [trimmed] : [];
-      })
-    : [];
-}
-
 function assignOptionalStrings<T extends object>(target: T, record: Record<string, unknown>, fields: string[]) {
   const writable = target as Record<string, unknown>;
   fields.forEach((field) => {
     const value = optionalString(record[field]);
     if (value) {
-      writable[field] = value;
-    }
-  });
-}
-
-function assignOptionalNumbers<T extends object>(target: T, record: Record<string, unknown>, fields: string[]) {
-  const writable = target as Record<string, unknown>;
-  fields.forEach((field) => {
-    const value = record[field];
-    if (typeof value === "number" && Number.isFinite(value)) {
       writable[field] = value;
     }
   });
@@ -1089,16 +1075,6 @@ function sanitizeSetupChecks(value: unknown): SetupCheck[] {
   });
 }
 
-function sanitizeNumberRecord(value: unknown): Record<string, number> | undefined {
-  if (!isRecord(value)) {
-    return undefined;
-  }
-  const clean = Object.fromEntries(
-    Object.entries(value).filter((entry): entry is [string, number] => typeof entry[1] === "number" && Number.isFinite(entry[1])),
-  );
-  return Object.keys(clean).length ? clean : undefined;
-}
-
 function sanitizeApplyReadiness(value: unknown): ProfilePatch["apply_readiness"] {
   if (!isRecord(value)) {
     return undefined;
@@ -1190,8 +1166,4 @@ function warnUnexpectedInboxField(index: number, field: string, value: unknown) 
     return;
   }
   console.warn(`[tgcs dashboard schema] inbox[${index}].${field} expected string/null/undefined`, value);
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }

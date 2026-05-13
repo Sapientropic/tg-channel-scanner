@@ -47,9 +47,30 @@ export type Profile = {
   source_topics?: string[];
   scan_window_hours?: number;
   semantic_max_messages?: number;
+  timezone?: string;
+  workdays?: string[];
+  work_start?: string;
+  work_end?: string;
+  work_interval_minutes?: number;
+  off_hours_interval_minutes?: number;
+  alert_rule?: string;
+  alert_max_age_minutes?: number;
   delivery_target_count?: number;
   matching_profile?: ProfileMatchingProfile;
   updated_at: string;
+};
+
+export type ProfileRuntimeSettings = {
+  scan_window_hours?: number;
+  semantic_max_messages?: number;
+  timezone?: string;
+  workdays?: string[];
+  work_start?: string;
+  work_end?: string;
+  work_interval_minutes?: number;
+  off_hours_interval_minutes?: number;
+  alert_rule?: string;
+  alert_max_age_minutes?: number;
 };
 
 export type ProfileMatchingProfile = {
@@ -183,6 +204,9 @@ export type DeskBotGatewayStatus = {
   supported_commands: string[];
   local_first_note: string;
   start_command: string;
+  last_update_at?: string;
+  last_error?: string;
+  safe_next_action?: string;
   background: DeskBotGatewayBackgroundStatus;
   started_at?: string;
   last_poll_at?: string;
@@ -358,6 +382,7 @@ export type ProfilePatch = {
   diff_text: string;
   base_profile_hash?: string;
   base_profile_short_hash?: string;
+  replayed_from_patch_id?: string;
   apply_readiness?: {
     status?: string;
     label?: string;

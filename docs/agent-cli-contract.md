@@ -135,7 +135,8 @@ the `jobs` topic tag.
 `tgcs quickstart jobs` is read-only and prints one current next action for the
 Developer Opportunity starter: init, Settings > Sources, doctor, login, first
 dry-run, or dashboard. It never starts login, scanning, delivery, or scheduler
-installation.
+installation. `--format json` is credential-free and may be used by desktop
+smoke tests.
 `tgcs run` defaults to `.tgcs/sources.json` when present, the local
 `.tgcs/config.toml` profile when initialized, HTML output, `output/`, and v0.4
 decision memory at `.tgcs/state`. Without local config the built-in fallback
@@ -583,13 +584,22 @@ Profiles may add `alert_max_age_minutes`. `jobs-fast` defaults to a 2-hour scan
 window and `alert_max_age_minutes=60`, so missed scheduler ticks can be
 recovered without interrupting the user for stale job posts. Dashboard profile
 controls can pause or re-enable a profile, set `alert_schedule_mode` to
-`work_hours`, `all_day`, or `muted`, and tune `scan_window_hours` plus
-`semantic_max_messages`; these are stored as local SQLite runtime overrides and
-applied by later monitor runs. The profile enabled endpoint only accepts
-`{ "enabled": true | false }` from localhost. The profile runtime settings
-endpoint only accepts `scan_window_hours` in `1..168` and
-`semantic_max_messages` in `1..500` from localhost. These endpoints are Desk
-setting surfaces, not arbitrary command or agent JSON execution contracts.
+`work_hours`, `all_day`, or `muted`, and tune profile-specific runtime fields.
+These are stored as local SQLite runtime overrides and applied by later monitor
+runs. The profile enabled endpoint only accepts `{ "enabled": true | false }`
+from localhost. The profile runtime settings endpoint accepts only this
+allowlist from localhost: `scan_window_hours` in `1..168`,
+`semantic_max_messages` in `1..500`, `timezone`, `workdays`, `work_start`,
+`work_end`, `work_interval_minutes`, `off_hours_interval_minutes`,
+`alert_rule`, and `alert_max_age_minutes`. `alert_rule` is limited to
+`high_new_or_changed` and `high_new_only` for v0.5; the default remains
+`high_new_or_changed`. These endpoints are Desk setting surfaces, not arbitrary
+command or agent JSON execution contracts.
+
+Profile diff apply/revert keeps the existing base-hash gate. A reverted diff
+may be replayed through `POST /api/profile-patches/<patch_id>/replay` only when
+the current profile still matches the revert snapshot. Replay creates a fresh
+pending patch with a new `patch_id`; it never revives the old reverted patch.
 
 Live alert suppression is status-aware: a sent `new` alert suppresses repeated
 `new` delivery for the same card, but a later `changed` status remains eligible
@@ -667,7 +677,12 @@ Telegram session user id. High-level summaries must continue to avoid rendering
 raw chat ids.
 The local Bot Gateway also uses `getUpdates` for ordinary desktop operation.
 Webhook and Mini App flows are intentionally out of this local contract until
-the hosted HTTPS boundary is designed.
+the hosted HTTPS boundary is designed. Signal Desk's Bot Gateway status
+projection includes only safe setup/run hints: whether a token is configured,
+allowed-chat counts and labels, background/autostart state, sanitized last
+update/error text, and a `safe_next_action` string. It must not expose token
+text, raw chat ids, raw Telegram message text, session paths, command strings,
+or argv.
 
 Signal Desk `Settings` can also install starter sources, import pasted sources,
 and apply bounded source assistant plans. Preview responses include a sanitized

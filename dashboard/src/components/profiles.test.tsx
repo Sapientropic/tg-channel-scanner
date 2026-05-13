@@ -38,6 +38,7 @@ describe("ProfilesView", () => {
         patches={[]}
         applyPatch={vi.fn()}
         revertPatch={vi.fn()}
+        replayPatch={vi.fn()}
         setAlertMode={vi.fn()}
         setProfileEnabled={vi.fn()}
         setProfileRuntimeSettings={vi.fn()}
@@ -79,6 +80,7 @@ describe("ProfilesView", () => {
         patches={[]}
         applyPatch={vi.fn()}
         revertPatch={vi.fn()}
+        replayPatch={vi.fn()}
         setAlertMode={vi.fn()}
         setProfileEnabled={vi.fn()}
         setProfileRuntimeSettings={vi.fn()}
@@ -111,6 +113,7 @@ describe("ProfilesView", () => {
         patches={[patch]}
         applyPatch={vi.fn()}
         revertPatch={vi.fn()}
+        replayPatch={vi.fn()}
         setAlertMode={vi.fn()}
         setProfileEnabled={vi.fn()}
         setProfileRuntimeSettings={vi.fn()}
@@ -127,6 +130,38 @@ describe("ProfilesView", () => {
     expect(html).toContain("React contract role");
     expect(html).toContain("Apply to profile");
     expect(html).toContain("Adds your manual preference");
+  });
+
+  it("offers replay only for reverted profile diffs", () => {
+    const patch: ProfilePatch = {
+      patch_id: "patch-1",
+      profile_id: "jobs-fast",
+      note: "Prefer remote React roles.",
+      status: "reverted",
+      diff_text: "-old\n+new",
+      created_at: "2026-05-10T00:00:00Z",
+    };
+    const html = renderToStaticMarkup(
+      <ProfilesView
+        profiles={[profile({ enabled: true })]}
+        patches={[patch]}
+        applyPatch={vi.fn()}
+        revertPatch={vi.fn()}
+        replayPatch={vi.fn()}
+        setAlertMode={vi.fn()}
+        setProfileEnabled={vi.fn()}
+        setProfileRuntimeSettings={vi.fn()}
+        createProfileDraftNote={vi.fn()}
+        createProfileMatchingPreferencesDraft={vi.fn()}
+        createProfileFromBrief={createProfileFromBrief}
+        profileCreateResult={null}
+        busy={false}
+      />,
+    );
+
+    expect(html).toContain("Replay");
+    expect(html).not.toContain("Apply to profile");
+    expect(html).not.toContain("Revert");
   });
 
   it("validates profile scan setting edits before save", () => {

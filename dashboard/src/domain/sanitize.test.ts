@@ -93,6 +93,48 @@ describe("dashboard state sanitizers", () => {
     expect(warn).toHaveBeenCalledWith("[tgcs dashboard schema] runs[0].status expected non-empty string", undefined);
   });
 
+  it("keeps profile schedule and alert rule runtime fields without exposing raw config", () => {
+    const state = sanitizeDashboardState({
+      profiles: [
+        {
+          profile_id: "jobs-fast",
+          enabled: true,
+          alert_schedule_mode: "work_hours",
+          scan_window_hours: 6,
+          semantic_max_messages: 40,
+          timezone: "America/New_York",
+          workdays: ["mon", "wed", "fri", 7],
+          work_start: "08:30",
+          work_end: "18:15",
+          work_interval_minutes: 30,
+          off_hours_interval_minutes: 120,
+          alert_rule: "high_new_only",
+          alert_max_age_minutes: 45,
+          updated_at: "2026-05-13T00:00:00Z",
+          config: { token: "secret" },
+        },
+      ],
+    });
+
+    expect(state.profiles[0]).toEqual({
+      profile_id: "jobs-fast",
+      enabled: true,
+      alert_schedule_mode: "work_hours",
+      scan_window_hours: 6,
+      semantic_max_messages: 40,
+      timezone: "America/New_York",
+      workdays: ["mon", "wed", "fri"],
+      work_start: "08:30",
+      work_end: "18:15",
+      work_interval_minutes: 30,
+      off_hours_interval_minutes: 120,
+      alert_rule: "high_new_only",
+      alert_max_age_minutes: 45,
+      updated_at: "2026-05-13T00:00:00Z",
+    });
+    expect(JSON.stringify(state)).not.toContain("secret");
+  });
+
   it("sanitizes active Desk action progress from dashboard state", () => {
     const state = sanitizeDashboardState({
       active_actions: [
@@ -139,6 +181,9 @@ describe("dashboard state sanitizers", () => {
         supported_commands: ["/status", "/latest", "/scan", 7],
         local_first_note: "Replies only while local gateway is running.",
         start_command: "./tgcs bot run",
+        last_update_at: "2026-05-12T15:00:00Z",
+        last_error: "TGCS_TELEGRAM_BOT_TOKEN=[redacted-secret]",
+        safe_next_action: "Bot Gateway is running.",
         background: {
           schema_version: "desk_bot_gateway_background_status_v1",
           backend: "windows_schtasks",
@@ -164,6 +209,9 @@ describe("dashboard state sanitizers", () => {
       supported_commands: ["/status", "/latest", "/scan"],
       local_first_note: "Replies only while local gateway is running.",
       start_command: "./tgcs bot run",
+      last_update_at: "2026-05-12T15:00:00Z",
+      last_error: "TGCS_TELEGRAM_BOT_TOKEN=[redacted-secret]",
+      safe_next_action: "Bot Gateway is running.",
       background: {
         schema_version: "desk_bot_gateway_background_status_v1",
         backend: "windows_schtasks",

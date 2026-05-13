@@ -20,13 +20,14 @@ import {
 import { InlineEmpty, PanelHeader } from "./common";
 import { alertMode, diffStats, toneClass } from "../domain/display";
 import { formatDate, formatScanWindow, profileDisplayName, titleCaseLabel } from "../domain/format";
-import type { Profile, ProfileCreateResult, ProfilePatch } from "../domain/types";
+import type { Profile, ProfileCreateResult, ProfilePatch, ProfileRuntimeSettings } from "../domain/types";
 
 export function ProfilesView({
   profiles,
   patches,
   applyPatch,
   revertPatch,
+  replayPatch,
   setAlertMode,
   setProfileEnabled,
   setProfileRuntimeSettings,
@@ -41,9 +42,10 @@ export function ProfilesView({
   patches: ProfilePatch[];
   applyPatch: (patchId: string) => void;
   revertPatch: (patchId: string) => void;
+  replayPatch: (patchId: string) => void;
   setAlertMode: (profileId: string, mode: string) => void;
   setProfileEnabled: (profileId: string, enabled: boolean) => void;
-  setProfileRuntimeSettings: (profileId: string, settings: { scan_window_hours?: number; semantic_max_messages?: number }) => void;
+  setProfileRuntimeSettings: (profileId: string, settings: ProfileRuntimeSettings) => void;
   createProfileDraftNote: (profileId: string, note: string) => Promise<void>;
   createProfileMatchingPreferencesDraft: (profileId: string, preferences: string) => Promise<void>;
   createProfileFromBrief: (payload: {
@@ -123,6 +125,7 @@ export function ProfilesView({
                 busy={busy}
                 key={patch.patch_id}
                 patch={patch}
+                replayPatch={replayPatch}
                 revertPatch={revertPatch}
               />
             ))}
@@ -281,7 +284,7 @@ function ProfileRow({
   profile: Profile;
   setAlertMode: (profileId: string, mode: string) => void;
   setProfileEnabled: (profileId: string, enabled: boolean) => void;
-  setProfileRuntimeSettings: (profileId: string, settings: { scan_window_hours?: number; semantic_max_messages?: number }) => void;
+  setProfileRuntimeSettings: (profileId: string, settings: ProfileRuntimeSettings) => void;
   createProfileDraftNote: (profileId: string, note: string) => Promise<void>;
   createProfileMatchingPreferencesDraft: (profileId: string, preferences: string) => Promise<void>;
   busy: boolean;
@@ -467,11 +470,13 @@ function ProfilePatchCard({
   patch,
   applyPatch,
   revertPatch,
+  replayPatch,
   busy,
 }: {
   patch: ProfilePatch;
   applyPatch: (patchId: string) => void;
   revertPatch: (patchId: string) => void;
+  replayPatch: (patchId: string) => void;
   busy: boolean;
 }) {
   const { added, removed } = parseDiff(patch.diff_text || "");
@@ -560,6 +565,18 @@ function ProfilePatchCard({
               <span>Revert</span>
             </button>
           )}
+          {patch.status === "reverted" && (
+            <button
+              className="text-button"
+              type="button"
+              onClick={() => replayPatch(patch.patch_id)}
+              disabled={busy}
+              title="Create a fresh pending diff from this reverted profile change if the file still matches the saved snapshot"
+            >
+              <RefreshCw size={15} />
+              <span>Replay</span>
+            </button>
+          )}
         </div>
       </div>
     </article>
@@ -604,7 +621,7 @@ function ProfileRuntimeSettingsControl({
   busy,
 }: {
   profile: Profile;
-  setProfileRuntimeSettings: (profileId: string, settings: { scan_window_hours?: number; semantic_max_messages?: number }) => void;
+  setProfileRuntimeSettings: (profileId: string, settings: ProfileRuntimeSettings) => void;
   createProfileDraftNote: (profileId: string, note: string) => Promise<void>;
   createProfileMatchingPreferencesDraft: (profileId: string, preferences: string) => Promise<void>;
   busy: boolean;

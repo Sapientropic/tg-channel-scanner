@@ -19,6 +19,9 @@ BOT_GATEWAY_STATUS_KEYS = (
     "supported_commands",
     "local_first_note",
     "start_command",
+    "last_update_at",
+    "last_error",
+    "safe_next_action",
     "started_at",
     "last_poll_at",
 )
@@ -100,6 +103,10 @@ class BotGatewayContractTests(unittest.TestCase):
                         "last_poll_at": expected["last_poll_at"],
                         "authorized_chat_count": expected["authorized_chat_count"],
                         "commands_installed": expected["commands_installed"],
+                        "last_error": (
+                            "TGCS_TELEGRAM_BOT_TOKEN=BOT_GATEWAY_TOKEN_SHOULD_NOT_SURFACE "
+                            "chat_id=12345678901 C:\\Users\\Administrator\\private\\bot-gateway-state.json"
+                        ),
                         "offset": 9,
                     }
                 ),

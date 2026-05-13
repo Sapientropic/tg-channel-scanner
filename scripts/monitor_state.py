@@ -31,10 +31,19 @@ PROFILE_PATCH_SCHEMA_VERSION = "profile_patch_suggestion_v1"
 DELIVERY_TARGET_SCHEMA_VERSION = "delivery_target_v1"
 DEFAULT_FEEDBACK_EXPORT_PATH = "output/feedback/review-feedback.jsonl"
 ALERT_SCHEDULE_MODES = {"work_hours", "all_day", "muted"}
-PROFILE_RUNTIME_SETTING_LIMITS = {
+ALERT_RULES = {"high_new_or_changed", "high_new_only"}
+PROFILE_RUNTIME_INT_LIMITS = {
     "scan_window_hours": (1, 168),
     "semantic_max_messages": (1, 500),
+    "work_interval_minutes": (1, 1440),
+    "off_hours_interval_minutes": (1, 1440),
+    "alert_max_age_minutes": (1, 10080),
 }
+PROFILE_RUNTIME_SETTING_LIMITS = PROFILE_RUNTIME_INT_LIMITS
+PROFILE_RUNTIME_STRING_FIELDS = {"timezone", "work_start", "work_end", "alert_rule"}
+PROFILE_RUNTIME_LIST_FIELDS = {"workdays"}
+PROFILE_RUNTIME_SETTINGS_ALLOWED = set(PROFILE_RUNTIME_INT_LIMITS) | PROFILE_RUNTIME_STRING_FIELDS | PROFILE_RUNTIME_LIST_FIELDS
+PROFILE_WEEKDAYS = {"mon", "tue", "wed", "thu", "fri", "sat", "sun"}
 
 PENDING_STATUS = "pending"
 HANDLED_STATUSES = {"kept", "skipped", "false_positive", "follow_up"}
@@ -446,6 +455,18 @@ def dashboard_profile_projection(profile: dict[str, Any], *, report_title: str =
         "source_topics": [str(topic) for topic in source_topics if str(topic).strip()],
         "scan_window_hours": non_negative_int(config.get("scan_window_hours")),
         "semantic_max_messages": non_negative_int(config.get("semantic_max_messages")),
+        "timezone": str(config.get("timezone") or ""),
+        "workdays": (
+            [str(day) for day in config.get("workdays", []) if str(day).strip()]
+            if isinstance(config.get("workdays"), list)
+            else []
+        ),
+        "work_start": str(config.get("work_start") or ""),
+        "work_end": str(config.get("work_end") or ""),
+        "work_interval_minutes": non_negative_int(config.get("work_interval_minutes")),
+        "off_hours_interval_minutes": non_negative_int(config.get("off_hours_interval_minutes")),
+        "alert_rule": str(config.get("alert_rule") or "high_new_or_changed"),
+        "alert_max_age_minutes": non_negative_int(config.get("alert_max_age_minutes")),
         "delivery_target_count": len(delivery_targets),
         "matching_profile": profile_matching_summary(profile_path),
         "updated_at": profile.get("updated_at"),
@@ -590,6 +611,72 @@ def update_profile_enabled(conn: sqlite3.Connection, *, profile_id: str, enabled
     return _profile_from_row(updated)
 
 
+def _clean_runtime_hhmm(key: str, value: object) -> str:
+    if not isinstance(value, str) or not re.fullmatch(r"\d{2}:\d{2}", value.strip()):
+        raise MonitorStateError(f"{key} must use HH:MM format.")
+    hour_text, minute_text = value.strip().split(":", 1)
+    hour = int(hour_text)
+    minute = int(minute_text)
+    if hour > 23 or minute > 59:
+        raise MonitorStateError(f"{key} must use HH:MM format.")
+    return f"{hour:02d}:{minute:02d}"
+
+
+def _clean_runtime_timezone(value: object) -> str:
+    if not isinstance(value, str):
+        raise MonitorStateError("timezone must be a valid IANA timezone.")
+    timezone = value.strip()
+    if (
+        not timezone
+        or len(timezone) > 80
+        or ".." in timezone
+        or timezone.startswith(("/", "."))
+        or "//" in timezone
+        or not re.fullmatch(r"[A-Za-z0-9_+\-]+(?:/[A-Za-z0-9_+\-]+)*", timezone)
+    ):
+        raise MonitorStateError("timezone must be a valid IANA timezone.")
+    return timezone
+
+
+def _clean_runtime_workdays(value: object) -> list[str]:
+    if not isinstance(value, list) or not value:
+        raise MonitorStateError("workdays must be a non-empty list of weekday names.")
+    cleaned: list[str] = []
+    for item in value:
+        if not isinstance(item, str):
+            raise MonitorStateError("workdays must contain weekday names.")
+        day = item.strip().lower()[:3]
+        if day not in PROFILE_WEEKDAYS:
+            raise MonitorStateError("workdays must contain weekday names.")
+        if day not in cleaned:
+            cleaned.append(day)
+    return cleaned
+
+
+def _clean_runtime_setting(key: str, value: object) -> Any:
+    if key in PROFILE_RUNTIME_INT_LIMITS:
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise MonitorStateError(f"{key} must be an integer.")
+        lower, upper = PROFILE_RUNTIME_INT_LIMITS[key]
+        if value < lower or value > upper:
+            raise MonitorStateError(f"{key} must be between {lower} and {upper}.")
+        return value
+    if key == "timezone":
+        return _clean_runtime_timezone(value)
+    if key in {"work_start", "work_end"}:
+        return _clean_runtime_hhmm(key, value)
+    if key == "alert_rule":
+        if not isinstance(value, str):
+            raise MonitorStateError(f"alert_rule must be one of: {', '.join(sorted(ALERT_RULES))}.")
+        alert_rule = value.strip()
+        if alert_rule not in ALERT_RULES:
+            raise MonitorStateError(f"alert_rule must be one of: {', '.join(sorted(ALERT_RULES))}.")
+        return alert_rule
+    if key == "workdays":
+        return _clean_runtime_workdays(value)
+    raise MonitorStateError(f"Unsupported profile setting field: {key}")
+
+
 def update_profile_runtime_settings(
     conn: sqlite3.Connection,
     *,
@@ -605,14 +692,9 @@ def update_profile_runtime_settings(
     if not isinstance(config, dict):
         config = {}
     for key, value in settings.items():
-        if key not in PROFILE_RUNTIME_SETTING_LIMITS:
+        if key not in PROFILE_RUNTIME_SETTINGS_ALLOWED:
             raise MonitorStateError(f"Unsupported profile setting field: {key}")
-        if isinstance(value, bool) or not isinstance(value, int):
-            raise MonitorStateError(f"{key} must be an integer.")
-        lower, upper = PROFILE_RUNTIME_SETTING_LIMITS[key]
-        if value < lower or value > upper:
-            raise MonitorStateError(f"{key} must be between {lower} and {upper}.")
-        config[key] = value
+        config[key] = _clean_runtime_setting(key, value)
     now = utc_now()
     conn.execute(
         "UPDATE profiles SET config_json = ?, updated_at = ? WHERE profile_id = ?",
@@ -637,11 +719,18 @@ def apply_profile_runtime_overrides(conn: sqlite3.Connection, profile: dict[str,
     mode = config.get("alert_schedule_mode")
     if mode in ALERT_SCHEDULE_MODES:
         merged["alert_schedule_mode"] = mode
-    for key in PROFILE_RUNTIME_SETTING_LIMITS:
+    for key in PROFILE_RUNTIME_INT_LIMITS:
         value = config.get(key)
-        lower, upper = PROFILE_RUNTIME_SETTING_LIMITS[key]
+        lower, upper = PROFILE_RUNTIME_INT_LIMITS[key]
         if isinstance(value, int) and not isinstance(value, bool) and lower <= value <= upper:
             merged[key] = value
+    for key in PROFILE_RUNTIME_STRING_FIELDS:
+        value = config.get(key)
+        if isinstance(value, str) and value.strip():
+            merged[key] = value
+    workdays = config.get("workdays")
+    if isinstance(workdays, list) and workdays:
+        merged["workdays"] = [str(day) for day in workdays if str(day).strip()]
     return merged
 
 
@@ -964,6 +1053,11 @@ def alert_candidates(
     suppressed = set(suppressed_card_ids or [])
     suppressed_keys = set(suppressed_alert_keys or [])
     max_age = None
+    rule_name = "high_new_or_changed"
+    if isinstance(alert_rule, dict) and isinstance(alert_rule.get("name"), str):
+        candidate_rule = str(alert_rule["name"]).strip()
+        if candidate_rule in ALERT_RULES:
+            rule_name = candidate_rule
     if isinstance(alert_rule, dict) and alert_rule.get("max_age_minutes") is not None:
         try:
             max_age = int(alert_rule["max_age_minutes"])
@@ -992,10 +1086,15 @@ def alert_candidates(
             continue
         if card.get("status") in HANDLED_STATUSES:
             continue
+        allowed_statuses = {"new"} if rule_name == "high_new_only" else {"new", "changed"}
         if (
             str(item.get("rating") or "").lower() == "high"
-            and state.get("status") in {"new", "changed"}
-            and _within_freshness_window(item, max_age, current_time)
+            and state.get("status") in allowed_statuses
+            and _within_freshness_window(
+                item,
+                max_age,
+                current_time,
+            )
         ):
             candidates.append(card)
     return candidates
@@ -1975,6 +2074,76 @@ def revert_profile_patch(conn: sqlite3.Connection, *, patch_id: str, profile_pat
         "snapshot_id": snapshot["snapshot_id"],
         "profile_path": str(profile_path),
         "reverted_at": now,
+    }
+
+
+def replay_profile_patch(conn: sqlite3.Connection, *, patch_id: str, profile_path: Path | None = None) -> dict[str, Any]:
+    row = conn.execute(
+        "SELECT * FROM profile_patch_suggestions WHERE patch_id = ?",
+        (patch_id,),
+    ).fetchone()
+    if not row:
+        raise MonitorStateError(f"Profile patch not found: {patch_id}")
+    if row["status"] != "reverted":
+        raise MonitorStateError(f"Profile patch is not reverted: {patch_id}")
+    snapshot = conn.execute(
+        """
+        SELECT * FROM profile_snapshots
+        WHERE profile_id = ? AND reason = ?
+        ORDER BY created_at DESC
+        LIMIT 1
+        """,
+        (row["profile_id"], f"before {patch_id}"),
+    ).fetchone()
+    if not snapshot:
+        raise MonitorStateError(f"Profile snapshot not found for patch: {patch_id}")
+    if profile_path is None:
+        profile_row = conn.execute("SELECT path FROM profiles WHERE profile_id = ?", (row["profile_id"],)).fetchone()
+        profile_path = dashboard_profile_file_path(profile_row["path"] if profile_row else snapshot["profile_path"])
+    current = profile_path.read_text(encoding="utf-8") if profile_path.exists() else ""
+    # Replay is intentionally stricter than "apply old patch again": it creates
+    # a fresh pending diff only while the profile still matches the revert
+    # snapshot, so manual edits after rollback cannot be overwritten by a click.
+    if current != snapshot["profile_text"]:
+        raise MonitorStateError("Profile changed after patch was reverted; regenerate the profile diff.")
+    now = utc_now()
+    new_patch_id = "patch_" + uuid.uuid4().hex
+    base_profile_hash = sha256_text(current)
+    conn.execute(
+        """
+        INSERT INTO profile_patch_suggestions(
+            patch_id, profile_id, card_id, note, status, diff_text,
+            proposed_profile_text, base_profile_hash, created_at, applied_at
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            new_patch_id,
+            row["profile_id"],
+            row["card_id"],
+            row["note"],
+            "pending",
+            row["diff_text"],
+            row["proposed_profile_text"],
+            base_profile_hash,
+            now,
+            None,
+        ),
+    )
+    conn.commit()
+    return {
+        "schema_version": PROFILE_PATCH_SCHEMA_VERSION,
+        "patch_id": new_patch_id,
+        "profile_id": row["profile_id"],
+        "card_id": row["card_id"],
+        "note": row["note"],
+        "status": "pending",
+        "diff_text": row["diff_text"],
+        "proposed_profile_text": row["proposed_profile_text"],
+        "base_profile_hash": base_profile_hash,
+        "created_at": now,
+        "applied_at": None,
+        "replayed_from_patch_id": patch_id,
     }
 
 

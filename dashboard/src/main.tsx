@@ -33,6 +33,7 @@ import {
   previewDeskSourceImport,
   previewSourceAssistant as previewSourceAssistantRequest,
   pullLatestGit,
+  replayProfilePatch,
   revertProfilePatch,
   removeDeskSource as removeDeskSourceRequest,
   saveDeskDeliveryTarget,
@@ -77,6 +78,7 @@ import type {
   FeedbackProfileSuggestionsResult,
   GitUpdateStatus,
   ProfileCreateResult,
+  ProfileRuntimeSettings,
   SourceImportResult,
   Tab,
 } from "./domain/types";
@@ -321,6 +323,20 @@ function App() {
     }
   }
 
+  async function replayPatch(patchId: string) {
+    setBusy(true);
+    setNotice(null);
+    try {
+      await replayProfilePatch(patchId);
+      await refresh();
+      setNotice({ tone: "success", text: "Profile diff replayed for review" });
+    } catch (error) {
+      setNotice({ tone: "error", text: errorMessage(error) });
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function setAlertMode(profileId: string, mode: string) {
     setBusy(true);
     setNotice(null);
@@ -464,7 +480,7 @@ function App() {
     }
   }
 
-  async function setProfileRuntimeSettings(profileId: string, settings: { scan_window_hours?: number; semantic_max_messages?: number }) {
+  async function setProfileRuntimeSettings(profileId: string, settings: ProfileRuntimeSettings) {
     setBusy(true);
     setNotice(null);
     try {
@@ -1014,6 +1030,7 @@ function App() {
                 profiles={state.profiles}
                 patches={state.profile_patch_suggestions}
                 applyPatch={applyPatch}
+                replayPatch={replayPatch}
                 revertPatch={revertPatch}
                 setAlertMode={setAlertMode}
                 setProfileEnabled={setProfileEnabled}

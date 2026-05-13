@@ -2924,6 +2924,7 @@ class DashboardServerGitTests(unittest.TestCase):
             ),
             "/api/profile-patches/patch_123/apply": (dashboard_server.monitor_state, "apply_profile_patch"),
             "/api/profile-patches/patch_123/revert": (dashboard_server.monitor_state, "revert_profile_patch"),
+            "/api/profile-patches/patch_123/replay": (dashboard_server.monitor_state, "replay_profile_patch"),
         }
         for path, (module, function_name) in endpoint_functions.items():
             with self.subTest(path=path):
@@ -3447,6 +3448,43 @@ class DashboardServerGitTests(unittest.TestCase):
         self.assertTrue(handler.conn.closed)
         self.assertEqual(handler.status, HTTPStatus.OK)
         self.assertEqual(handler.payload["result"]["status"], "reverted")
+
+    def test_profile_patch_replay_endpoint_calls_monitor_state(self):
+        class FakeConnection:
+            closed = False
+
+            def close(self):
+                self.closed = True
+
+        class FakeHandler:
+            path = "/api/profile-patches/patch_123/replay"
+            status = None
+            payload = None
+            conn = FakeConnection()
+
+            def _read_json_body(self):
+                return {}
+
+            def _connect(self):
+                return self.conn
+
+            def _json(self, status, payload):
+                self.status = status
+                self.payload = payload
+
+        with patch.object(
+            dashboard_server.monitor_state,
+            "replay_profile_patch",
+            return_value={"patch_id": "patch_456", "status": "pending", "replayed_from_patch_id": "patch_123"},
+        ) as replay_mock:
+            handler = FakeHandler()
+            dashboard_server.DashboardHandler.do_POST(handler)
+
+        replay_mock.assert_called_once_with(handler.conn, patch_id="patch_123")
+        self.assertTrue(handler.conn.closed)
+        self.assertEqual(handler.status, HTTPStatus.OK)
+        self.assertEqual(handler.payload["result"]["status"], "pending")
+        self.assertEqual(handler.payload["result"]["replayed_from_patch_id"], "patch_123")
 
     def test_feedback_profile_suggestions_endpoint_calls_monitor_state(self):
         class FakeConnection:

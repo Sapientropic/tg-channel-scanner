@@ -465,10 +465,10 @@ Cleanup:
   - Product direction: `ROADMAP.md`.
   - Agent execution: `SKILL.md`.
   - JSON contracts: `docs/agent-cli-contract.md`.
-  - Implementation specs: `docs/superpowers/specs/` or another owner-approved
-    specs directory.
-- Add an index for active specs if `docs/superpowers/specs/` remains the
-  project convention.
+  - Internal implementation specs: gitignored `docs/internal/specs/`.
+- Keep `docs/internal/specs/INDEX.md` as the private index authority for active
+  specs. Public docs may link to stable summaries, but must not mirror internal
+  implementation details.
 - Archive or move temporary quality logs out of public docs.
 
 Done when:
@@ -654,10 +654,8 @@ The technical-debt cleanup is complete when:
 2. [⚠️ 需确认] Should behavior-changing fixes be allowed during cleanup?
    Recommendation: only when a test exposes a real privacy, contract, or setup
    bug; otherwise keep refactor-only.
-3. [⚠️ 需确认] Should implementation specs live under
-   `docs/superpowers/specs/` as the project convention, or should debt specs
-   stay under `docs/`? Recommendation: use `docs/superpowers/specs/` for active
-   implementation specs after the current untracked directory is accepted.
+3. Implementation specs live under gitignored `docs/internal/specs/`; the
+   private `INDEX.md` there is the authority for active spec ownership.
 4. [⚠️ 需确认] What is the acceptable local Python test runtime after cleanup?
    Current observed runtime is about 95 seconds. Recommendation: keep full suite
    under two minutes, but create smaller focused gates under ten seconds.

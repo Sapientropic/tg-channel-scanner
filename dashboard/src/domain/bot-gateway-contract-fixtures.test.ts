@@ -31,6 +31,9 @@ function botGatewayContract(value: unknown) {
     supported_commands: record.supported_commands,
     local_first_note: record.local_first_note,
     start_command: record.start_command,
+    last_update_at: record.last_update_at,
+    last_error: record.last_error,
+    safe_next_action: record.safe_next_action,
     started_at: record.started_at,
     last_poll_at: record.last_poll_at,
     background: {

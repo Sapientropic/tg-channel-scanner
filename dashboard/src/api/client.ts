@@ -35,6 +35,7 @@ import type {
   FeedbackExportResult,
   FeedbackProfileSuggestionsResult,
   GitUpdateStatus,
+  ProfileRuntimeSettings,
   ProfileCreateResult,
   SourceImportResult,
 } from "../domain/types";
@@ -83,6 +84,15 @@ export async function revertProfilePatch(patchId: string) {
   await assertOk(response);
 }
 
+export async function replayProfilePatch(patchId: string) {
+  const response = await fetch(`/api/profile-patches/${encodeURIComponent(patchId)}/replay`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({}),
+  });
+  await assertOk(response);
+}
+
 export async function setProfileAlertMode(profileId: string, mode: string) {
   const response = await fetch(`/api/profiles/${encodeURIComponent(profileId)}/alert-mode`, {
     method: "POST",
@@ -103,7 +113,7 @@ export async function setProfileEnabled(profileId: string, enabled: boolean) {
 
 export async function setProfileRuntimeSettings(
   profileId: string,
-  settings: { scan_window_hours?: number; semantic_max_messages?: number },
+  settings: ProfileRuntimeSettings,
 ) {
   const response = await fetch(`/api/profiles/${encodeURIComponent(profileId)}/runtime-settings`, {
     method: "POST",

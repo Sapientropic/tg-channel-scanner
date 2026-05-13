@@ -2296,6 +2296,109 @@ class MonitorStateTests(unittest.TestCase):
         self.assertEqual(snapshot["profiles"][0]["semantic_max_messages"], 40)
         self.assertNotIn("config", snapshot["profiles"][0])
 
+    def test_profile_runtime_settings_update_persists_schedule_and_alert_rules(self):
+        conn = sqlite3.connect(":memory:")
+        conn.row_factory = sqlite3.Row
+        monitor_state.init_db(conn)
+        monitor_state.upsert_profile(
+            conn,
+            {
+                "id": "jobs-fast",
+                "path": "profiles/templates/jobs.md",
+                "enabled": True,
+                "timezone": "Asia/Shanghai",
+                "work_start": "09:00",
+                "work_end": "23:00",
+                "work_interval_minutes": 15,
+                "off_hours_interval_minutes": 60,
+                "alert_rule": "high_new_or_changed",
+                "alert_max_age_minutes": 60,
+            },
+        )
+
+        profile = monitor_state.update_profile_runtime_settings(
+            conn,
+            profile_id="jobs-fast",
+            settings={
+                "timezone": "America/New_York",
+                "workdays": ["mon", "wed", "fri"],
+                "work_start": "08:30",
+                "work_end": "18:15",
+                "work_interval_minutes": 30,
+                "off_hours_interval_minutes": 120,
+                "alert_rule": "high_new_only",
+                "alert_max_age_minutes": 45,
+            },
+        )
+        overridden = monitor_state.apply_profile_runtime_overrides(
+            conn,
+            {
+                "id": "jobs-fast",
+                "path": "profiles/templates/jobs.md",
+                "timezone": "Asia/Shanghai",
+                "work_start": "09:00",
+                "work_end": "23:00",
+                "work_interval_minutes": 15,
+                "off_hours_interval_minutes": 60,
+                "alert_rule": "high_new_or_changed",
+                "alert_max_age_minutes": 60,
+            },
+        )
+        snapshot = monitor_state.dashboard_snapshot(conn)
+
+        self.assertEqual(profile["config"]["timezone"], "America/New_York")
+        self.assertEqual(profile["config"]["workdays"], ["mon", "wed", "fri"])
+        self.assertEqual(profile["config"]["work_start"], "08:30")
+        self.assertEqual(profile["config"]["work_end"], "18:15")
+        self.assertEqual(profile["config"]["work_interval_minutes"], 30)
+        self.assertEqual(profile["config"]["off_hours_interval_minutes"], 120)
+        self.assertEqual(profile["config"]["alert_rule"], "high_new_only")
+        self.assertEqual(profile["config"]["alert_max_age_minutes"], 45)
+        self.assertEqual(overridden["timezone"], "America/New_York")
+        self.assertEqual(overridden["workdays"], ["mon", "wed", "fri"])
+        self.assertEqual(overridden["work_start"], "08:30")
+        self.assertEqual(overridden["work_end"], "18:15")
+        self.assertEqual(overridden["work_interval_minutes"], 30)
+        self.assertEqual(overridden["off_hours_interval_minutes"], 120)
+        self.assertEqual(overridden["alert_rule"], "high_new_only")
+        self.assertEqual(overridden["alert_max_age_minutes"], 45)
+        self.assertEqual(snapshot["profiles"][0]["alert_rule"], "high_new_only")
+        self.assertEqual(snapshot["profiles"][0]["alert_max_age_minutes"], 45)
+        self.assertNotIn("config", snapshot["profiles"][0])
+
+    def test_high_new_only_alert_rule_excludes_changed_cards(self):
+        now = datetime(2026, 5, 13, 12, 0, tzinfo=UTC)
+        cards = [
+            {
+                "card_id": "new-card",
+                "status": "pending",
+                "opportunity_status": "open",
+                "item": {
+                    "rating": "high",
+                    "decision_state": {"status": "new"},
+                    "monitor_freshness": {"freshest_source_at": now.isoformat().replace("+00:00", "Z")},
+                },
+            },
+            {
+                "card_id": "changed-card",
+                "status": "pending",
+                "opportunity_status": "open",
+                "item": {
+                    "rating": "high",
+                    "decision_state": {"status": "changed"},
+                    "monitor_freshness": {"freshest_source_at": now.isoformat().replace("+00:00", "Z")},
+                },
+            },
+        ]
+
+        candidates = monitor_state.alert_candidates(
+            cards,
+            alert_rule={"name": "high_new_only", "max_age_minutes": 60},
+            now=now,
+        )
+
+        self.assertEqual([card["card_id"] for card in candidates], ["new-card"])
+
     def test_profile_runtime_settings_rejects_invalid_values(self):
         conn = sqlite3.connect(":memory:")
         conn.row_factory = sqlite3.Row
@@ -2312,6 +2415,14 @@ class MonitorStateTests(unittest.TestCase):
             {"semantic_max_messages": 501},
             {"scan_window_hours": True},
             {"command": "tgcs monitor run"},
+            {"timezone": ".."},
+            {"workdays": ["mon", "noday"]},
+            {"work_start": "25:00"},
+            {"work_end": "18"},
+            {"work_interval_minutes": 0},
+            {"off_hours_interval_minutes": 1441},
+            {"alert_rule": "all_items"},
+            {"alert_max_age_minutes": 0},
         ]
         for settings in invalid_settings:
             with self.subTest(settings=settings):
@@ -2611,6 +2722,56 @@ class MonitorStateTests(unittest.TestCase):
             ).fetchone()[0],
             "reverted",
         )
+
+    def test_reverted_profile_patch_can_replay_as_new_pending_patch(self):
+        conn = sqlite3.connect(":memory:")
+        conn.row_factory = sqlite3.Row
+        monitor_state.init_db(conn)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            profile_path = Path(tmp) / "profile.md"
+            original = "# Profile\n\n## Search Rules\n1. Keep useful items.\n"
+            profile_path.write_text(original, encoding="utf-8")
+            monitor_state.upsert_profile(
+                conn,
+                {"id": "market-news", "path": str(profile_path), "enabled": True},
+            )
+            cards = monitor_state.upsert_review_cards(
+                conn,
+                profile_id="market-news",
+                run_id="run-1",
+                items=[
+                    {
+                        "topic": "New rule",
+                        "rating": "high",
+                        "decision_state": {"status": "new"},
+                        "source_message_refs": [{"channel": "source", "id": 1}],
+                    }
+                ],
+            )
+            card = monitor_state.set_card_action(
+                conn,
+                card_id=cards[0]["card_id"],
+                action="follow_up",
+                note="Prefer official incident updates.",
+                profile_path=profile_path,
+            )
+            patch = card["profile_patch_suggestion"]
+            monitor_state.apply_profile_patch(conn, patch_id=patch["patch_id"], profile_path=profile_path)
+            monitor_state.revert_profile_patch(conn, patch_id=patch["patch_id"], profile_path=profile_path)
+
+            replay = monitor_state.replay_profile_patch(conn, patch_id=patch["patch_id"], profile_path=profile_path)
+
+        self.assertNotEqual(replay["patch_id"], patch["patch_id"])
+        self.assertEqual(replay["status"], "pending")
+        self.assertEqual(replay["replayed_from_patch_id"], patch["patch_id"])
+        self.assertEqual(replay["base_profile_hash"], monitor_state.sha256_text(original))
+        statuses = {
+            row["patch_id"]: row["status"]
+            for row in conn.execute("SELECT patch_id, status FROM profile_patch_suggestions").fetchall()
+        }
+        self.assertEqual(statuses[patch["patch_id"]], "reverted")
+        self.assertEqual(statuses[replay["patch_id"]], "pending")
 
     def test_revert_profile_patch_refuses_when_profile_changed_after_apply(self):
         conn = sqlite3.connect(":memory:")

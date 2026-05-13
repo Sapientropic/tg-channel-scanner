@@ -19,6 +19,17 @@ import type {
   ProfileCreateResult,
   SourceImportResult,
 } from "../types";
+import {
+  assignOptionalNumbers,
+  isRecord,
+  nonNegativeInteger,
+  nonNegativeIntegerOrDefault,
+  numberOrDefault,
+  optionalString,
+  optionalStringOrNull,
+  sanitizeNumberRecord,
+  stringArray,
+} from "./shared";
 
 export function sanitizeGitUpdateStatus(value: unknown): GitUpdateStatus | null {
   if (!isRecord(value) || value.schema_version !== "git_update_status_v1") {
@@ -412,6 +423,18 @@ export function sanitizeDeskBotGatewayStatus(value: unknown): DeskBotGatewayStat
   };
   const startedAt = optionalString(value.started_at);
   const lastPollAt = optionalString(value.last_poll_at);
+  const lastUpdateAt = optionalString(value.last_update_at);
+  const lastError = optionalString(value.last_error);
+  const safeNextAction = optionalString(value.safe_next_action);
+  if (lastUpdateAt) {
+    sanitized.last_update_at = lastUpdateAt;
+  }
+  if (lastError) {
+    sanitized.last_error = lastError;
+  }
+  if (safeNextAction) {
+    sanitized.safe_next_action = safeNextAction;
+  }
   if (startedAt) {
     sanitized.started_at = startedAt;
   }
@@ -693,67 +716,4 @@ function sanitizeObjectArray(value: unknown, scope: string): Record<string, unkn
     }
     return [item];
   });
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function optionalString(value: unknown) {
-  if (typeof value !== "string") {
-    return undefined;
-  }
-  const trimmed = value.trim();
-  return trimmed ? trimmed : undefined;
-}
-
-function optionalStringOrNull(value: unknown) {
-  if (value === null) {
-    return null;
-  }
-  return optionalString(value);
-}
-
-function numberOrDefault(value: unknown, fallback: number) {
-  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
-}
-
-function nonNegativeIntegerOrDefault(value: unknown, fallback: number) {
-  return typeof value === "number" && Number.isInteger(value) && value >= 0 ? value : fallback;
-}
-
-function nonNegativeInteger(value: unknown) {
-  return typeof value === "number" && Number.isInteger(value) && value >= 0 ? value : null;
-}
-
-function assignOptionalNumbers<T extends object>(target: T, record: Record<string, unknown>, fields: string[]) {
-  const writable = target as Record<string, unknown>;
-  fields.forEach((field) => {
-    const value = record[field];
-    if (typeof value === "number" && Number.isFinite(value)) {
-      writable[field] = value;
-    }
-  });
-}
-
-function sanitizeNumberRecord(value: unknown): Record<string, number> | undefined {
-  if (!isRecord(value)) {
-    return undefined;
-  }
-  const clean = Object.fromEntries(
-    Object.entries(value).filter((entry): entry is [string, number] => typeof entry[1] === "number" && Number.isFinite(entry[1])),
-  );
-  return Object.keys(clean).length ? clean : undefined;
-}
-
-function stringArray(value: unknown) {
-  return Array.isArray(value)
-    ? value.flatMap((item) => {
-        if (typeof item !== "string") {
-          return [];
-        }
-        const trimmed = item.trim();
-        return trimmed ? [trimmed] : [];
-      })
-    : [];
 }
