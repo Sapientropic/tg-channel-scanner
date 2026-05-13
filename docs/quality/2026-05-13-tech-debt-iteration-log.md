@@ -1494,6 +1494,49 @@ Next:
 
 - Commit, then continue until the 14:00 stop condition.
 
+## Slice 38: Desk Fixture Contract-Vs-Copy Boundary
+
+Status: completed.
+
+Actions:
+
+- Triaged Peirce's P2 finding that Desk boundary fixtures were locking UI copy
+  and exact timestamps too tightly.
+- Updated backend Desk fixture tests to compare schema/security contract fields
+  exactly while checking `title`, `detail`, and `next_action` as required
+  non-empty display fields.
+- Updated frontend Desk boundary and source-access fixture tests to keep
+  exact assertions for contract fields, privacy denial, and aggregate summary
+  shape, while treating `finished_at`, `checked_at`, and display copy as
+  type/presence checks.
+
+Verification:
+
+- `python -m pytest tests/test_desk_contract_fixtures.py tests/test_dashboard_server.py -k "desk_actions or desk_source or desk_action_result" -q`
+  passed `19` tests, `127` deselected, and `32` subtests.
+- `python -m ruff check tests/test_desk_contract_fixtures.py` passed.
+- `cd dashboard; npm test -- --run desk-contract-fixtures desk-source-access-contract-fixtures sanitize`
+  passed `3` test files and `30` tests.
+- Staged snapshot verification passed after checking out the index to a temp
+  directory: ruff passed, backend passed `19` tests with `116` deselected and
+  `32` subtests, and frontend passed `3` test files with `28` tests.
+
+Reviewer Gate:
+
+- This addresses Peirce P2 without changing product behavior. The fixtures
+  still prove backend-only fields, local paths, tokens, argv, and per-source
+  access details cannot surface through the tested dashboard boundary.
+
+Residual Risk:
+
+- The fixture files still contain representative copy and timestamps as sample
+  payload data. The tests no longer make those strings part of the API
+  contract unless they are schema/security fields.
+
+Next:
+
+- Commit, then continue until the 14:00 stop condition.
+
 ## Slice 34: `agent_extraction_request_v1` Projection Helper Extraction
 
 Status: in progress.

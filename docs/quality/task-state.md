@@ -1,7 +1,7 @@
 state: implementing
 mode: Standard
 run_shape: continuous_until_stop
-slice_goal: "Create canonical testing gate documentation and staged-index guidance."
+slice_goal: "Relax Desk fixture tests to lock contract/security fields instead of UI copy and exact timestamps."
 stop_condition: "2026-05-13 14:00 +08:00 user acceptance window"
 handoff_policy: after_deadline_closeout
 continuation_policy: continue_after_initial_plan_until_stop_condition
@@ -11,13 +11,13 @@ blockers: []
 needs_human:
   - "Final acceptance at 2026-05-13 14:00 +08:00."
 residual_risk: "Current branch starts with substantial bot/dashboard WIP; isolate commits where possible and do not treat pre-existing changes as this slice's output."
-next_action: "Verify and commit the testing gate documentation checkpoint, then continue until the 14:00 stop condition."
+next_action: "Verify and commit the Desk fixture contract-vs-copy checkpoint, then continue until the 14:00 stop condition."
 candidate_slices:
   - "Add fixture-backed backend/frontend contract tests for high-risk v0.5 dashboard and monitor payloads."
   - "Add privacy negative tests for raw Telegram text, tokens, local paths, argv, and command leakage."
   - "Extract shared sanitizer primitives after fixture tests prove the repeated behavior."
   - "Split dashboard_server.py boundaries only after contract tests protect endpoint behavior."
-last_update: "2026-05-13T13:14:00+08:00"
+last_update: "2026-05-13T13:18:00+08:00"
 deadline: "2026-05-13T14:00:00+08:00"
-time_budget_remaining: "about 46 minutes"
+time_budget_remaining: "about 42 minutes"
 checkpoint_ready: true

@@ -15,6 +15,17 @@ SELECTED_ACTION_IDS = {
     "login_human",
     "live_delivery_human",
 }
+ACTION_CONTRACT_KEYS = ("schema_version", "action_id", "group", "run_mode", "display_command")
+ACTION_DISPLAY_KEYS = ("title", "detail", "next_action")
+ACTION_RESULT_CONTRACT_KEYS = (
+    "schema_version",
+    "action_id",
+    "status",
+    "display_command",
+    "exit_code",
+    "artifact_path",
+)
+ACTION_RESULT_DISPLAY_KEYS = ("title", "detail", "next_action")
 
 
 def load_fixture() -> dict:
@@ -32,8 +43,26 @@ def selected_desk_actions(payload: dict) -> dict:
     }
 
 
+def desk_action_contract(payload: dict) -> dict:
+    return {
+        "schema_version": payload.get("schema_version"),
+        "actions": [
+            {key: action.get(key) for key in ACTION_CONTRACT_KEYS}
+            for action in payload.get("actions", [])
+            if isinstance(action, dict)
+        ],
+    }
+
+
 def action_result_contract(result: dict) -> dict:
-    return {key: value for key, value in result.items() if key != "finished_at"}
+    return {key: result.get(key) for key in ACTION_RESULT_CONTRACT_KEYS}
+
+
+def assert_display_fields(testcase: unittest.TestCase, payload: dict, keys: tuple[str, ...]) -> None:
+    for key in keys:
+        with testcase.subTest(display_key=key):
+            testcase.assertIsInstance(payload.get(key), str)
+            testcase.assertTrue(payload[key].strip())
 
 
 def write_registry(root: Path) -> None:
@@ -80,7 +109,9 @@ class DeskContractFixtureTests(unittest.TestCase):
         fixture = load_fixture()
         payload = selected_desk_actions(dashboard_server.desk_actions())
 
-        self.assertEqual(payload, fixture["desk_actions"])
+        self.assertEqual(desk_action_contract(payload), desk_action_contract(fixture["desk_actions"]))
+        for action in payload["actions"]:
+            assert_display_fields(self, action, ACTION_DISPLAY_KEYS)
         surfaced = json.dumps(payload, ensure_ascii=False, sort_keys=True)
         self.assertNotIn("argv", surfaced)
         self.assertNotIn("artifact_keys", surfaced)
@@ -98,7 +129,8 @@ class DeskContractFixtureTests(unittest.TestCase):
             artifact_path="output/runs/run-desk-contract/report.html",
         )
 
-        self.assertEqual(action_result_contract(result), fixture["desk_action_result"])
+        self.assertEqual(action_result_contract(result), action_result_contract(fixture["desk_action_result"]))
+        assert_display_fields(self, result, ACTION_RESULT_DISPLAY_KEYS)
 
     def test_desk_sources_match_registry_fixture_without_local_absolute_path(self):
         fixture = load_fixture()
