@@ -1,0 +1,289 @@
+"""Bot reply text, keyboards, and safe action summaries."""
+
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+from typing import Any
+
+try:
+    from scripts import bot_actions, bot_intents, dashboard_server, monitor_state
+    from scripts.bot_api import BotGatewayError
+except ModuleNotFoundError:
+    PROJECT_ROOT = Path(__file__).resolve().parent.parent
+    if str(PROJECT_ROOT) not in sys.path:
+        sys.path.insert(0, str(PROJECT_ROOT))
+    from scripts import bot_actions, bot_intents, dashboard_server, monitor_state
+    from scripts.bot_api import BotGatewayError
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+DEFAULT_DB_PATH = PROJECT_ROOT / ".tgcs" / "tgcs.db"
+ALLOWED_INTENT_ACTIONS = bot_intents.ALLOWED_INTENT_ACTIONS
+BotIntent = bot_intents.BotIntent
+
+
+
+def main_menu_keyboard() -> dict[str, Any]:
+    return {
+        "inline_keyboard": [
+            [
+                {"text": "Status", "callback_data": "status"},
+                {"text": "Latest", "callback_data": "latest"},
+            ],
+            [
+                {"text": "Dry scan", "callback_data": "scan:jobs-fast"},
+                {"text": "Sources", "callback_data": "sources"},
+            ],
+        ]
+    }
+
+
+
+def help_text() -> str:
+    return "\n".join(
+        [
+            "T-Sense bot",
+            "",
+            "Commands:",
+            "/status - setup, source, run, and inbox status",
+            "/latest - latest actionable cards and report",
+            "/scan - run jobs-fast in dry-run mode",
+            "/sources - source count and topics",
+            "/sources add @channel - preview a source change",
+            "/profiles - enabled profiles",
+            "/settings - local setup guidance",
+            "",
+            "Natural language works for the same safe actions. Source changes are previewed first and require the Apply button.",
+        ]
+    )
+
+
+
+def dashboard_snapshot(db_path: Path = DEFAULT_DB_PATH) -> dict[str, Any]:
+    conn = monitor_state.connect(db_path)
+    try:
+        return monitor_state.dashboard_snapshot(conn)
+    finally:
+        conn.close()
+
+
+
+def source_summary() -> str:
+    sources = dashboard_server.desk_sources()
+    topics = ", ".join(sources.get("topics") or []) or "none"
+    return "\n".join(
+        [
+            "Sources",
+            f"Total: {sources.get('source_count', 0)}",
+            f"Enabled: {sources.get('enabled_count', 0)}",
+            f"Topics: {topics}",
+            "",
+            "Send: add @channel, pause @channel, remove @channel",
+        ]
+    )
+
+
+
+def profile_summary(snapshot: dict[str, Any]) -> str:
+    profiles = [item for item in snapshot.get("profiles") or [] if isinstance(item, dict)]
+    if not profiles:
+        return "No profiles are registered yet. Open Signal Desk Start or run ./tgcs init --starter jobs."
+    lines = ["Profiles"]
+    for profile in profiles[:12]:
+        status = "enabled" if profile.get("enabled") else "muted"
+        label = str(profile.get("display_name") or profile.get("profile_id") or "profile")
+        lines.append(f"- {label}: {status}")
+    if len(profiles) > 12:
+        lines.append(f"... {len(profiles) - 12} more")
+    return "\n".join(lines)
+
+
+
+def status_summary(snapshot: dict[str, Any]) -> str:
+    setup = snapshot.get("setup_status") if isinstance(snapshot.get("setup_status"), dict) else {}
+    opportunity = snapshot.get("opportunity_summary") if isinstance(snapshot.get("opportunity_summary"), dict) else {}
+    runs = [item for item in snapshot.get("runs") or [] if isinstance(item, dict)]
+    inbox = [item for item in snapshot.get("inbox") or [] if isinstance(item, dict)]
+    latest_run = runs[0] if runs else {}
+    return "\n".join(
+        [
+            "T-Sense status",
+            f"Stage: {setup.get('stage') or 'unknown'}",
+            f"Next: {setup.get('next_step') or 'Open Signal Desk'}",
+            f"Pending review cards: {len(inbox)}",
+            f"Latest run: {latest_run.get('status') or 'none'} {latest_run.get('profile_id') or ''}".strip(),
+            f"Opportunity summary: {opportunity.get('title') or opportunity.get('status') or 'not ready'}",
+        ]
+    )
+
+
+
+def latest_summary(snapshot: dict[str, Any]) -> str:
+    opportunity = snapshot.get("opportunity_summary") if isinstance(snapshot.get("opportunity_summary"), dict) else {}
+    title = str(opportunity.get("title") or "Latest results")
+    detail = str(opportunity.get("detail") or opportunity.get("status") or "No latest summary yet.")
+    lines = [title, detail]
+    items = opportunity.get("items")
+    if isinstance(items, list):
+        for item in items[:5]:
+            if not isinstance(item, dict):
+                continue
+            label = str(item.get("title") or item.get("label") or item.get("card_title") or "Item")
+            rating = str(item.get("rating") or item.get("status") or "").strip()
+            lines.append(f"- {label}" + (f" ({rating})" if rating else ""))
+    runs = [item for item in snapshot.get("runs") or [] if isinstance(item, dict)]
+    if runs:
+        artifact = runs[0].get("report_artifact") if isinstance(runs[0].get("report_artifact"), dict) else {}
+        display_path = str(artifact.get("display_path") or artifact.get("path") or "")
+        if display_path:
+            lines.append(f"Report: {display_path}")
+    return "\n".join(lines)
+
+
+
+def latest_actionable_card(snapshot: dict[str, Any]) -> dict[str, Any] | None:
+    inbox = snapshot.get("inbox") if isinstance(snapshot.get("inbox"), list) else []
+    for card in inbox:
+        if not isinstance(card, dict):
+            continue
+        if str(card.get("opportunity_status") or "open").strip().lower() != "open":
+            continue
+        if str(card.get("card_id") or "").strip():
+            return card
+    return None
+
+
+
+def lifecycle_keyboard(card: dict[str, Any]) -> dict[str, Any] | None:
+    card_id = str(card.get("card_id") or "").strip()
+    if not card_id:
+        return None
+    return {
+        "inline_keyboard": [
+            [
+                {"text": "Applied", "callback_data": f"card:applied:{card_id}"},
+                {"text": "Save", "callback_data": f"card:saved:{card_id}"},
+            ],
+            [
+                {"text": "Contacted", "callback_data": f"card:contacted:{card_id}"},
+                {"text": "Dismiss", "callback_data": f"card:dismissed:{card_id}"},
+                {"text": "Duplicate", "callback_data": f"card:duplicate:{card_id}"},
+            ],
+        ]
+    }
+
+
+
+def lifecycle_status_label(status: object) -> str:
+    labels = {
+        "open": "Open",
+        "saved": "Saved",
+        "applied": "Applied",
+        "contacted": "Contacted",
+        "dismissed": "Dismissed",
+        "duplicate": "Duplicate",
+    }
+    return labels.get(str(status or "open").strip().lower(), "Open")
+
+
+
+def card_action_summary(card: dict[str, Any]) -> str:
+    label = lifecycle_status_label(card.get("opportunity_status"))
+    title = str(card.get("title") or "Review card").strip()
+    rating = str(card.get("rating") or "").strip()
+    detail = f"{label}: {title}"
+    if rating:
+        detail += f" ({rating})"
+    return detail
+
+
+
+def run_dry_scan(profile_id: str, *, timeout_seconds: int = 900) -> str:
+    _ = timeout_seconds
+    result = bot_actions.BotActionRegistry().execute(
+        BotIntent(action="scan_profile_dry_run", args={"profile_id": profile_id})
+    )
+    if result.error_category:
+        raise BotGatewayError(result.text)
+    return result.text
+
+
+
+def clean_topic(value: str) -> str:
+    return bot_intents.clean_topic(value)
+
+
+
+def deterministic_intent(text: str) -> BotIntent | None:
+    return bot_intents.deterministic_intent(text)
+
+
+
+def llm_intent(text: str) -> BotIntent | None:
+    return bot_intents.llm_intent(text)
+
+
+
+def route_text_to_intent(text: str, *, use_llm: bool = False) -> BotIntent:
+    return bot_intents.route_text_to_intent(text, use_llm=use_llm)
+
+
+
+def source_plan_preview(instruction: str, topic: str) -> tuple[str, dict[str, Any]]:
+    # Telegram chat confirmation only authorizes applying the resolved local
+    # plan. It is not a consent boundary for sending the saved source list to
+    # an external model, so bot previews stay parser-only until Signal Desk
+    # provides a dedicated AI source planning confirmation flow.
+    result = dashboard_server.run_source_assistant(
+        {
+            "instruction": instruction,
+            "topic": topic,
+            "dry_run": True,
+            "confirm_external_ai": False,
+        }
+    )
+    lines = [
+        result.get("title") or "Source plan ready",
+        result.get("detail") or "Review the source plan before applying it.",
+        f"Add {result.get('added_count', 0)} · Pause {result.get('disabled_count', 0)} · Resume {result.get('enabled_count', 0)} · Remove {result.get('removed_count', 0)}",
+    ]
+    preview_sources = result.get("preview_sources") if isinstance(result.get("preview_sources"), list) else []
+    for source in preview_sources[:8]:
+        if isinstance(source, dict):
+            lines.append(f"- {source.get('label') or source.get('source_id')}")
+    return "\n".join(lines), result
+
+
+
+def apply_source_plan(resolved_plan: dict[str, list[str]], topic: str) -> str:
+    result = dashboard_server.apply_source_assistant_resolved_plan(resolved_plan, topic)
+    return "\n".join(
+        [
+            result.get("title") or "Source plan applied",
+            f"Add {result.get('added_count', 0)} · Pause {result.get('disabled_count', 0)} · Resume {result.get('enabled_count', 0)} · Remove {result.get('removed_count', 0)}",
+        ]
+    )
+
+
+
+def unauthorized_text() -> str:
+    return "\n".join(
+        [
+            "This chat is not authorized for T-Sense actions.",
+            "Open Signal Desk Settings > Alerts, detect and save this bot chat, then try again.",
+            "CLI fallback: TGCS_BOT_ALLOWED_CHAT_IDS=<chat_id> ./tgcs bot run",
+        ]
+    )
+
+
+
+def settings_text() -> str:
+    return "\n".join(
+        [
+            "Settings",
+            "- Save the Telegram bot token in Signal Desk Settings > Alerts.",
+            "- Detect and save this chat ID before using bot actions.",
+            "- Keep Signal Desk or ./tgcs bot run active for local-first bot control.",
+            "- Cloud webhook and Mini App support are tracked as a later roadmap phase.",
+        ]
+    )
