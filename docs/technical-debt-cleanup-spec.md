@@ -358,6 +358,30 @@ without changing dashboard state contracts:
   `py_compile`, `python -m ruff check .`, `python -m pytest -q`, and
   `git diff --check`.
 
+## Progress Update: 2026-05-14 Dashboard Setup Projection Split
+
+The dashboard projection module shed the setup-readiness product boundary
+without changing dashboard state contracts:
+
+- `scripts/dashboard_setup.py` now owns `dashboard_setup_status_v1`, setup
+  check rows, preferred setup profile selection, run-to-profile matching,
+  source-attention detection, and the user-facing source-recovery next step.
+- `scripts/dashboard_projection.py` still owns dashboard snapshot assembly,
+  run/report artifacts, delivery target projection, profile patches, and
+  compatibility re-exports for setup helpers.
+- `tests/monitor_state/test_projection.py` now locks the
+  `monitor_state -> dashboard_projection -> dashboard_setup` facade path for
+  setup status and checklist helpers.
+- The CI explicit `py_compile` list now includes `scripts/dashboard_setup.py`.
+- Reviewer dispatch remained unavailable due account usage limits, so this
+  checkpoint uses a degraded reviewer gate. Focused setup tests cover disabled
+  profiles, first-run guidance, source-access failure priority, and dashboard
+  state contract projection.
+- Focused and full gates passed: `python -m pytest
+  tests/monitor_state/test_projection.py tests/test_dashboard_state_contracts.py
+  -q`, `python -m pytest tests/monitor_state -q`, CI-list `py_compile`,
+  `python -m ruff check .`, and `python -m pytest -q`.
+
 ## Current Debt Snapshot: 2026-05-14
 
 The debt register below remains the long-form reasoning. This table is the
@@ -381,9 +405,10 @@ Large current files are still the main maintainability signal:
 | Area | File | Lines | Why It Matters |
 | --- | ---: | ---: | --- |
 | Python server | `scripts/dashboard_server.py` | 1195 | HTTP routing, state payload assembly, route-level validation, and compatibility re-exports remain in the facade after profile creation moved out. |
-| Dashboard projection | `scripts/dashboard_projection.py` | 672 | Focused projection module for dashboard snapshots, run/report artifacts, delivery targets, profile patches, and setup status after profile and opportunity projection moved out. |
+| Dashboard projection | `scripts/dashboard_projection.py` | 487 | Focused projection module for dashboard snapshots, run/report artifacts, delivery target projection, and profile patches after profile, opportunity, and setup projection moved out. |
 | Dashboard profile projection | `scripts/dashboard_profiles.py` | 186 | Focused profile projection module for profile labels, matching summaries, report titles, and display paths. |
 | Dashboard opportunity projection | `scripts/dashboard_opportunities.py` | 210 | Focused opportunity summary module for action-signal ranking, decision counts, replay totals, and next actions. |
+| Dashboard setup projection | `scripts/dashboard_setup.py` | 199 | Focused setup-readiness module for first-run, source-access, profile, and delivery guidance. |
 | Python monitor runner | `scripts/monitor_runner.py` | 679 | Repeated-run orchestration is now focused on validation, DB writeback, review cards, delivery, and CLI routing after delivery, command execution, and manifest construction moved out. |
 | Monitor command execution | `scripts/monitor_execution.py` | 412 | Focused command-execution module for scan/report command construction, prefilter branching, and latest-manifest pointer writes. |
 | Monitor manifest projection | `scripts/monitor_manifest.py` | 186 | Focused run-manifest/result projection module for stable `run_manifest_v1` and `monitor_run_result_v1` payloads. |
