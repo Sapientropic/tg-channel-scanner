@@ -1,7 +1,14 @@
 # T-Sense Technical Debt Cleanup Spec
 
 Date: 2026-05-13
-Status: Draft for owner review
+Status: Active debt register and documentation ownership index
+
+This file is the current authority for technical-debt status. The detailed
+2026-05-13 implementation log in
+`docs/quality/2026-05-13-tech-debt-iteration-log.md` is historical evidence,
+not the current task state. The live handoff summary lives in
+`docs/quality/task-state.md`, and local command recipes live in
+`docs/testing.md`.
 
 ## Goal
 
@@ -15,20 +22,21 @@ and contract tests that prevent silent product regressions.
 
 ## Current Baseline
 
-Observed from the current workspace:
+Observed from the 2026-05-14 local workspace:
 
-- Python quality gate passes: `429 passed, 2 skipped, 64 subtests passed`.
-- Dashboard quality gate passes: `12` Vitest files, `106` tests.
-- Dashboard production build passes with Vite.
-- CI covers Python 3.12/3.13 on Linux, Windows, macOS; ruff; pytest; dashboard
-  tests/build; shell syntax; POSIX launcher LF line endings.
-- Current branch has active WIP across dashboard, bot gateway, monitor state,
-  decision intelligence, tests, and untracked bot assistant design assets.
+- Current branch: `sapientropic/tech-debt-cleanup-20260513`.
+- Current worktree is still dirty. It includes packaging metadata, extracted
+  Python modules, split dashboard settings panels/hooks, focused test
+  directories, and deleted legacy monolithic test files.
+- The latest recorded clean `HEAD` gate is in the 2026-05-13 quality log; do
+  not treat the current dirty worktree as proven by that older clean gate.
+- CI still covers Python 3.12/3.13 on Linux, Windows, macOS; ruff; pytest;
+  dashboard tests/build; shell syntax; POSIX launcher LF line endings.
 
 ## Progress Update: 2026-05-13 Hardening Iteration
 
-The current `sapientropic/v05-hardening-tech-debt-20260513` branch now has a
-clean-HEAD hardening baseline independent of unrelated dirty WIP:
+The 2026-05-13 hardening branch established a clean-HEAD baseline independent
+of unrelated dirty WIP:
 
 - Detached clean worktree gate passes: `python -m ruff check .`,
   `python -m pytest -q` (`435` passed, `2` skipped, `180` subtests),
@@ -44,30 +52,44 @@ clean-HEAD hardening baseline independent of unrelated dirty WIP:
 - `agent_extraction_request_v1` no longer serializes local input/profile/output
   handoff paths into the copyable request document; those writable paths remain
   in the local JSON envelope.
-- Bot Gateway status fixture coverage was attempted and rejected before commit
-  because it depended on uncommitted Bot Gateway WIP in `dashboard_server.py`.
-  Treat that as a future slice only after the implementation files are scoped
-  and committed together.
+- Bot Gateway status fixture coverage was later isolated as a checkpoint, but
+  live Telegram API, live scheduler, keyring, and LLM knowledge-answer behavior
+  remain operator checks.
 
 The next cleanup phase should build on this baseline rather than re-litigating
 whether contract/privacy fixtures are worth keeping. New splits should either
 reuse these fixtures or add similarly shared fixtures before moving behavior.
 
-Large current files are the main maintainability signal:
+## Current Debt Snapshot: 2026-05-14
+
+The debt register below remains the long-form reasoning. This table is the
+current triage view for what is still real after the later splits:
+
+| Debt | Current Status | Next Useful Slice |
+| --- | --- | --- |
+| D1. WIP and branch hygiene | Still active. The worktree has many tracked and untracked implementation changes. Do not use mixed-worktree gates as commit proof. | Pick one coherent checkpoint, then verify it through the staged snapshot gate or detached clean worktree gate. |
+| D2. Contract sprawl | Materially improved. Shared fixtures now cover the high-risk Python/TypeScript contracts, but `docs/agent-cli-contract.md` is still long. | Keep the contract doc as an index and move new guarantees into fixtures first, prose second. |
+| D3. `dashboard_server.py` boundaries | Still high risk at `4320` lines. | Extract one route boundary at a time, starting with modules that already exist in the dirty worktree. |
+| D4. `monitor_state.py` boundaries | Still high risk at `2773` lines. | Continue splitting DB, projection, review-card, feedback, and source-insight behavior behind existing focused tests. |
+| D5. `report.py` coupling | Mostly reduced. `report.py` is now `503` lines; report behavior moved into `report_*` modules. | Treat `report_extraction.py`, `report_html.py`, and `report_sources.py` as the next review units rather than reopening the old monolith. |
+| D6. Dashboard root/settings state | Partially reduced. `main.tsx` is `546` lines and `settings.tsx` is `308`, but `profiles.tsx`, `actions.tsx`, `inbox.tsx`, and `runs.tsx` remain large. | Finish the settings/hooks checkpoint, then split `actions.tsx` or `profiles.tsx` only with focused component tests. |
+| D7. Runtime sanitizers | Still active. `sanitize/dashboard.ts`, `sanitize/desk.ts`, and `sanitize.test.ts` remain large. | Extract shared primitives only where fixture tests already prove the repeated behavior. |
+| D8. Test concentration | Improved. The old monolithic dashboard/monitor/report tests are replaced in the dirty tree by focused directories, but several test files remain large. | Keep focused directories; next split targets are `tests/test_monitor.py`, `sanitize.test.ts`, and `tests/test_tgcs_cli.py`. |
+| D9. Packaging metadata | In progress. `pyproject.toml`, `MANIFEST.in`, `Dockerfile`, package data, and packaging tests exist in the dirty tree. | Run the packaging metadata smoke from `docs/testing.md` before claiming install support. |
+| D10. Documentation ownership | This pass. | Keep this file as the debt authority, `docs/testing.md` as command authority, and quality logs as historical evidence only. |
+
+Large current files are still the main maintainability signal:
 
 | Area | File | Lines | Why It Matters |
 | --- | ---: | ---: | --- |
 | Python server | `scripts/dashboard_server.py` | 4320 | HTTP routing, local actions, credentials, sources, scheduler, artifacts, git, bot gateway state, and markdown rendering are coupled. |
-| Python state | `scripts/monitor_state.py` | 2705 | SQLite schema, migrations, projections, review cards, alerts, feedback, profile patches, source stats, and setup status share one file. |
-| Python report | `scripts/report.py` | 2416 | Provider routing, prompt shaping, semantic validation, state enrichment, Markdown, HTML, and rendering helpers are coupled. |
-| Python monitor | `scripts/monitor.py` | 1474 | Profile config, scan/report orchestration, prefilter, manifests, delivery, and scheduling defaults share one flow. |
-| Python scan | `scripts/scan.py` | 1150 | Telegram access, media/OCR gates, source registry integration, JSON envelopes, and legacy options share one CLI. |
-| Python facade | `scripts/tgcs.py` | 950 | Human CLI defaults, init, dashboard launch, schedule preview, delivery, bot commands, and quickstart logic are coupled. |
-| Bot gateway | `scripts/bot_gateway.py` | 837 | Telegram API, state lock, intent routing adapters, action dispatch, authorization, and lifecycle controls share one module. |
-| Dashboard UI | `dashboard/src/components/settings.tsx` | 1582 | Notifications, sources, AI keys, gateway, delivery, source insights, and feedback panels are concentrated. |
-| Dashboard shell | `dashboard/src/main.tsx` | 1164 | State orchestration and most mutation handlers live in the root component. |
+| Python state | `scripts/monitor_state.py` | 2773 | SQLite schema, migrations, projections, review cards, alerts, feedback, profile patches, source stats, and setup status share one file. |
 | Dashboard actions | `dashboard/src/components/actions.tsx` | 1119 | Start actions, progress, confirmations, and display mapping are concentrated. |
 | Dashboard sanitize | `dashboard/src/domain/sanitize/dashboard.ts` | 1105 | Large runtime boundary with overlap against `sanitize/desk.ts`. |
+| Dashboard profiles | `dashboard/src/components/profiles.tsx` | 1183 | Profile display, editing, draft patch state, and form controls are concentrated. |
+| Dashboard inbox | `dashboard/src/components/inbox.tsx` | 813 | Review buckets, setup checks, filters, source health, and review actions are concentrated. |
+| Python monitor runner | `scripts/monitor_runner.py` | 879 | Repeated-run orchestration and manifest behavior are now a focused but still sizeable boundary. |
+| Report rendering | `scripts/report_html.py` | 610 | HTML rendering is separated from extraction but remains large enough to merit focused tests before visual/report changes. |
 
 ## Product Constraints
 
@@ -125,17 +147,20 @@ report rendering, extraction providers, and dashboard API clients.
 
 Evidence:
 
-- Current branch is `sapientropic/issue-5-bot-lifecycle`.
-- `git diff --stat` shows 31 modified tracked files with 3310 insertions and
-  408 deletions.
-- Untracked items include `docs/superpowers/`, `docs/brand/bot-avatar.jpg`,
-  `scripts/bot_actions.py`, `scripts/bot_intents.py`, and
-  `scripts/bot_knowledge.py`.
-- Several dashboard files report CRLF-to-LF warnings.
+- Current branch is `sapientropic/tech-debt-cleanup-20260513`.
+- Current dirty tree includes tracked changes in `.gitignore`, packaging,
+  dashboard settings/root files, monitor/report/scan/TGCS Python modules, and
+  deleted legacy monolithic test files.
+- Untracked items include packaging files, extracted Python modules, focused
+  dashboard/monitor/report tests, dashboard settings panels/hooks, and package
+  resource `__init__.py` files.
+- `git diff --name-status` still reports line-ending warnings for some touched
+  files.
 
 Risk:
 
-- A technical-debt branch could accidentally absorb unrelated bot assistant WIP.
+- A technical-debt branch could accidentally absorb unrelated packaging,
+  dashboard, source, or bot WIP.
 - Line-ending churn can hide real diffs.
 
 Cleanup:
@@ -147,9 +172,9 @@ Cleanup:
 
 Done when:
 
-- A clean owner decision exists for current WIP.
-- Technical debt work starts from a known baseline with passing Python and
-  dashboard gates.
+- A clean owner decision exists for the next checkpoint scope.
+- Technical debt work is verified from a staged snapshot or detached worktree,
+  not only from the mixed dirty tree.
 
 ### D2. Contract Sprawl Between Docs, Python, And TypeScript
 
@@ -410,30 +435,33 @@ Done when:
   boundary gates.
 - CI still runs the full suite.
 
-### D9. Packaging And Dependency Metadata Are Minimal
+### D9. Packaging And Dependency Metadata Are In Progress
 
 Evidence:
 
-- `pyproject.toml` currently configures pytest and ruff only.
-- Runtime dependencies live in `requirements*.txt`.
-- The human facade is shell/batch plus `scripts/tgcs.py`.
-- Roadmap calls out future `pipx`, `uvx`, and Docker installation paths.
+- `pyproject.toml` now contains package metadata, optional dependency groups,
+  package data, and the `tgcs` console script in the dirty tree.
+- `MANIFEST.in`, `Dockerfile`, package resource `__init__.py` files, and
+  `tests/test_packaging_metadata.py` exist in the dirty tree.
+- `requirements*.txt` still exist as compatibility/development inputs.
+- `signal-desk` remains a source-checkout launcher until dashboard/templates
+  resources are fully package-safe.
 
 Risk:
 
-- Packaging work will keep patching launchers and setup scripts instead of
-  converging on one supported Python entry point.
-- CI can pass while install paths drift.
+- Install support can be overstated before `pipx`, `uvx`, Docker, and package
+  data smokes prove the dirty-tree packaging checkpoint.
+- CI can pass while launchers, package metadata, and bundled resources drift.
 
 Cleanup:
 
-- First document the supported entry points and which are compatibility aliases:
+- Keep documenting supported entry points and compatibility aliases:
   `tgcs`, `tgcs.bat`, `signal-desk`, `Signal Desk.bat`, and direct scripts.
 - Add smoke tests for facade commands that do not require credentials:
   `tgcs demo`, `tgcs quickstart jobs`, `tgcs doctor --format json` with a temp
   registry/profile where possible.
-- Only after behavior is locked, expand `pyproject.toml` toward package metadata
-  and console scripts.
+- Treat the current package metadata as a checkpoint candidate until the
+  packaging metadata smoke in `docs/testing.md` passes.
 
 Done when:
 
@@ -450,7 +478,12 @@ Evidence:
 - `SKILL.md` is the agent workflow.
 - `docs/agent-cli-contract.md` is a long contract and implementation boundary
   document.
-- `docs/superpowers/specs/2026-05-13-bot-assistant-design.md` is untracked WIP.
+- `docs/testing.md` is the canonical local command index.
+- `docs/quality/2026-05-13-tech-debt-iteration-log.md` is a large historical
+  implementation log; it should not be used as current state.
+- `docs/quality/task-state.md` is the compact current handoff.
+- Local ignored UX/research artifacts still exist under ignored doc paths, but
+  they are not stable public docs.
 
 Risk:
 
@@ -465,11 +498,16 @@ Cleanup:
   - Product direction: `ROADMAP.md`.
   - Agent execution: `SKILL.md`.
   - JSON contracts: `docs/agent-cli-contract.md`.
+  - Local verification commands: `docs/testing.md`.
+  - Technical-debt status: this file.
+  - Current quality handoff: `docs/quality/task-state.md`.
+  - Historical quality evidence: `docs/quality/*-iteration-log.md`.
   - Internal implementation specs: gitignored `docs/internal/specs/`.
 - Keep `docs/internal/specs/INDEX.md` as the private index authority for active
   specs. Public docs may link to stable summaries, but must not mirror internal
   implementation details.
-- Archive or move temporary quality logs out of public docs.
+- Keep temporary quality logs labeled as historical evidence or move them out of
+  tracked docs once they are no longer needed for handoff.
 
 Done when:
 

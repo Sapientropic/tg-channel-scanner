@@ -1,5 +1,12 @@
 # 2026-05-13 Technical Debt Quality Iteration Log
 
+Status: historical evidence log. Do not use this file as the current technical
+debt state or task handoff. Current debt status lives in
+`docs/technical-debt-cleanup-spec.md`; current quality handoff lives in
+`docs/quality/task-state.md`; command recipes live in `docs/testing.md`.
+Some late checkpoint slices were appended after acceptance handoff, so the file
+order is not a strict chronological state machine.
+
 ## Run Contract
 
 - Mode: Standard quality iteration.

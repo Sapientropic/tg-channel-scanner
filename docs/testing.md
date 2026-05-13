@@ -9,7 +9,8 @@ committing or asking for review.
 - Run focused tests first for fast feedback, then run the broader gate that
   matches the change risk.
 - In a dirty worktree, mixed working-tree tests do not prove the commit. For a
-  checkpoint commit, verify the staged index or a clean `HEAD` archive.
+  checkpoint commit, verify the staged index or a detached clean `HEAD`
+  worktree.
 - Credential-free and dry-run paths are the default. Live Telegram, LLM, and
   notification delivery checks require explicit operator intent.
 - Contract changes must update fixture coverage before being called stable.
@@ -20,7 +21,7 @@ Use this for schema, sanitizer, privacy, report-contract, and dashboard-boundary
 changes:
 
 ```powershell
-python -m pytest tests/test_contract_fixtures.py tests/test_report_contracts.py tests/test_contract_privacy_fixtures.py tests/test_dashboard_state_contracts.py tests/test_desk_contract_fixtures.py tests/test_desk_source_access_contracts.py tests/test_desk_settings_contracts.py tests/test_bot_gateway_contracts.py tests/test_agent_semantic_fallback.py tests/test_report.py -q
+python -m pytest tests/test_contract_fixtures.py tests/test_report_contracts.py tests/test_contract_privacy_fixtures.py tests/test_dashboard_state_contracts.py tests/test_desk_contract_fixtures.py tests/test_desk_source_access_contracts.py tests/test_desk_settings_contracts.py tests/test_bot_gateway_contracts.py tests/test_agent_semantic_fallback.py tests/report -q
 ```
 
 ```powershell
@@ -34,7 +35,7 @@ Pop-Location
 Use this for monitor, dashboard server, bot gateway, and decision-state changes:
 
 ```powershell
-python -m pytest tests/test_monitor.py tests/test_monitor_state.py tests/test_dashboard_server.py tests/test_bot_gateway.py tests/test_bot_gateway_contracts.py tests/test_decision_intelligence.py -q
+python -m pytest tests/test_monitor.py tests/monitor_state tests/dashboard tests/test_bot_gateway.py tests/test_bot_gateway_contracts.py tests/test_decision_intelligence.py -q
 ```
 
 ## Credential-Free Desktop Smoke
@@ -48,6 +49,31 @@ tgcs quickstart jobs --format json
 tgcs doctor --format json
 tgcs schedule print --profile-id jobs-fast --interval-minutes 15 --delivery-mode dry-run
 ```
+
+## Packaging Metadata Smoke
+
+Use this when `pyproject.toml`, dependency pins, launchers, or packaging docs
+change. `tgcs` is the only packaged console script in v0.5; `signal-desk`
+remains a source-checkout launcher until dashboard/templates/profile resources
+are moved behind package-safe resource loading.
+
+```powershell
+python -m pytest tests/test_packaging_metadata.py tests/test_tgcs_cli.py -q
+python -m build
+pipx install --force --python python -e .
+tgcs demo
+tgcs quickstart jobs --format json
+tgcs doctor --format json
+pipx uninstall tg-channel-scanner
+uvx --refresh --from . tgcs demo
+docker build -t tgcs-local-smoke .
+docker run --rm -v "${PWD}/output:/workspace/output" tgcs-local-smoke demo
+docker run --rm -e TELEGRAM_API_ID=12345 -e TELEGRAM_API_HASH=00000000000000000000000000000000 tgcs-local-smoke doctor --format json
+```
+
+For a credential-free doctor smoke, run from a temp home/workspace with
+Telegram and LLM environment variables cleared. The command should complete and
+may report missing credentials inside the JSON envelope.
 
 ## Full Local Gate
 

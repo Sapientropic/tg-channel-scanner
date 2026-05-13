@@ -1,23 +1,22 @@
-state: checkpoint_ready
+state: documentation_debt_checkpoint_ready
 mode: Standard
-run_shape: continuous_until_stop
-slice_goal: "Bot Gateway WIP isolated as implementation plus fixture gate checkpoint."
-stop_condition: "2026-05-13 14:00 +08:00 user acceptance window"
-handoff_policy: after_deadline_closeout
-continuation_policy: continue_after_initial_plan_until_stop_condition
-intake_status: inferred_from_user_request
-gate_status: clean_head_bot_gateway_checkpoint_green
+run_shape: docs_first_checkpoint
+slice_goal: "Make the current technical-debt status discoverable without reading historical iteration logs."
+stop_condition: "Current debt register, historical log status, and testing command authority are aligned."
+handoff_policy: evidence_backed_summary
+continuation_policy: "Continue with one coherent implementation checkpoint after docs are verified."
+intake_status: explicit_user_request
+gate_status: docs_diff_check_passed
 blockers: []
 needs_human:
-  - "Live Telegram Bot API, live LLM knowledge answers, and real keyring/scheduler backends still need operator validation."
-residual_risk: "Current worktree still contains unrelated dashboard/source/Git-update WIP outside the staged Bot Gateway checkpoint; do not treat those files as included."
-next_action: "Commit the staged Bot Gateway checkpoint, then decide whether to continue with frontend Settings UI integration as a separate checkpoint."
+  - "Owner still needs to choose the next implementation checkpoint scope before large code cleanup continues."
+residual_risk: "The main worktree still contains many tracked and untracked implementation changes. Mixed-worktree tests are useful compatibility evidence but do not prove a checkpoint commit."
+next_action: "Pick one checkpoint: packaging smoke, dashboard_server boundary extraction, monitor_state split, sanitizer primitive extraction, or dashboard actions/profile component split."
 candidate_slices:
-  - "Add fixture-backed backend/frontend contract tests for high-risk v0.5 dashboard and monitor payloads."
-  - "Add privacy negative tests for raw Telegram text, tokens, local paths, argv, and command leakage."
-  - "Extract shared sanitizer primitives after fixture tests prove the repeated behavior."
-  - "Split dashboard_server.py boundaries only after contract tests protect endpoint behavior."
-last_update: "2026-05-13T22:16:30+08:00"
-deadline: "2026-05-13T14:00:00+08:00"
-time_budget_remaining: "deadline reached"
+  - "Verify and commit the packaging metadata checkpoint with the packaging smoke in docs/testing.md."
+  - "Extract one dashboard_server boundary using the focused tests already split under tests/dashboard."
+  - "Continue monitor_state splitting using tests/monitor_state focused gates."
+  - "Extract sanitizer shared primitives only where existing fixture tests cover both Python and TypeScript behavior."
+  - "Split dashboard actions.tsx or profiles.tsx behind focused component tests."
+last_update: "2026-05-14T02:16:24+08:00"
 checkpoint_ready: true
