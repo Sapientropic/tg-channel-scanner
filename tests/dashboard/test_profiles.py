@@ -1,0 +1,445 @@
+import tempfile
+import unittest
+from http import HTTPStatus
+from pathlib import Path
+from unittest.mock import patch
+
+from scripts import dashboard_server, monitor_state
+
+
+class DashboardProfileTests(unittest.TestCase):
+    def test_profile_enabled_http_endpoint_updates_runtime_override(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "tgcs.db"
+            conn = monitor_state.connect(db_path)
+            try:
+                monitor_state.upsert_profile(
+                    conn,
+                    {
+                        "id": "jobs-fast",
+                        "path": "profiles/templates/jobs.md",
+                        "enabled": True,
+                    },
+                )
+            finally:
+                conn.close()
+
+            class FakeHandler:
+                path = "/api/profiles/jobs-fast/enabled"
+                status = None
+                payload = None
+                client_address = ("127.0.0.1", 51000)
+
+                def _connect(self):
+                    return monitor_state.connect(db_path)
+
+                def _read_json_body(self):
+                    return {"enabled": False}
+
+                def _json(self, status, payload):
+                    self.status = status
+                    self.payload = payload
+
+            handler = FakeHandler()
+            dashboard_server.DashboardHandler.do_POST(handler)
+            conn = monitor_state.connect(db_path)
+            try:
+                snapshot = monitor_state.dashboard_snapshot(conn)
+            finally:
+                conn.close()
+
+        self.assertEqual(handler.status, HTTPStatus.OK)
+        self.assertFalse(handler.payload["profile"]["enabled"])
+        self.assertFalse(snapshot["profiles"][0]["enabled"])
+
+
+    def test_profile_enabled_http_endpoint_rejects_unexpected_fields(self):
+        class FakeHandler:
+            path = "/api/profiles/jobs-fast/enabled"
+            status = None
+            payload = None
+            client_address = ("127.0.0.1", 51000)
+
+            def _read_json_body(self):
+                return {"enabled": False, "command": "tgcs monitor run"}
+
+            def _json(self, status, payload):
+                self.status = status
+                self.payload = payload
+
+        handler = FakeHandler()
+        dashboard_server.DashboardHandler.do_POST(handler)
+
+        self.assertEqual(handler.status, HTTPStatus.BAD_REQUEST)
+        self.assertIn("Unsupported profile setting field: command", handler.payload["error"])
+
+
+    def test_profile_enabled_http_endpoint_requires_boolean(self):
+        class FakeHandler:
+            path = "/api/profiles/jobs-fast/enabled"
+            status = None
+            payload = None
+            client_address = ("127.0.0.1", 51000)
+
+            def _read_json_body(self):
+                return {"enabled": "false"}
+
+            def _json(self, status, payload):
+                self.status = status
+                self.payload = payload
+
+        handler = FakeHandler()
+        dashboard_server.DashboardHandler.do_POST(handler)
+
+        self.assertEqual(handler.status, HTTPStatus.BAD_REQUEST)
+        self.assertIn("true or false", handler.payload["error"])
+
+
+    def test_profile_runtime_settings_http_endpoint_updates_runtime_override(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "tgcs.db"
+            conn = monitor_state.connect(db_path)
+            try:
+                monitor_state.upsert_profile(
+                    conn,
+                    {
+                        "id": "jobs-fast",
+                        "path": "profiles/templates/jobs.md",
+                        "enabled": True,
+                        "scan_window_hours": 2,
+                        "semantic_max_messages": 20,
+                    },
+                )
+            finally:
+                conn.close()
+
+            class FakeHandler:
+                path = "/api/profiles/jobs-fast/runtime-settings"
+                status = None
+                payload = None
+                client_address = ("127.0.0.1", 51000)
+
+                def _connect(self):
+                    return monitor_state.connect(db_path)
+
+                def _read_json_body(self):
+                    return {"scan_window_hours": 6, "semantic_max_messages": 40}
+
+                def _json(self, status, payload):
+                    self.status = status
+                    self.payload = payload
+
+            handler = FakeHandler()
+            dashboard_server.DashboardHandler.do_POST(handler)
+            conn = monitor_state.connect(db_path)
+            try:
+                snapshot = monitor_state.dashboard_snapshot(conn)
+            finally:
+                conn.close()
+
+        self.assertEqual(handler.status, HTTPStatus.OK)
+        self.assertEqual(handler.payload["profile"]["config"]["scan_window_hours"], 6)
+        self.assertEqual(handler.payload["profile"]["config"]["semantic_max_messages"], 40)
+        self.assertEqual(snapshot["profiles"][0]["scan_window_hours"], 6)
+        self.assertEqual(snapshot["profiles"][0]["semantic_max_messages"], 40)
+
+
+    def test_profile_runtime_settings_http_endpoint_rejects_extra_fields(self):
+        class FakeHandler:
+            path = "/api/profiles/jobs-fast/runtime-settings"
+            status = None
+            payload = None
+            client_address = ("127.0.0.1", 51000)
+
+            def _read_json_body(self):
+                return {"scan_window_hours": 6, "command": "tgcs monitor run"}
+
+            def _json(self, status, payload):
+                self.status = status
+                self.payload = payload
+
+        handler = FakeHandler()
+        dashboard_server.DashboardHandler.do_POST(handler)
+
+        self.assertEqual(handler.status, HTTPStatus.BAD_REQUEST)
+        self.assertIn("Unsupported profile setting field: command", handler.payload["error"])
+
+
+    def test_profile_runtime_settings_http_endpoint_rejects_out_of_range_values(self):
+        class FakeConnection:
+            def close(self):
+                pass
+
+        class FakeHandler:
+            path = "/api/profiles/jobs-fast/runtime-settings"
+            status = None
+            payload = None
+            client_address = ("127.0.0.1", 51000)
+
+            def _connect(self):
+                return FakeConnection()
+
+            def _read_json_body(self):
+                return {"scan_window_hours": 0}
+
+            def _json(self, status, payload):
+                self.status = status
+                self.payload = payload
+
+        with patch.object(
+            dashboard_server.monitor_state,
+            "update_profile_runtime_settings",
+            side_effect=monitor_state.MonitorStateError("scan_window_hours must be between 1 and 168."),
+        ) as update_mock:
+            handler = FakeHandler()
+            dashboard_server.DashboardHandler.do_POST(handler)
+
+        update_mock.assert_called_once()
+        self.assertEqual(handler.status, HTTPStatus.BAD_REQUEST)
+        self.assertIn("between 1 and 168", handler.payload["error"])
+
+
+    def test_profile_runtime_settings_http_endpoint_rejects_invalid_payloads(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "tgcs.db"
+            conn = monitor_state.connect(db_path)
+            try:
+                monitor_state.upsert_profile(
+                    conn,
+                    {"id": "jobs-fast", "path": "profiles/templates/jobs.md", "enabled": True},
+                )
+            finally:
+                conn.close()
+
+            class FakeHandler:
+                status = None
+                payload = None
+                client_address = ("127.0.0.1", 51000)
+
+                def __init__(self, body, path="/api/profiles/jobs-fast/runtime-settings"):
+                    self.body = body
+                    self.path = path
+
+                def _connect(self):
+                    return monitor_state.connect(db_path)
+
+                def _read_json_body(self):
+                    return self.body
+
+                def _json(self, status, payload):
+                    self.status = status
+                    self.payload = payload
+
+            cases = [
+                ({}, "/api/profiles/jobs-fast/runtime-settings", "At least one profile setting is required"),
+                ({"semantic_max_messages": 0}, "/api/profiles/jobs-fast/runtime-settings", "between 1 and 500"),
+                ({"semantic_max_messages": 501}, "/api/profiles/jobs-fast/runtime-settings", "between 1 and 500"),
+                ({"scan_window_hours": "six"}, "/api/profiles/jobs-fast/runtime-settings", "must be an integer"),
+                ({"scan_window_hours": True}, "/api/profiles/jobs-fast/runtime-settings", "must be an integer"),
+                ({"scan_window_hours": 6}, "/api/profiles/unknown/runtime-settings", "Profile is not registered"),
+            ]
+            for body, path, error_fragment in cases:
+                with self.subTest(body=body, path=path):
+                    handler = FakeHandler(body, path)
+                    dashboard_server.DashboardHandler.do_POST(handler)
+
+                    self.assertEqual(handler.status, HTTPStatus.BAD_REQUEST)
+                    self.assertIn(error_fragment, handler.payload["error"])
+
+
+    def test_profile_draft_note_http_endpoint_creates_reviewable_patch(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            db_path = root / "tgcs.db"
+            profile_path = root / "profiles" / "jobs.md"
+            profile_path.parent.mkdir(parents=True)
+            profile_path.write_text("# Jobs profile\n", encoding="utf-8")
+            conn = monitor_state.connect(db_path)
+            try:
+                monitor_state.upsert_profile(
+                    conn,
+                    {"id": "jobs-fast", "path": str(profile_path), "enabled": True},
+                )
+            finally:
+                conn.close()
+
+            class FakeHandler:
+                path = "/api/profiles/jobs-fast/draft-note"
+                status = None
+                payload = None
+                client_address = ("127.0.0.1", 51000)
+
+                def _connect(self):
+                    return monitor_state.connect(db_path)
+
+                def _read_json_body(self):
+                    return {"note": "Prefer senior remote AI engineering roles."}
+
+                def _json(self, status, payload):
+                    self.status = status
+                    self.payload = payload
+
+            with patch.object(monitor_state, "PROJECT_ROOT", root):
+                handler = FakeHandler()
+                dashboard_server.DashboardHandler.do_POST(handler)
+                conn = monitor_state.connect(db_path)
+                try:
+                    patches = monitor_state.dashboard_snapshot(conn)["profile_patch_suggestions"]
+                finally:
+                    conn.close()
+
+        self.assertEqual(handler.status, HTTPStatus.OK)
+        self.assertEqual(handler.payload["patch"]["status"], "pending")
+        self.assertEqual(len(patches), 1)
+        self.assertIn("Prefer senior remote", patches[0]["note"])
+
+
+    def test_profile_draft_note_http_endpoint_rejects_invalid_payloads(self):
+        class FakeHandler:
+            status = None
+            payload = None
+            client_address = ("127.0.0.1", 51000)
+
+            def __init__(self, body):
+                self.body = body
+                self.path = "/api/profiles/jobs-fast/draft-note"
+
+            def _read_json_body(self):
+                return self.body
+
+            def _json(self, status, payload):
+                self.status = status
+                self.payload = payload
+
+        for body, error_fragment in [
+            ({}, "Profile note is required"),
+            ({"note": "valid", "command": "tgcs monitor run"}, "Unsupported profile draft field"),
+            ({"note": "x" * (dashboard_server.PROFILE_DRAFT_NOTE_MAX_LENGTH + 1)}, "characters or fewer"),
+            ({"note": "OPENAI_API_KEY=sk-localSecret12345"}, "cannot include"),
+        ]:
+            with self.subTest(body=list(body)):
+                handler = FakeHandler(body)
+                dashboard_server.DashboardHandler.do_POST(handler)
+
+                self.assertEqual(handler.status, HTTPStatus.BAD_REQUEST)
+                self.assertIn(error_fragment, handler.payload["error"])
+
+
+    def test_profile_matching_preferences_http_endpoint_rejects_private_fragments(self):
+        class FakeHandler:
+            status = None
+            payload = None
+            client_address = ("127.0.0.1", 51000)
+            path = "/api/profiles/jobs-fast/matching-preferences"
+
+            def __init__(self, body):
+                self.body = body
+
+            def _connect(self):
+                raise AssertionError("private preference text should be rejected before state access")
+
+            def _read_json_body(self):
+                return self.body
+
+            def _json(self, status, payload):
+                self.status = status
+                self.payload = payload
+
+        for body, error_fragment in [
+            ({"preferences": "Prefer remote roles. argv=['tgcs','monitor']"}, "cannot include"),
+            ({"preferences": "chat_id=12345678901"}, "cannot include"),
+        ]:
+            with self.subTest(body=list(body)):
+                handler = FakeHandler(body)
+                dashboard_server.DashboardHandler.do_POST(handler)
+
+                self.assertEqual(handler.status, HTTPStatus.BAD_REQUEST)
+                self.assertIn(error_fragment, handler.payload["error"])
+
+
+    def test_profile_create_endpoint_writes_local_profile_and_config(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            db_path = root / "tgcs.db"
+
+            class FakeHandler:
+                path = "/api/profiles/create"
+                status = None
+                payload = None
+                client_address = ("127.0.0.1", 51000)
+
+                def _connect(self):
+                    return monitor_state.connect(db_path)
+
+                def _read_json_body(self):
+                    return {
+                        "brief": "Senior remote AI engineering roles. Avoid unpaid internships and vague promos.",
+                        "source_filename": "background.txt",
+                        "source_text": "Prefer agent platforms, backend automation, and clear paid work.",
+                    }
+
+                def _json(self, status, payload):
+                    self.status = status
+                    self.payload = payload
+
+            with patch.object(dashboard_server, "PROJECT_ROOT", root):
+                handler = FakeHandler()
+                dashboard_server.DashboardHandler.do_POST(handler)
+                conn = monitor_state.connect(db_path)
+                try:
+                    snapshot = monitor_state.dashboard_snapshot(conn)
+                finally:
+                    conn.close()
+
+            profile = handler.payload["profile"]
+            profile_path = root / profile["profile_path"]
+            profile_body = profile_path.read_text(encoding="utf-8")
+            config_exists = (root / ".tgcs" / "profiles.toml").exists()
+
+        self.assertEqual(handler.status, HTTPStatus.OK)
+        self.assertEqual(profile["schema_version"], "desk_profile_create_result_v1")
+        self.assertIn("Senior remote AI engineering roles", profile_body)
+        self.assertTrue(config_exists)
+        self.assertEqual(snapshot["profiles"][0]["profile_id"], profile["profile_id"])
+
+
+    def test_profile_create_endpoint_rejects_invalid_payloads(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "tgcs.db"
+
+            class FakeHandler:
+                status = None
+                payload = None
+                client_address = ("127.0.0.1", 51000)
+
+                def __init__(self, body):
+                    self.body = body
+                    self.path = "/api/profiles/create"
+
+                def _connect(self):
+                    return monitor_state.connect(db_path)
+
+                def _read_json_body(self):
+                    return self.body
+
+                def _json(self, status, payload):
+                    self.status = status
+                    self.payload = payload
+
+            for body, error_fragment in [
+                ({}, "Describe the profile"),
+                ({"brief": "valid", "command": "tgcs monitor run"}, "Unsupported profile creation field"),
+                ({"brief": "x" * (dashboard_server.PROFILE_CREATE_MAX_TEXT_LENGTH + 1)}, "characters or fewer"),
+                ({"brief": "Authorization: Bearer sk-localSecret12345"}, "cannot include"),
+            ]:
+                with self.subTest(body=list(body)):
+                    handler = FakeHandler(body)
+                    dashboard_server.DashboardHandler.do_POST(handler)
+
+                    self.assertEqual(handler.status, HTTPStatus.BAD_REQUEST)
+                    self.assertIn(error_fragment, handler.payload["error"])
+
+
+
+if __name__ == "__main__":
+    unittest.main()
