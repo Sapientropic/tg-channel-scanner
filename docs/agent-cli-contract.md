@@ -10,7 +10,8 @@ Fixture-backed contract coverage lives under `tests/fixtures/contracts/`.
 `tests/test_contract_fixtures.py` checks the shared agent envelope,
 `semantic_items_v1`, `monitor_run_result_v1`, and a normalized
 `run_manifest_v1` shape against those fixtures. Dashboard sanitizer fixtures
-are covered in `dashboard/src/domain/contract-privacy-fixtures.test.ts` and
+are covered in `dashboard/src/domain/contract-privacy-fixtures.test.ts`,
+`dashboard/src/domain/desk-settings-contract-fixtures.test.ts`, and
 `dashboard/src/domain/sanitize.test.ts`. Add or update fixtures with contract
 changes so Python emitters and TypeScript consumers do not drift silently.
 

@@ -1537,6 +1537,52 @@ Next:
 
 - Commit, then continue until the 14:00 stop condition.
 
+## Slice 39: Desk Settings Status Privacy Fixture
+
+Status: completed.
+
+Actions:
+
+- Added `tests/fixtures/contracts/desk_settings_status_v1.json` for
+  `desk_notification_token_status_v1` and `desk_ai_settings_status_v1`.
+- Added backend fixture tests that generate real Desk status payloads with both
+  environment and local-store secrets present, then assert only configuration
+  status fields surface.
+- Added frontend sanitizer fixture tests for the same token and AI settings
+  payloads, including extra secret/path fields that must not survive
+  sanitization.
+- Updated `docs/agent-cli-contract.md` to list the new shared settings fixture
+  coverage.
+
+Verification:
+
+- `python -m pytest tests/test_desk_settings_contracts.py tests/test_dashboard_server.py -k "notification_token or ai_settings" -q`
+  passed `12` tests, `132` deselected, and `7` subtests.
+- `python -m pytest tests/test_desk_settings_contracts.py -q` passed `1` test
+  and `7` subtests.
+- `python -m ruff check tests/test_desk_settings_contracts.py` passed.
+- `cd dashboard; npm test -- --run desk-settings-contract-fixtures sanitize client`
+  passed `4` test files and `53` tests.
+- Staged snapshot verification passed after checking out the index to a temp
+  directory: ruff passed, backend passed `12` tests with `121` deselected and
+  `7` subtests, and frontend passed `4` test files with `51` tests.
+
+Reviewer Gate:
+
+- This extends the fixture-backed contract net to a high-risk settings surface:
+  token and AI key status may expose only presence/source/storage capability,
+  never the secret values or local key files.
+
+Residual Risk:
+
+- This locks status payloads and frontend sanitization, not live keyring
+  backend behavior. Live credential storage remains covered by existing mocked
+  backend tests and operator checks.
+
+Next:
+
+- Commit, then continue until the 14:00 stop condition.
+
 ## Slice 34: `agent_extraction_request_v1` Projection Helper Extraction
 
 Status: in progress.
