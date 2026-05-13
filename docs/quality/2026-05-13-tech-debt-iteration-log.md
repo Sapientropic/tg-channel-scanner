@@ -1927,6 +1927,36 @@ Next:
 
 - Commit, then continue until the 14:00 stop condition.
 
+## Slice 50: Python Desk Fixture Index Alignment
+
+Status: completed.
+
+Actions:
+
+- Updated `docs/agent-cli-contract.md` to point maintainers to focused
+  `tests/test_desk_*_contracts.py` files for Python Desk producer fixture
+  coverage.
+
+Verification:
+
+- `git diff --check -- docs/agent-cli-contract.md docs/quality/task-state.md docs/quality/2026-05-13-tech-debt-iteration-log.md`
+  passed.
+- `rg -n "test_desk_\\*_contracts|client-contract-fixtures|Fixture-backed contract coverage" docs/agent-cli-contract.md -S`
+  found the expected pointers.
+
+Reviewer Gate:
+
+- Complements Slice 49 by indexing both Python producer and TypeScript consumer
+  fixture gates from the stable agent contract doc.
+
+Residual Risk:
+
+- Documentation pointer only; no runtime behavior change.
+
+Next:
+
+- Commit, then continue until the 14:00 stop condition.
+
 ## Slice 34: `agent_extraction_request_v1` Projection Helper Extraction
 
 Status: in progress.

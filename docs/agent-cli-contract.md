@@ -9,8 +9,9 @@ replace the explicit agent contract below.
 Fixture-backed contract coverage lives under `tests/fixtures/contracts/`.
 `tests/test_contract_fixtures.py` checks the shared agent envelope,
 `semantic_items_v1`, `monitor_run_result_v1`, and a normalized
-`run_manifest_v1` shape against those fixtures. Dashboard sanitizer fixtures
-are covered in `dashboard/src/domain/contract-privacy-fixtures.test.ts`,
+`run_manifest_v1` shape against those fixtures. Desk producer fixtures are
+covered by focused `tests/test_desk_*_contracts.py` files. Dashboard sanitizer
+fixtures are covered in `dashboard/src/domain/contract-privacy-fixtures.test.ts`,
 `dashboard/src/domain/desk-settings-contract-fixtures.test.ts`, and
 `dashboard/src/domain/sanitize.test.ts`. API client fixture gates live in
 `dashboard/src/api/client-contract-fixtures.test.ts`. Add or update fixtures
