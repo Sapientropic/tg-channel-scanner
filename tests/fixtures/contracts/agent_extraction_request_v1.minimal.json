@@ -40,6 +40,12 @@
     "monitor_prefilter",
     "message_ref"
   ],
+  "omitted_local_path_keys": [
+    "input_path",
+    "profile_path",
+    "report_output_path",
+    "items_output_path"
+  ],
   "denied_strings": [
     "E:\\workspace",
     "source_health",

@@ -1468,10 +1468,10 @@ def build_agent_extraction_request(
     return {
         "schema_version": AGENT_EXTRACTION_REQUEST_SCHEMA_VERSION,
         "created_at": datetime.now(UTC).isoformat(),
-        "input_path": str(input_path),
-        "profile_path": str(profile_path),
-        "report_output_path": output_path,
-        "items_output_path": str(items_output_path),
+        # The JSON envelope is the local control plane and carries writable
+        # handoff paths. Keep the request document copyable to an agent or
+        # provider without retaining machine-specific input/profile/output
+        # paths.
         "extraction_contract": {
             "items_schema_version": SEMANTIC_ITEMS_SCHEMA_VERSION,
             "top_level_key": "items",

@@ -735,6 +735,11 @@ The request file uses `agent_extraction_request_v1` and includes:
 - `selected_messages`
 - prompt text for compatibility with existing profile behavior
 
+The request file is the copyable data plane for extraction. It intentionally
+omits local handoff paths such as `input_path`, `profile_path`,
+`report_output_path`, and `items_output_path`; writable paths stay in the JSON
+success envelope above, which is the local control plane.
+
 The agent writes `semantic_items_v1`:
 
 ```json

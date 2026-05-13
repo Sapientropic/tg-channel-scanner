@@ -54,10 +54,10 @@ class ReportContractTests(unittest.TestCase):
                     }
                 ],
             },
-            input_path=Path("scan.jsonl"),
-            profile_path=Path("profile.md"),
-            output_path="report.md",
-            items_output_path=Path("extracted-items.json"),
+            input_path=Path(r"E:\workspace\output\runs\run-1\scan.jsonl"),
+            profile_path=Path(r"E:\workspace\profiles\profile.md"),
+            output_path=r"E:\workspace\output\runs\run-1\report.md",
+            items_output_path=Path(r"E:\workspace\output\runs\run-1\extracted-items.json"),
             max_messages=10,
             profile_config=report.parse_profile_config(profile),
         )
@@ -72,15 +72,10 @@ class ReportContractTests(unittest.TestCase):
             for key in fixture["denied_message_keys"]:
                 with self.subTest(message_key=key):
                     self.assertNotIn(key, message)
-        request_text = json.dumps(
-            {
-                "scan_meta": request["scan_meta"],
-                "selected_messages": request["selected_messages"],
-                "user_prompt": request["user_prompt"],
-            },
-            ensure_ascii=False,
-            sort_keys=True,
-        )
+        for key in fixture["omitted_local_path_keys"]:
+            with self.subTest(local_path_key=key):
+                self.assertNotIn(key, request)
+        request_text = json.dumps(request, ensure_ascii=False, sort_keys=True)
         for denied in fixture["denied_strings"]:
             with self.subTest(denied=denied):
                 self.assertNotIn(denied, request_text)

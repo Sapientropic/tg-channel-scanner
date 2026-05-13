@@ -1410,6 +1410,51 @@ Next:
 
 - Commit this checkpoint, then continue until the 14:00 stop condition.
 
+## Slice 36: Agent Extraction Request Path Privacy
+
+Status: completed.
+
+Actions:
+
+- Triaged Peirce's P1 finding that `agent_extraction_request_v1` only checked
+  minimized prompt fields for denied local-path strings, while the full request
+  still serialized `input_path`, `profile_path`, `report_output_path`, and
+  `items_output_path`.
+- Defined the contract boundary in `docs/agent-cli-contract.md`: the JSON
+  success envelope is the local control plane for writable handoff paths, while
+  the request file is the copyable extraction data plane.
+- Removed local handoff paths from the request document and added fixture
+  assertions that the full request JSON excludes both the omitted path keys and
+  denied Windows path fragments.
+
+Verification:
+
+- `python -m pytest tests/test_report_contracts.py tests/test_agent_semantic_fallback.py tests/test_report.py -q`
+  passed `47` tests and `24` subtests.
+- `python -m ruff check scripts/report.py tests/test_report_contracts.py`
+  passed.
+- Staged snapshot verification passed after checking out the index to a temp
+  directory: ruff passed and the same report contract test set passed `47`
+  tests and `24` subtests.
+
+Reviewer Gate:
+
+- Directly addresses Peirce P1. This changes behavior only for the request file;
+  the existing envelope still returns local `request_path` and
+  `items_output_path` so agent fallback orchestration remains intact.
+
+Residual Risk:
+
+- The JSON envelope can still contain local handoff paths because that is its
+  explicit local-control-plane role. If a future surface forwards envelope data
+  to a remote model or browser UI, it must sanitize or project those paths
+  separately.
+
+Next:
+
+- Commit this checkpoint, then add the testing-gate documentation slice
+  requested by the spec.
+
 ## Slice 34: `agent_extraction_request_v1` Projection Helper Extraction
 
 Status: in progress.
