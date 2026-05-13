@@ -1074,3 +1074,47 @@ Next:
 
 - Commit this checkpoint, then continue with the next v0.5 privacy/output or
   local-boundary hardening item.
+
+## Slice 27: `semantic_items_v1` Private Field Rejection
+
+Status: completed.
+
+Actions:
+
+- Hardened `semantic_items_v1` ingestion so agent-produced items recursively
+  reject raw/private/control-plane fields such as `raw_text`, `message`,
+  `content`, `transcript`, `argv`, `token`, `path`, `session`, `headers`, and
+  secret-like suffixes before report generation.
+- Kept normal semantic extraction fields and source-message refs unchanged.
+- Added an integration regression through `report.main --items-json --format
+  json` to prove rejected raw text is not echoed back through the agent error
+  envelope.
+
+Verification:
+
+- `python -m pytest tests/test_agent_semantic_fallback.py::AgentSemanticFallbackTests::test_report_items_json_rejects_private_semantic_item_fields tests/test_agent_semantic_fallback.py::AgentSemanticFallbackTests::test_report_items_json_renders_without_llm_key tests/test_agent_semantic_fallback.py::AgentSemanticFallbackTests::test_report_items_json_rejects_unknown_source_refs -q`
+  passed: `3` tests.
+- `python -m pytest tests/test_agent_semantic_fallback.py tests/test_report.py -q`
+  passed: `46` tests.
+- Staged snapshot verification passed without unrelated WIP:
+  targeted agent semantic tests passed (`3` tests), and staged
+  `tests/test_agent_semantic_fallback.py` plus staged `tests/test_report.py`
+  passed (`46` tests).
+
+Reviewer Gate:
+
+- This follows Phase 1 of the spec directly: agent JSON contracts must not
+  become a backdoor raw Telegram or local control-plane store.
+- External review was not available due subagent thread limit; deterministic
+  negative tests cover the intended contract.
+
+Residual Risk:
+
+- Report HTML/Markdown can still intentionally render original message text
+  from the scan input as a local artifact. This slice only constrains agent
+  `semantic_items_v1` output, not the product report decision.
+
+Next:
+
+- Commit this checkpoint, then continue with shared contract fixture coverage
+  or another privacy negative test from Phase 1.

@@ -204,6 +204,57 @@ class AgentSemanticFallbackTests(unittest.TestCase):
         self.assertFalse(payload["ok"])
         self.assertEqual(payload["error"]["code"], "items_json_invalid")
 
+    def test_report_items_json_rejects_private_semantic_item_fields(self):
+        report = load_report_module(self)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            input_path = root / "scan.jsonl"
+            profile_path = root / "profile.md"
+            items_path = root / "items.json"
+            input_path.write_text(json.dumps(sample_scan_row()) + "\n", encoding="utf-8")
+            profile_path.write_text("# Market Monitor\n", encoding="utf-8")
+            items_path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": "semantic_items_v1",
+                        "items": [
+                            {
+                                "source_message_refs": [{"channel": "cointelegraph", "id": 101}],
+                                "company": "Coinbase",
+                                "role": "Market signal",
+                                "rating": "medium",
+                                "raw_text": "Coinbase launches a new market product.",
+                                "debug": {"argv": ["tgcs", "report"], "token": "123456:ABCDEF_secret"},
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            stdout = io.StringIO()
+
+            with patch("sys.stdout", stdout):
+                exit_code = report.main(
+                    [
+                        "--input",
+                        str(input_path),
+                        "--profile",
+                        str(profile_path),
+                        "--items-json",
+                        str(items_path),
+                        "--format",
+                        "json",
+                    ]
+                )
+            payload = json.loads(stdout.getvalue())
+
+        self.assertEqual(exit_code, 3)
+        self.assertFalse(payload["ok"])
+        self.assertEqual(payload["error"]["code"], "items_json_invalid")
+        self.assertIn("raw_text", payload["error"]["message"])
+        self.assertNotIn("Coinbase launches a new market product", json.dumps(payload, ensure_ascii=False))
+
     def test_daily_report_propagates_agent_extraction_request(self):
         from scripts import agent_cli, daily_report
 
