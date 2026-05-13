@@ -1,12 +1,12 @@
-state: active_quality_iteration_inbox_split_checkpoint
+state: active_quality_iteration_runs_split_checkpoint
 mode: Standard
 run_shape: continuous_until_deadline
-slice_goal: "Continue the technical-debt SPEC with high-value dashboard/backend slices, starting with Inbox concentration, while preserving public props, review action names, sanitizer behavior, and local-first privacy boundaries."
+slice_goal: "Continue the technical-debt SPEC with high-value dashboard/backend slices, including Inbox and Runs concentration cleanup, while preserving public props, review/run action names, sanitizer behavior, and local-first privacy boundaries."
 stop_condition: "Do not enter final closeout before 2026-05-14 14:00 Asia/Shanghai unless the user explicitly stops; if SPEC work is exhausted, research competitors/user pain points and expand ROADMAP/SPEC before continuing."
 handoff_policy: after_deadline_closeout
 continuation_policy: "Use docs/technical-debt-cleanup-spec.md as the debt authority; continue with one remaining boundary at a time and keep old facade exports until downstream callers move."
 intake_status: explicit_user_request
-gate_status: frontend_inbox_gates_passed_review_clean
+gate_status: frontend_runs_gates_passed_review_clean
 blockers: []
 needs_human: []
 residual_risk: "This checkpoint is a frontend component split. It does not exercise live Telegram, live LLM/provider behavior, Scheduler/Credential Manager, Docker packaging, or human product acceptance."
@@ -29,6 +29,7 @@ completed_slices:
   - "Sanitizer shared primitives added to dashboard/src/domain/sanitize/shared.ts with sanitize-shared Vitest coverage."
   - "dashboard/src/domain/sanitize/dashboard.ts reduced to a public facade; dashboard state sanitizers split into dashboard-common, dashboard-state, dashboard-review, dashboard-runs, dashboard-profiles, dashboard-delivery, and dashboard-summary modules."
   - "Dashboard Inbox split: dashboard/src/components/inbox.tsx is now a 137-line composition facade; filters/backlog moved to dashboard/src/components/inbox/filters.tsx, review-card/actions/source refs moved to dashboard/src/components/inbox/review-card.tsx, and setup/empty-state checklist moved to dashboard/src/components/inbox/setup.tsx."
+  - "Dashboard Runs split: dashboard/src/components/runs.tsx is now a 76-line composition facade; run model logic moved to dashboard/src/components/runs/model.ts, evidence rows/artifact links moved to dashboard/src/components/runs/evidence.tsx, health chart/actions moved to dashboard/src/components/runs/health-chart.tsx, and empty state moved to dashboard/src/components/runs/empty-state.tsx."
 verification:
   - "python -m pytest tests/dashboard -q -> 149 passed, 71 subtests passed"
   - "python -m pytest tests/monitor_state -q -> 81 passed, 24 subtests passed"
@@ -44,9 +45,15 @@ verification:
   - "cd dashboard; npm run build -> passed"
   - "git diff --check -> passed for the Inbox split working tree"
   - "Playwright browser smoke against Vite dev server with mocked local API -> Review card visible, Tune profile expanded, profile note submitted as follow_up with trimmed local note; screenshot written under ignored output/playwright/."
+  - "cd dashboard; npm test -- --run runs -> 1 file, 13 tests passed"
+  - "cd dashboard; npm test -- --run -> 21 files, 150 tests passed"
+  - "cd dashboard; npm run build -> passed"
+  - "git diff --check -> passed for the Runs split working tree"
+  - "Playwright browser smoke against Vite dev server with mocked local API -> Runs tab opened, run health visible, recovered older failure group visible, report link rendered; screenshot written under ignored output/playwright/."
 reviewer_status:
   - "Explorer review of the proposed split recommended a搬运式拆分: keep InboxView as facade, move filters/backlog, review-card/actions/source refs, and setup checklist into focused submodules."
   - "Post-diff reviewer found no blocking issues. Remaining risks were untracked new files, SSR-only test coverage, and preserving existing link sanitizer boundaries; untracked files are included in the checkpoint plan and the browser smoke covers the main interaction path."
+  - "Runs split post-diff reviewer found no blocking issues. It confirmed helper re-exports, RECENT_RUN_LIMIT, action ids, artifactHref/display helper usage, and empty-state action ids remained compatible."
 operator_checks:
   - "Docker Desktop 4.65.0 / engine 29.2.1 reachable after startup; docker build -t tgcs-local-smoke:<temp> . -> exit 0"
   - "Docker demo container -> exit 0, generated one demo report in a temporary mounted output directory; temporary directory and image removed."
@@ -56,10 +63,10 @@ operator_checks:
   - "Live Windows Task Scheduler dry-run task with random name -> install exit 0, status installed, remove exit 0, final status not_installed."
   - "Live Windows Credential Manager smoke -> random secret write/read/delete passed; post-delete read returned empty."
   - "Live LLM structured call -> provider=deepseek, model=deepseek-v4-flash, JSON response status=TGCS_LIVE_LLM_OK, total_tokens=58."
-next_action: "Commit the Inbox split as one compatibility-preserving frontend refactor checkpoint, then continue with the next high-value SPEC slice instead of closing out."
+next_action: "Commit the Runs split as one compatibility-preserving frontend refactor checkpoint, then continue with the next high-value SPEC slice instead of closing out."
 candidate_slices:
-  - "Split dashboard runs.tsx only with focused component tests and production build coverage."
   - "Split large legacy dashboard/src/domain/sanitize.test.ts by dashboard/desk/fixture areas; keep current sanitizer modules as the implementation authority."
+  - "Investigate dashboard_server.py facade growth and split only if route handling/profile creation has a focused testable boundary."
   - "Consider profile creation/profile runtime helpers only when those server/state areas change next."
-last_update: "2026-05-14T06:08:00+08:00"
+last_update: "2026-05-14T06:17:00+08:00"
 checkpoint_ready: true
