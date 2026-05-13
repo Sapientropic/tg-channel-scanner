@@ -1029,3 +1029,48 @@ Next:
 
 - Commit this checkpoint, then continue with bot reply redaction expansion or
   the next remaining privacy/output boundary.
+
+## Slice 26: Bot Reply Redaction Boundary
+
+Status: completed.
+
+Actions:
+
+- Added a baseline Telegram reply redactor in `bot_gateway.py` for bot tokens,
+  provider/API keys, GitHub/Slack-style access tokens, bearer headers, secret
+  env/key-value assignments, argv/args dumps, Windows/UNC/POSIX private paths,
+  chat-id fields, bare long chat IDs, raw message JSON fields, and traceback
+  bodies.
+- Routed `TelegramBotApi.send_message`, BotGateway's fake-API/test path, and
+  summary helpers through the redactor so both production sends and direct
+  helper outputs stay clean.
+- Also strengthened the current working-tree bot action redactor used by the
+  in-progress bot refactor, without staging that unrelated refactor.
+
+Verification:
+
+- Staged snapshot targeted bot tests passed:
+  `python -m pytest .codex-index-check\tests\test_bot_gateway.py::BotGatewayTests::test_redaction_removes_sensitive_telegram_reply_content .codex-index-check\tests\test_bot_gateway.py::BotGatewayTests::test_gateway_send_message_redacts_with_fake_api .codex-index-check\tests\test_bot_gateway.py::BotGatewayTests::test_summary_helpers_redact_private_snapshot_fields -q`
+  passed: `3` tests.
+- Staged snapshot `python -m pytest .codex-index-check\tests\test_bot_gateway.py -q`
+  passed: `16` tests.
+- Mixed working-tree `python -m pytest tests/test_bot_gateway.py -q` passed:
+  `32` tests.
+
+Reviewer Gate:
+
+- This directly addresses Ptolemy's remaining quick-landable bot reply
+  redaction finding.
+- No additional external reviewer was launched for this narrow deterministic
+  slice; the test matrix covers the previously missing private-fragment forms.
+
+Residual Risk:
+
+- Redaction remains deterministic pattern matching; it cannot prove arbitrary
+  free-form text is not private if it does not look like a known secret, path,
+  argv dump, traceback, or chat identifier.
+
+Next:
+
+- Commit this checkpoint, then continue with the next v0.5 privacy/output or
+  local-boundary hardening item.

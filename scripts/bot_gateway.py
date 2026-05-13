@@ -42,6 +42,20 @@ BOT_API_TIMEOUT_SECONDS = 20
 BOT_POLL_TIMEOUT_SECONDS = 30
 MAX_TELEGRAM_MESSAGE_LENGTH = 3900
 PENDING_SOURCE_PLAN_TTL_SECONDS = 15 * 60
+BOT_TOKEN_RE = re.compile(r"\b\d{5,12}:[A-Za-z0-9_-]{10,}\b")
+PROVIDER_KEY_RE = re.compile(r"\b(?:sk|sk-proj|sk-ant|ak)-[A-Za-z0-9_-]{12,}\b", re.IGNORECASE)
+ACCESS_TOKEN_RE = re.compile(r"\b(?:gh[pousr]_[A-Za-z0-9_]{12,}|github_pat_[A-Za-z0-9_]{20,}|xox[abprs]-[A-Za-z0-9-]{12,})\b", re.IGNORECASE)
+AUTHORIZATION_RE = re.compile(r"(?i)\bAuthorization\s*:\s*Bearer\s+[A-Za-z0-9._~+/=-]{8,}")
+ENV_SECRET_RE = re.compile(r"(?i)\b[A-Z0-9_]*(?:API[_-]?KEY|TOKEN|SECRET|PASSWORD)\b\s*=\s*(?:\"[^\"\r\n]+\"|'[^'\r\n]+'|[^\s`'\"]+)")
+KEY_VALUE_SECRET_RE = re.compile(r"(?i)\b(?:api[_-]?key|token|secret|password)\b\s*[:=]\s*(?:\"[^\"\r\n]+\"|'[^'\r\n]+'|[^\s`'\"]+)")
+ARGV_DUMP_RE = re.compile(r"(?i)\b(?:argv|args)\b\s*(?::|=)?\s*\[[^\]]*\]|\b(?:argv|args)\b\s*[:=]\s*[^\r\n]+")
+WINDOWS_PATH_RE = re.compile(r"[A-Za-z]:\\[^\s`'\"]+")
+UNC_PATH_RE = re.compile(r"\\\\[^\\\s]+\\[^\s`'\"]+")
+POSIX_PRIVATE_PATH_RE = re.compile(r"(?<!\w)/(?:home|Users|users|var|tmp|etc|private/tmp)/[^\s`'\"]+")
+CHAT_ID_FIELD_RE = re.compile(r"\bchat[_ -]?id\b\s*[:=]?\s*-?\d{5,20}\b", re.IGNORECASE)
+BARE_CHAT_ID_RE = re.compile(r"(?<![\w:])-?\d{8,20}(?!\w)")
+TRACEBACK_RE = re.compile(r"Traceback \(most recent call last\):.*", re.IGNORECASE | re.DOTALL)
+RAW_MESSAGE_FIELD_RE = re.compile(r'(?i)"(?:text|message|raw_message|body)"\s*:\s*"[^"]{12,}"')
 
 BOT_COMMANDS = [
     {"command": "start", "description": "Show the T-Sense bot menu"},
@@ -125,7 +139,7 @@ class TelegramBotApi:
         return [item for item in updates if isinstance(item, dict)] if isinstance(updates, list) else []
 
     def send_message(self, chat_id: str, text: str, *, reply_markup: dict[str, Any] | None = None) -> None:
-        chunks = split_telegram_text(text)
+        chunks = split_telegram_text(redact_telegram_reply(text))
         for index, chunk in enumerate(chunks):
             payload: dict[str, Any] = {
                 "chat_id": chat_id,
@@ -144,6 +158,25 @@ class TelegramBotApi:
 
     def set_my_commands(self) -> None:
         self.request("setMyCommands", {"commands": BOT_COMMANDS})
+
+
+def redact_telegram_reply(text: object) -> str:
+    clean = str(text or "")
+    clean = TRACEBACK_RE.sub("Local action failed. Open Signal Desk Runs or Settings for details.", clean)
+    clean = BOT_TOKEN_RE.sub("[redacted-token]", clean)
+    clean = PROVIDER_KEY_RE.sub("[redacted-key]", clean)
+    clean = ACCESS_TOKEN_RE.sub("[redacted-token]", clean)
+    clean = AUTHORIZATION_RE.sub("Authorization: Bearer [redacted-key]", clean)
+    clean = ENV_SECRET_RE.sub(lambda match: f"{match.group(0).split('=')[0].strip()}=[redacted-secret]", clean)
+    clean = KEY_VALUE_SECRET_RE.sub(lambda match: re.split(r"[:=]", match.group(0), maxsplit=1)[0].strip() + "=[redacted-secret]", clean)
+    clean = ARGV_DUMP_RE.sub("argv=[redacted-argv]", clean)
+    clean = WINDOWS_PATH_RE.sub("[redacted-path]", clean)
+    clean = UNC_PATH_RE.sub("[redacted-path]", clean)
+    clean = POSIX_PRIVATE_PATH_RE.sub("[redacted-path]", clean)
+    clean = CHAT_ID_FIELD_RE.sub("chat_id [redacted-chat-id]", clean)
+    clean = RAW_MESSAGE_FIELD_RE.sub('"text":"[redacted-message]"', clean)
+    clean = BARE_CHAT_ID_RE.sub("[redacted-chat-id]", clean)
+    return clean.strip() or "Done."
 
 
 def split_telegram_text(text: str) -> list[str]:
@@ -278,15 +311,17 @@ def dashboard_snapshot(db_path: Path = DEFAULT_DB_PATH) -> dict[str, Any]:
 def source_summary() -> str:
     sources = dashboard_server.desk_sources()
     topics = ", ".join(sources.get("topics") or []) or "none"
-    return "\n".join(
-        [
-            "Sources",
-            f"Total: {sources.get('source_count', 0)}",
-            f"Enabled: {sources.get('enabled_count', 0)}",
-            f"Topics: {topics}",
-            "",
-            "Send: add @channel, pause @channel, remove @channel",
-        ]
+    return redact_telegram_reply(
+        "\n".join(
+            [
+                "Sources",
+                f"Total: {sources.get('source_count', 0)}",
+                f"Enabled: {sources.get('enabled_count', 0)}",
+                f"Topics: {topics}",
+                "",
+                "Send: add @channel, pause @channel, remove @channel",
+            ]
+        )
     )
 
 
@@ -301,7 +336,7 @@ def profile_summary(snapshot: dict[str, Any]) -> str:
         lines.append(f"- {label}: {status}")
     if len(profiles) > 12:
         lines.append(f"... {len(profiles) - 12} more")
-    return "\n".join(lines)
+    return redact_telegram_reply("\n".join(lines))
 
 
 def status_summary(snapshot: dict[str, Any]) -> str:
@@ -310,15 +345,17 @@ def status_summary(snapshot: dict[str, Any]) -> str:
     runs = [item for item in snapshot.get("runs") or [] if isinstance(item, dict)]
     inbox = [item for item in snapshot.get("inbox") or [] if isinstance(item, dict)]
     latest_run = runs[0] if runs else {}
-    return "\n".join(
-        [
-            "T-Sense status",
-            f"Stage: {setup.get('stage') or 'unknown'}",
-            f"Next: {setup.get('next_step') or 'Open Signal Desk'}",
-            f"Pending review cards: {len(inbox)}",
-            f"Latest run: {latest_run.get('status') or 'none'} {latest_run.get('profile_id') or ''}".strip(),
-            f"Opportunity summary: {opportunity.get('title') or opportunity.get('status') or 'not ready'}",
-        ]
+    return redact_telegram_reply(
+        "\n".join(
+            [
+                "T-Sense status",
+                f"Stage: {setup.get('stage') or 'unknown'}",
+                f"Next: {setup.get('next_step') or 'Open Signal Desk'}",
+                f"Pending review cards: {len(inbox)}",
+                f"Latest run: {latest_run.get('status') or 'none'} {latest_run.get('profile_id') or ''}".strip(),
+                f"Opportunity summary: {opportunity.get('title') or opportunity.get('status') or 'not ready'}",
+            ]
+        )
     )
 
 
@@ -341,7 +378,7 @@ def latest_summary(snapshot: dict[str, Any]) -> str:
         display_path = str(artifact.get("display_path") or artifact.get("path") or "")
         if display_path:
             lines.append(f"Report: {display_path}")
-    return "\n".join(lines)
+    return redact_telegram_reply("\n".join(lines))
 
 
 def run_dry_scan(profile_id: str, *, timeout_seconds: int = 900) -> str:
@@ -370,7 +407,7 @@ def run_dry_scan(profile_id: str, *, timeout_seconds: int = 900) -> str:
         stderr = " ".join((completed.stderr or "").split())[:500]
         raise BotGatewayError(f"Dry scan failed. {stderr or 'Open Runs in Signal Desk for diagnostics.'}")
     snapshot = dashboard_snapshot()
-    return "Dry scan finished.\n\n" + latest_summary(snapshot)
+    return redact_telegram_reply("Dry scan finished.\n\n" + latest_summary(snapshot))
 
 
 def clean_topic(value: str) -> str:
@@ -544,6 +581,9 @@ class BotGateway:
         self.refresh_allowed()
         return chat_is_allowed(chat_id, allowed=self.allowed)
 
+    def send_message(self, chat_id: str, text: str, *, reply_markup: dict[str, Any] | None = None) -> None:
+        self.api.send_message(chat_id, redact_telegram_reply(text), reply_markup=reply_markup)
+
     def prune_pending_source_plans(self) -> None:
         now = time.time()
         expired = [
@@ -556,35 +596,35 @@ class BotGateway:
 
     def dispatch_intent(self, chat_id: str, intent: BotIntent) -> None:
         if intent.action == "help":
-            self.api.send_message(chat_id, help_text(), reply_markup=main_menu_keyboard())
+            self.send_message(chat_id, help_text(), reply_markup=main_menu_keyboard())
             return
         if intent.action == "status":
-            self.api.send_message(chat_id, status_summary(dashboard_snapshot(self.db_path)))
+            self.send_message(chat_id, status_summary(dashboard_snapshot(self.db_path)))
             return
         if intent.action == "latest":
-            self.api.send_message(chat_id, latest_summary(dashboard_snapshot(self.db_path)))
+            self.send_message(chat_id, latest_summary(dashboard_snapshot(self.db_path)))
             return
         if intent.action == "profiles":
-            self.api.send_message(chat_id, profile_summary(dashboard_snapshot(self.db_path)))
+            self.send_message(chat_id, profile_summary(dashboard_snapshot(self.db_path)))
             return
         if intent.action == "settings":
-            self.api.send_message(chat_id, settings_text())
+            self.send_message(chat_id, settings_text())
             return
         if intent.action == "sources_summary":
-            self.api.send_message(chat_id, source_summary())
+            self.send_message(chat_id, source_summary())
             return
         if intent.action == "scan":
-            self.api.send_message(chat_id, f"Running {intent.profile_id} as dry-run. This can take a minute.")
-            self.api.send_message(chat_id, run_dry_scan(intent.profile_id))
+            self.send_message(chat_id, f"Running {intent.profile_id} as dry-run. This can take a minute.")
+            self.send_message(chat_id, run_dry_scan(intent.profile_id))
             return
         if intent.action == "sources_plan":
             if not intent.instruction:
-                self.api.send_message(chat_id, "Send a source instruction such as: add @remote_jobs or remove @old_jobs.")
+                self.send_message(chat_id, "Send a source instruction such as: add @remote_jobs or remove @old_jobs.")
                 return
             preview, result = source_plan_preview(intent.instruction, intent.topic)
             operation_count = sum(int(result.get(key) or 0) for key in ("added_count", "updated_count", "removed_count", "enabled_count", "disabled_count"))
             if operation_count <= 0:
-                self.api.send_message(chat_id, preview)
+                self.send_message(chat_id, preview)
                 return
             resolved_plan = result.get("resolved_plan") if isinstance(result.get("resolved_plan"), dict) else {}
             plan_id = secrets.token_urlsafe(8)
@@ -595,17 +635,17 @@ class BotGateway:
                 resolved_plan=resolved_plan,
                 created_at=time.time(),
             )
-            self.api.send_message(
+            self.send_message(
                 chat_id,
                 preview,
                 reply_markup={"inline_keyboard": [[{"text": "Apply source plan", "callback_data": f"sources_apply:{plan_id}"}]]},
             )
             return
-        self.api.send_message(chat_id, help_text(), reply_markup=main_menu_keyboard())
+        self.send_message(chat_id, help_text(), reply_markup=main_menu_keyboard())
 
     def handle_text(self, chat_id: str, text: str) -> None:
         if not self.chat_is_allowed(chat_id):
-            self.api.send_message(chat_id, unauthorized_text(), reply_markup=main_menu_keyboard())
+            self.send_message(chat_id, unauthorized_text(), reply_markup=main_menu_keyboard())
             return
         intent = route_text_to_intent(text, use_llm=self.use_llm)
         self.dispatch_intent(chat_id, intent)
@@ -613,7 +653,7 @@ class BotGateway:
     def handle_callback(self, chat_id: str, callback_query_id: str, data: str) -> None:
         if not self.chat_is_allowed(chat_id):
             self.api.answer_callback_query(callback_query_id, "Open Signal Desk Settings to authorize this chat.")
-            self.api.send_message(chat_id, unauthorized_text())
+            self.send_message(chat_id, unauthorized_text())
             return
         if data == "status":
             self.api.answer_callback_query(callback_query_id)
@@ -639,7 +679,7 @@ class BotGateway:
                 self.api.answer_callback_query(callback_query_id, "Source plan expired.")
                 return
             self.api.answer_callback_query(callback_query_id, "Applying source plan")
-            self.api.send_message(chat_id, apply_source_plan(plan.resolved_plan, plan.topic))
+            self.send_message(chat_id, apply_source_plan(plan.resolved_plan, plan.topic))
             self.pending_source_plans.pop(plan_id, None)
             return
         self.api.answer_callback_query(callback_query_id, "Unsupported action")

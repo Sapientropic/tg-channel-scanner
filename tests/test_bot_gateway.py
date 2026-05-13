@@ -49,6 +49,82 @@ class BotGatewayTests(unittest.TestCase):
         self.assertEqual(intent, routed)
         llm_mock.assert_called_once_with("semantic fuzzy intent zzz")
 
+    def test_redaction_removes_sensitive_telegram_reply_content(self):
+        text = (
+            "token 123456:ABCDEF_secret\n"
+            "Authorization: Bearer sk-localSecret12345\n"
+            "MY_SECRET=\"plain-secret-value\" ghp_1234567890abcdefABCDEF1234567890abcd\n"
+            "args=['tgcs','scan']\n"
+            "path C:\\Users\\Administrator\\secret\\scan.jsonl and /home/sdy/private/scan.jsonl and \\\\server\\share\\secret.txt\n"
+            "chat_id 123456789\n"
+            "Traceback (most recent call last): raw message text"
+        )
+
+        redacted = bot_gateway.redact_telegram_reply(text)
+
+        self.assertNotIn("123456:ABCDEF_secret", redacted)
+        self.assertNotIn("sk-localSecret12345", redacted)
+        self.assertNotIn("plain-secret-value", redacted)
+        self.assertNotIn("ghp_1234567890abcdefABCDEF1234567890abcd", redacted)
+        self.assertNotIn("['tgcs','scan']", redacted)
+        self.assertNotIn("C:\\Users", redacted)
+        self.assertNotIn("/home/sdy", redacted)
+        self.assertNotIn("\\\\server\\share", redacted)
+        self.assertNotIn("123456789", redacted)
+        self.assertNotIn("Traceback", redacted)
+        self.assertIn("[redacted", redacted)
+
+    def test_gateway_send_message_redacts_with_fake_api(self):
+        api = FakeBotApi()
+        gateway = bot_gateway.BotGateway(api, allowed={"12345"})
+
+        gateway.send_message("12345", "OPENAI_API_KEY=sk-localSecret12345 argv=['tgcs'] C:\\Users\\Administrator\\state")
+
+        rendered = api.messages[-1]["text"]
+        self.assertNotIn("sk-localSecret12345", rendered)
+        self.assertNotIn("['tgcs']", rendered)
+        self.assertNotIn("C:\\Users", rendered)
+        self.assertIn("[redacted", rendered)
+
+    def test_summary_helpers_redact_private_snapshot_fields(self):
+        snapshot = {
+            "setup_status": {
+                "stage": 'MY_SECRET="plain-secret-value"',
+                "next_step": "argv=['tgcs','scan'] C:\\Users\\Administrator\\state",
+            },
+            "opportunity_summary": {
+                "title": "token 123456:ABCDEF_secret",
+                "detail": "chat_id=12345678901",
+                "items": [{"title": "ghp_1234567890abcdefABCDEF1234567890abcd", "rating": "high"}],
+            },
+            "runs": [
+                {
+                    "status": "Authorization: Bearer sk-localSecret12345",
+                    "profile_id": "jobs-fast",
+                    "report_artifact": {"path": "\\\\server\\share\\report.html"},
+                }
+            ],
+            "inbox": [{}],
+            "profiles": [{"display_name": "DATABASE_PASSWORD='plain-secret-value'", "enabled": True}],
+        }
+
+        rendered = "\n".join(
+            [
+                bot_gateway.status_summary(snapshot),
+                bot_gateway.latest_summary(snapshot),
+                bot_gateway.profile_summary(snapshot),
+            ]
+        )
+
+        self.assertNotIn("123456:ABCDEF_secret", rendered)
+        self.assertNotIn("sk-localSecret12345", rendered)
+        self.assertNotIn("plain-secret-value", rendered)
+        self.assertNotIn("ghp_1234567890abcdefABCDEF1234567890abcd", rendered)
+        self.assertNotIn("['tgcs','scan']", rendered)
+        self.assertNotIn("C:\\Users", rendered)
+        self.assertNotIn("\\\\server\\share", rendered)
+        self.assertNotIn("12345678901", rendered)
+
     def test_unauthorized_chat_gets_setup_message_without_action(self):
         api = FakeBotApi()
         gateway = bot_gateway.BotGateway(api, allowed={"11111"})
