@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
@@ -21,6 +22,35 @@ from scripts import local_credentials
 
 TELEGRAM_BOT_TOKEN_ENV = "TGCS_TELEGRAM_BOT_TOKEN"
 TELEGRAM_BOT_TOKEN_CREDENTIAL_TARGET = "tgcs.signal-desk.telegram-bot-token"
+BOT_TOKEN_RE = re.compile(r"\b\d{5,12}:[A-Za-z0-9_-]{10,}\b")
+PROVIDER_KEY_RE = re.compile(r"\b(?:sk|sk-proj|sk-ant|ak)-[A-Za-z0-9_-]{12,}\b", re.IGNORECASE)
+AUTHORIZATION_RE = re.compile(r"(?i)\bAuthorization\s*:\s*Bearer\s+[A-Za-z0-9._~+/=-]{8,}")
+ENV_SECRET_RE = re.compile(r"(?i)\b[A-Z0-9_]*(?:API[_-]?KEY|TOKEN|SECRET|PASSWORD)\b\s*=\s*(?:\"[^\"\r\n]+\"|'[^'\r\n]+'|[^\s`'\"]+)")
+KEY_VALUE_SECRET_RE = re.compile(r"(?i)\b(?:api[_-]?key|token|secret|password)\b\s*[:=]\s*(?:\"[^\"\r\n]+\"|'[^'\r\n]+'|[^\s`'\"]+)")
+ARGV_DUMP_RE = re.compile(r"(?i)\b(?:argv|args)\b\s*(?::|=)?\s*\[[^\]]*\]|\b(?:argv|args)\b\s*[:=]\s*[^\r\n]+")
+WINDOWS_PATH_RE = re.compile(r"[A-Za-z]:\\[^\s`'\"]+")
+UNC_PATH_RE = re.compile(r"\\\\[^\\\s]+\\[^\s`'\"]+")
+POSIX_PRIVATE_PATH_RE = re.compile(r"(?<!\w)/(?:home|Users|users|var|tmp|etc|private/tmp)/[^\s`'\"]+")
+CHAT_ID_FIELD_RE = re.compile(r"\bchat[_ -]?id\b\s*[:=]?\s*-?\d{5,20}\b", re.IGNORECASE)
+BARE_CHAT_ID_RE = re.compile(r"(?<![\w:])-?\d{8,20}(?!\w)")
+
+
+def redact_delivery_error(value: object) -> str:
+    text = " ".join(str(value or "").split())
+    if not text:
+        return ""
+    text = BOT_TOKEN_RE.sub("[redacted-token]", text)
+    text = PROVIDER_KEY_RE.sub("[redacted-key]", text)
+    text = AUTHORIZATION_RE.sub("Authorization: Bearer [redacted-key]", text)
+    text = ENV_SECRET_RE.sub(lambda match: f"{match.group(0).split('=')[0].strip()}=[redacted-secret]", text)
+    text = KEY_VALUE_SECRET_RE.sub(lambda match: re.split(r"[:=]", match.group(0), maxsplit=1)[0].strip() + "=[redacted-secret]", text)
+    text = ARGV_DUMP_RE.sub("argv=[redacted-argv]", text)
+    text = WINDOWS_PATH_RE.sub("[redacted-path]", text)
+    text = UNC_PATH_RE.sub("[redacted-path]", text)
+    text = POSIX_PRIVATE_PATH_RE.sub("[redacted-path]", text)
+    text = CHAT_ID_FIELD_RE.sub("chat_id [redacted-chat-id]", text)
+    text = BARE_CHAT_ID_RE.sub("[redacted-chat-id]", text)
+    return _clean_text(text, max_len=500)
 
 
 class DeliveryError(Exception):
@@ -38,6 +68,7 @@ class DeliveryAttempt:
     error: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
+        error = redact_delivery_error(self.error) if self.error else None
         return {
             "target_id": self.target_id,
             "target_type": self.target_type,
@@ -45,7 +76,7 @@ class DeliveryAttempt:
             "ok": self.ok,
             "status": self.status,
             "message_id": self.message_id,
-            "error": self.error,
+            "error": error,
         }
 
 

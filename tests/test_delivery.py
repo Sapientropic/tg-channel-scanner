@@ -1,3 +1,4 @@
+import json
 import unittest
 from unittest.mock import patch
 
@@ -50,6 +51,30 @@ class DeliveryTests(unittest.TestCase):
 
         self.assertTrue(attempt.ok)
         self.assertEqual(attempt.status, "dry_run")
+
+    def test_delivery_attempt_dict_redacts_error_private_fragments(self):
+        attempt = delivery.DeliveryAttempt(
+            target_id="telegram-bot-default",
+            target_type="telegram_bot",
+            mode="live",
+            ok=False,
+            status="request_failed",
+            error=(
+                "token 123456:ABCDEF_secret Authorization: Bearer sk-localSecret12345 "
+                "chat_id=12345678901 argv=['tgcs','monitor'] "
+                "C:\\Users\\Administrator\\state \\\\server\\share\\delivery.log"
+            ),
+        )
+
+        rendered = json.dumps(attempt.to_dict(), ensure_ascii=False)
+
+        self.assertNotIn("123456:ABCDEF_secret", rendered)
+        self.assertNotIn("sk-localSecret12345", rendered)
+        self.assertNotIn("12345678901", rendered)
+        self.assertNotIn("['tgcs','monitor']", rendered)
+        self.assertNotIn("C:\\Users\\Administrator", rendered)
+        self.assertNotIn("\\\\server\\share", rendered)
+        self.assertIn("[redacted", rendered)
 
     def test_token_resolution_prefers_environment_over_credential_store(self):
         with patch.dict("os.environ", {delivery.TELEGRAM_BOT_TOKEN_ENV: "env-token"}):

@@ -1118,3 +1118,43 @@ Next:
 
 - Commit this checkpoint, then continue with shared contract fixture coverage
   or another privacy negative test from Phase 1.
+
+## Slice 28: Delivery Attempt Error Redaction
+
+Status: completed.
+
+Actions:
+
+- Added a delivery-error redactor at `DeliveryAttempt.to_dict()` so monitor
+  result JSON, run manifests, dashboard state, and tests that consume delivery
+  attempts do not receive raw bot tokens, provider keys, bearer headers,
+  secret env/key-value assignments, argv/args dumps, local paths, UNC paths, or
+  chat IDs through error strings.
+- Kept dry-run/live status shape unchanged; only the optional `error` field is
+  sanitized at the serialization boundary.
+
+Verification:
+
+- `python -m pytest tests/test_delivery.py -q` passed: `7` tests.
+- First attempted monitor verification used a stale test name and ran no tests;
+  corrected immediately.
+- `python -m pytest tests/test_delivery.py tests/test_monitor.py -q` passed:
+  `28` tests.
+- Staged snapshot `python -m pytest .codex-index-check\tests\test_delivery.py .codex-index-check\tests\test_monitor.py -q`
+  passed: `28` tests.
+
+Reviewer Gate:
+
+- This is a deterministic privacy/output boundary slice. External review was
+  skipped because the blast radius is one serialization boundary plus focused
+  regression tests.
+
+Residual Risk:
+
+- In-memory `DeliveryAttempt.error` remains the original adapter error for local
+  debugging. The hardened guarantee is for serialized contract surfaces.
+
+Next:
+
+- Commit this checkpoint, then continue with shared contract fixture coverage
+  or another Phase 1 privacy negative test.
