@@ -187,6 +187,25 @@ runtime sanitizer implementation:
 - Focused gates passed: `cd dashboard; npm test -- --run sanitize`,
   `cd dashboard; npm test -- --run`, and `cd dashboard; npm run build`.
 
+## Progress Update: 2026-05-14 Profile Creation Split
+
+The Signal Desk profile creation boundary moved out of the HTTP server facade
+without changing the `/api/profiles/create` route contract:
+
+- `scripts/desk_profiles.py` now owns brief/file parsing, profile title/id
+  generation, local profile Markdown generation, profile TOML append, and DB
+  upsert for newly created profiles.
+- `scripts/dashboard_server.py` keeps the public route, loopback/POST
+  integrity checks, and monkeypatch-compatible facade re-exports for
+  `create_profile_from_brief`, `_profile_*` helpers, `DESK_DELIVERY_TARGET_ID`,
+  and `PROFILE_CREATE_*` constants.
+- `tests/dashboard/test_profiles.py` now locks the dashboard-server facade
+  re-export and patch paths in addition to the existing create-profile endpoint
+  behavior.
+- Focused gates passed: `python -m pytest tests/dashboard/test_profiles.py -q`,
+  `python -m pytest tests/dashboard -q`, targeted `ruff`, `py_compile`, and
+  full `python -m pytest -q`.
+
 ## Current Debt Snapshot: 2026-05-14
 
 The debt register below remains the long-form reasoning. This table is the
@@ -196,12 +215,12 @@ current triage view for what is still real after the later splits:
 | --- | --- | --- |
 | D1. WIP and branch hygiene | Cleared for the known backlog. The dirty implementation slices from the handoff are now checkpoint commits. | Keep using staged snapshot or clean worktree gates for future slices; do not use mixed-worktree gates as commit proof. |
 | D2. Contract sprawl | Materially improved. Shared fixtures now cover the high-risk Python/TypeScript contracts, but `docs/agent-cli-contract.md` is still long. | Keep the contract doc as an index and move new guarantees into fixtures first, prose second. |
-| D3. `dashboard_server.py` boundaries | Artifact, git, scheduler, credentials, sources, and action execution helpers are split behind the old facade, but later product work has grown the facade back to `1657` lines. | Keep HTTP routing/profile creation in the facade for now; only split further if route handling or profile creation starts changing. |
+| D3. `dashboard_server.py` boundaries | Artifact, git, scheduler, credentials, sources, action execution, and profile creation helpers are split behind the old facade. The facade is down to `1195` lines and mainly owns route dispatch, loopback/POST checks, state payload assembly, and compatibility re-exports. | Keep profile runtime/review-patch route wiring in the facade until those areas change; next backend leverage is test concentration or focused Desk source/helper splits. |
 | D4. `monitor_state.py` boundaries | Mostly reduced to a `411` line facade. DB/schema, common privacy guards, review cards, alerts, feedback, profile patches, and dashboard projection are split. | Profile runtime/settings helpers are the only meaningful remaining state responsibility; split only with focused tests if that area changes. |
 | D5. `report.py` coupling | Mostly reduced. `report.py` is now `503` lines; report behavior moved into `report_*` modules. | Treat `report_extraction.py`, `report_html.py`, and `report_sources.py` as the next review units rather than reopening the old monolith. |
 | D6. Dashboard root/settings state | Actions, Profiles, Inbox, and Runs are now composition entrypoints. `inbox.tsx` is down to `137` lines and `runs.tsx` is down to `76` lines, each backed by focused submodules. Runtime settings remain the next UI concentration point. | Touch runtime settings only when that area changes; otherwise shift to backend facade growth or large backend test concentration. |
 | D7. Runtime sanitizers | Dashboard sanitizer is now a `14` line facade. Dashboard state sanitizers are split by product area and Desk-owned helpers re-export `sanitize/desk.ts`. The former `1368` line legacy `sanitize.test.ts` is split into focused dashboard-state, Desk action/feedback, Desk bot/settings, Desk source/delivery, and entrypoint-compat files. | Keep these tests close to existing sanitizer modules; avoid adding a second sanitizer implementation. |
-| D8. Test concentration | Improved. Report, dashboard server, monitor-state, and dashboard sanitizer tests now live in focused files/directories, but several backend test files remain large. | Keep focused directories; next split targets are `tests/test_monitor.py`, `tests/test_tgcs_cli.py`, and dashboard-server growth if a route/profile boundary changes. |
+| D8. Test concentration | Improved. Report, dashboard server, monitor-state, and dashboard sanitizer tests now live in focused files/directories, but several backend test files remain large. | Keep focused directories; next split targets are `tests/test_monitor.py`, `tests/test_tgcs_cli.py`, and any focused Desk helper tests that become necessary while shrinking large backend modules. |
 | D9. Packaging metadata | Mostly complete for local Python packaging. Build, staged wheel install, `pipx`, `uvx`, and Docker build/demo/doctor smokes passed. | Keep `signal-desk` as a source-checkout launcher until resources are package-safe; re-run Docker when Dockerfile/package-data/dependency metadata changes. |
 | D10. Documentation ownership | Current docs are aligned: this file is the debt authority, `docs/testing.md` is command authority, and quality logs are historical evidence. | Update this table and `docs/quality/task-state.md` whenever a new cleanup slice changes current status. |
 
@@ -209,7 +228,7 @@ Large current files are still the main maintainability signal:
 
 | Area | File | Lines | Why It Matters |
 | --- | ---: | ---: | --- |
-| Python server | `scripts/dashboard_server.py` | 1657 | HTTP routing and profile creation remain in the facade; product helpers are split behind compatibility exports, but the facade is growing again. |
+| Python server | `scripts/dashboard_server.py` | 1195 | HTTP routing, state payload assembly, route-level validation, and compatibility re-exports remain in the facade after profile creation moved out. |
 | Dashboard projection | `scripts/dashboard_projection.py` | 1012 | Focused projection module for dashboard snapshots, run/report artifacts, setup status, and opportunity summaries. |
 | Python monitor runner | `scripts/monitor_runner.py` | 1008 | Repeated-run orchestration and manifest behavior are now a focused but still sizeable boundary. |
 | Report rendering | `scripts/report_html.py` | 711 | HTML rendering is separated from extraction but remains large enough to merit focused tests before visual/report changes. |

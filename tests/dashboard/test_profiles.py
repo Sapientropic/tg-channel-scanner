@@ -4,10 +4,56 @@ from http import HTTPStatus
 from pathlib import Path
 from unittest.mock import patch
 
-from scripts import dashboard_server, monitor_state
+from scripts import dashboard_server, desk_profiles, monitor_state
 
 
 class DashboardProfileTests(unittest.TestCase):
+    def test_profile_creation_helpers_stay_available_from_dashboard_server_facade(self):
+        self.assertIs(dashboard_server.create_profile_from_brief, desk_profiles.create_profile_from_brief)
+        self.assertIs(dashboard_server._profile_create_input_text, desk_profiles._profile_create_input_text)
+        self.assertEqual(dashboard_server.PROFILE_CREATE_MAX_TEXT_LENGTH, desk_profiles.PROFILE_CREATE_MAX_TEXT_LENGTH)
+
+    def test_profile_create_facade_helper_patches_still_affect_creation(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            conn = monitor_state.connect(root / "tgcs.db")
+            try:
+                with patch.object(dashboard_server, "PROJECT_ROOT", root):
+                    with patch.object(
+                        dashboard_server,
+                        "_profile_text_from_base64_file",
+                        return_value="Patched profile brief",
+                    ) as text_mock:
+                        with patch.object(dashboard_server, "_unique_profile_id", return_value="patched-profile") as id_mock:
+                            with patch.object(dashboard_server, "_append_profile_config") as append_mock:
+                                with patch.object(dashboard_server, "DESK_DELIVERY_TARGET_ID", "custom-target"):
+                                    result = dashboard_server.create_profile_from_brief(
+                                        conn,
+                                        {"source_base64": "not-base64", "source_filename": "brief.txt"},
+                                    )
+                profile_exists = (root / "profiles" / "desk" / "patched-profile.md").exists()
+            finally:
+                conn.close()
+
+        text_mock.assert_called_once_with("not-base64", "brief.txt")
+        id_mock.assert_called_once()
+        append_mock.assert_called_once()
+        self.assertEqual(result["profile_id"], "patched-profile")
+        self.assertEqual(append_mock.call_args.args[0]["delivery_targets"], ["custom-target"])
+        self.assertTrue(profile_exists)
+
+    def test_profile_create_facade_constant_patch_still_affects_validation(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            conn = monitor_state.connect(Path(tmp) / "tgcs.db")
+            try:
+                with patch.object(dashboard_server, "PROFILE_CREATE_MAX_TEXT_LENGTH", 5):
+                    with self.assertRaises(ValueError) as raised:
+                        dashboard_server.create_profile_from_brief(conn, {"brief": "too long"})
+            finally:
+                conn.close()
+
+        self.assertIn("5 characters or fewer", str(raised.exception))
+
     def test_profile_enabled_http_endpoint_updates_runtime_override(self):
         with tempfile.TemporaryDirectory() as tmp:
             db_path = Path(tmp) / "tgcs.db"
