@@ -2371,6 +2371,38 @@ class DashboardServerGitTests(unittest.TestCase):
             ({}, "Profile note is required"),
             ({"note": "valid", "command": "tgcs monitor run"}, "Unsupported profile draft field"),
             ({"note": "x" * (dashboard_server.PROFILE_DRAFT_NOTE_MAX_LENGTH + 1)}, "characters or fewer"),
+            ({"note": "OPENAI_API_KEY=sk-localSecret12345"}, "cannot include"),
+        ]:
+            with self.subTest(body=list(body)):
+                handler = FakeHandler(body)
+                dashboard_server.DashboardHandler.do_POST(handler)
+
+                self.assertEqual(handler.status, HTTPStatus.BAD_REQUEST)
+                self.assertIn(error_fragment, handler.payload["error"])
+
+    def test_profile_matching_preferences_http_endpoint_rejects_private_fragments(self):
+        class FakeHandler:
+            status = None
+            payload = None
+            client_address = ("127.0.0.1", 51000)
+            path = "/api/profiles/jobs-fast/matching-preferences"
+
+            def __init__(self, body):
+                self.body = body
+
+            def _connect(self):
+                raise AssertionError("private preference text should be rejected before state access")
+
+            def _read_json_body(self):
+                return self.body
+
+            def _json(self, status, payload):
+                self.status = status
+                self.payload = payload
+
+        for body, error_fragment in [
+            ({"preferences": "Prefer remote roles. argv=['tgcs','monitor']"}, "cannot include"),
+            ({"preferences": "chat_id=12345678901"}, "cannot include"),
         ]:
             with self.subTest(body=list(body)):
                 handler = FakeHandler(body)
@@ -2451,6 +2483,7 @@ class DashboardServerGitTests(unittest.TestCase):
                 ({}, "Describe the profile"),
                 ({"brief": "valid", "command": "tgcs monitor run"}, "Unsupported profile creation field"),
                 ({"brief": "x" * (dashboard_server.PROFILE_CREATE_MAX_TEXT_LENGTH + 1)}, "characters or fewer"),
+                ({"brief": "Authorization: Bearer sk-localSecret12345"}, "cannot include"),
             ]:
                 with self.subTest(body=list(body)):
                     handler = FakeHandler(body)

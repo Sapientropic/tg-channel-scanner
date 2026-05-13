@@ -2649,7 +2649,7 @@ def _profile_create_input_text(body: dict) -> str:
         raise ValueError("Describe the profile or attach a Markdown, text, or PDF file.")
     if len(text) > PROFILE_CREATE_MAX_TEXT_LENGTH:
         raise ValueError(f"Profile brief must be {PROFILE_CREATE_MAX_TEXT_LENGTH} characters or fewer after parsing.")
-    return text
+    return monitor_state.require_profile_text_without_private_fragments("Profile brief", text)
 
 
 def _profile_text_from_base64_file(source_base64: str, filename: str) -> str:
@@ -4185,6 +4185,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
                     raise ValueError("Profile note is required.")
                 if len(note) > PROFILE_DRAFT_NOTE_MAX_LENGTH:
                     raise ValueError(f"Profile note must be {PROFILE_DRAFT_NOTE_MAX_LENGTH} characters or fewer.")
+                note = monitor_state.require_profile_text_without_private_fragments("Profile note", note)
                 profile_id = unquote(parsed.path.split("/")[3])
                 with close_after_use(self._connect()) as conn:
                     patch = monitor_state.create_profile_patch_suggestion(
@@ -4207,6 +4208,10 @@ class DashboardHandler(BaseHTTPRequestHandler):
                     raise ValueError("Profile matching preferences are required.")
                 if len(preferences) > PROFILE_MATCHING_PREFERENCES_MAX_LENGTH:
                     raise ValueError(f"Profile matching preferences must be {PROFILE_MATCHING_PREFERENCES_MAX_LENGTH} characters or fewer.")
+                preferences = monitor_state.require_profile_text_without_private_fragments(
+                    "Profile matching preferences",
+                    preferences,
+                )
                 profile_id = unquote(parsed.path.split("/")[3])
                 with close_after_use(self._connect()) as conn:
                     patch = monitor_state.create_profile_preferences_patch_suggestion(

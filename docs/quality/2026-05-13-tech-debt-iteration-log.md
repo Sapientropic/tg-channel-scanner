@@ -980,3 +980,52 @@ Next:
 
 - Commit this checkpoint after staged-snapshot verification, then continue with
   profile draft/preference input redaction or bot reply redaction expansion.
+
+## Slice 25: Profile Input Private-Fragment Rejection
+
+Status: completed.
+
+Actions:
+
+- Added a shared profile-text private-fragment guard in `monitor_state` so
+  direct profile patch creation rejects obvious bot tokens, provider/API keys,
+  bearer authorization headers, secret env/key-value assignments, argv dumps,
+  chat-id fields, and local paths before writing `profile_patch_suggestions`.
+- Applied the same guard at dashboard route boundaries for profile draft notes
+  and matching-preference edits before opening the local state database.
+- Applied the guard to profile creation input after Markdown/text/PDF parsing
+  and length checks, so new local profile Markdown is not created from obvious
+  credential or path dumps.
+
+Verification:
+
+- `python -m pytest tests/test_monitor_state.py::MonitorStateTests::test_profile_patch_suggestions_reject_private_fragments tests/test_monitor_state.py::MonitorStateTests::test_profile_text_private_fragment_detector_covers_common_dumps tests/test_monitor_state.py::MonitorStateTests::test_profile_patch_rejects_existing_private_profile_text_before_storing_copy tests/test_monitor_state.py::MonitorStateTests::test_follow_up_private_note_rejects_before_feedback_write tests/test_monitor_state.py::MonitorStateTests::test_follow_up_patch_can_apply_to_profile_file tests/test_dashboard_server.py::DashboardServerGitTests::test_profile_draft_note_http_endpoint_rejects_invalid_payloads tests/test_dashboard_server.py::DashboardServerGitTests::test_profile_matching_preferences_http_endpoint_rejects_private_fragments tests/test_dashboard_server.py::DashboardServerGitTests::test_profile_create_endpoint_rejects_invalid_payloads -q`
+  passed: `8` tests, `20` subtests.
+- `python -m pytest tests/test_monitor_state.py tests/test_dashboard_server.py -q`
+  passed: `216` tests, `86` subtests.
+- Exported the staged index to a temporary tree to verify this checkpoint
+  without unrelated working-tree WIP: targeted profile privacy tests passed
+  (`8` tests, `20` subtests), and staged `tests/test_monitor_state.py` plus
+  staged `tests/test_dashboard_server.py` passed (`202` tests, `86` subtests).
+
+Reviewer Gate:
+
+- Accepted Ptolemy's profile draft/profile preference privacy finding as the
+  slice input.
+- Lagrange returned no P0, accepted P1/P2 gaps: existing profile text could be
+  copied into patch suggestions; common private-fragment patterns were missing;
+  and `follow_up` notes were validated after feedback writes in direct calls.
+- All three findings were accepted and fixed in this slice.
+
+Residual Risk:
+
+- This is deterministic pattern rejection for clearly private fragments; it
+  does not classify arbitrary raw Telegram transcript pasted under benign
+  wording.
+- Report artifacts still intentionally keep original local report text pending
+  a product decision.
+
+Next:
+
+- Commit this checkpoint, then continue with bot reply redaction expansion or
+  the next remaining privacy/output boundary.

@@ -101,6 +101,18 @@ PRIVATE_ITEM_FIELD_SUFFIXES = (
     "_session_path",
     "_token",
 )
+PROFILE_TEXT_PRIVATE_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
+    ("bot token", re.compile(r"\b\d{5,12}:[A-Za-z0-9_-]{10,}\b")),
+    ("provider/API key", re.compile(r"\b(?:sk|sk-proj|sk-ant|ak)-[A-Za-z0-9_-]{12,}\b", re.IGNORECASE)),
+    ("access token", re.compile(r"\b(?:gh[pousr]_[A-Za-z0-9_]{12,}|github_pat_[A-Za-z0-9_]{20,}|xox[abprs]-[A-Za-z0-9-]{12,})\b", re.IGNORECASE)),
+    ("authorization header", re.compile(r"(?i)\bAuthorization\s*:\s*Bearer\s+[A-Za-z0-9._~+/=-]{8,}")),
+    ("secret environment assignment", re.compile(r"(?i)\b[A-Z0-9_]*(?:API[_-]?KEY|TOKEN|SECRET|PASSWORD)\b\s*=\s*(?:\"[^\"\r\n]+\"|'[^'\r\n]+'|[^\s`'\"]+)")),
+    ("secret key/value", re.compile(r"(?i)\b(?:api[_-]?key|token|secret|password)\b\s*[:=]\s*(?:\"[^\"\r\n]+\"|'[^'\r\n]+'|[^\s`'\"]+)")),
+    ("argv dump", re.compile(r"(?i)\b(?:argv|args)\b\s*(?::|=)?\s*\[[^\]]*\]|\b(?:argv|args)\b\s*[:=]\s*[^\r\n]+")),
+    ("chat id", re.compile(r"\bchat[_ -]?id\b\s*[:=]?\s*-?\d{5,20}\b", re.IGNORECASE)),
+)
+PROFILE_TEXT_LOCAL_PATH_RE = re.compile(r"(?i)(?:\b[A-Z]:\\|\\\\[^\\\s]+\\|/(?:Users|home|tmp|var/tmp|private/tmp)/)[^\r\n\"<>|]+")
+
 
 class MonitorStateError(Exception):
     """Raised when monitor state cannot be loaded or updated safely."""
@@ -121,6 +133,43 @@ def parse_json(text: str | None, default: Any) -> Any:
         return json.loads(text)
     except json.JSONDecodeError:
         return default
+
+
+def profile_text_private_fragment_reason(text: object) -> str | None:
+    value = str(text or "")
+    if not value:
+        return None
+    for reason, pattern in PROFILE_TEXT_PRIVATE_PATTERNS:
+        if pattern.search(value):
+            return reason
+    if PROFILE_TEXT_LOCAL_PATH_RE.search(value):
+        return "local path"
+    path_roots = {PROJECT_ROOT}
+    try:
+        path_roots.add(PROJECT_ROOT.resolve())
+    except OSError:
+        pass
+    try:
+        home = Path.home()
+        path_roots.add(home)
+        path_roots.add(home.resolve())
+    except OSError:
+        pass
+    for root in path_roots:
+        raw = str(root)
+        if raw and raw in value:
+            return "local path"
+    return None
+
+
+def require_profile_text_without_private_fragments(label: str, text: object) -> str:
+    value = str(text or "")
+    reason = profile_text_private_fragment_reason(value)
+    if reason:
+        raise MonitorStateError(
+            f"{label} cannot include {reason}; remove credentials, local paths, argv dumps, or raw chat identifiers before saving."
+        )
+    return value
 
 
 def sha256_text(text: str) -> str:
@@ -983,10 +1032,11 @@ def set_card_action(
 ) -> dict[str, Any]:
     if action not in REVIEW_ACTIONS:
         raise MonitorStateError(f"Unsupported review action: {action}")
-    if action == "follow_up":
-        note = " ".join(note.split())
-        if not note:
-            raise MonitorStateError("Follow-up note is required.")
+    note = " ".join(str(note or "").split())
+    if note:
+        note = require_profile_text_without_private_fragments("Review note", note)
+    if action == "follow_up" and not note:
+        raise MonitorStateError("Follow-up note is required.")
     card = get_review_card(conn, card_id)
     now = utc_now()
     status = ACTION_TO_STATUS[action]
@@ -1642,6 +1692,7 @@ def create_profile_patch_suggestion(
     note: str,
     profile_path: Path | None,
 ) -> dict[str, Any]:
+    note = require_profile_text_without_private_fragments("Profile note", note)
     if profile_path is None:
         row = conn.execute("SELECT path FROM profiles WHERE profile_id = ?", (profile_id,)).fetchone()
         if not row:
@@ -1650,14 +1701,16 @@ def create_profile_patch_suggestion(
     if not profile_path.exists():
         raise MonitorStateError(f"Profile file not found: {profile_path}")
     current = profile_path.read_text(encoding="utf-8")
+    require_profile_text_without_private_fragments("Current profile", current)
     base_profile_hash = sha256_text(current)
     proposed = _append_follow_up_rule(current, note)
+    require_profile_text_without_private_fragments("Proposed profile", proposed)
     diff = "\n".join(
         difflib.unified_diff(
             current.splitlines(),
             proposed.splitlines(),
-            fromfile=str(profile_path),
-            tofile=str(profile_path),
+            fromfile="current-profile",
+            tofile="proposed-profile",
             lineterm="",
         )
     )
@@ -1705,6 +1758,7 @@ def create_profile_preferences_patch_suggestion(
     profile_id: str,
     preferences_text: str,
 ) -> dict[str, Any]:
+    preferences_text = require_profile_text_without_private_fragments("Profile matching preferences", preferences_text)
     clean_lines = _normalize_preference_lines(preferences_text)
     if not clean_lines:
         raise MonitorStateError("At least one matching preference is required.")
@@ -1715,14 +1769,16 @@ def create_profile_preferences_patch_suggestion(
     if not profile_path.exists():
         raise MonitorStateError(f"Profile file not found: {profile_path}")
     current = profile_path.read_text(encoding="utf-8")
+    require_profile_text_without_private_fragments("Current profile", current)
     base_profile_hash = sha256_text(current)
     proposed = _replace_follow_up_preferences(current, "\n".join(clean_lines))
+    require_profile_text_without_private_fragments("Proposed profile", proposed)
     diff = "\n".join(
         difflib.unified_diff(
             current.splitlines(),
             proposed.splitlines(),
-            fromfile=str(profile_path),
-            tofile=str(profile_path),
+            fromfile="current-profile",
+            tofile="proposed-profile",
             lineterm="",
         )
     )

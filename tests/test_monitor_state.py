@@ -2281,6 +2281,130 @@ class MonitorStateTests(unittest.TestCase):
             self.assertEqual(result["status"], "applied")
             self.assertIn("## Follow-up Preferences", profile_path.read_text(encoding="utf-8"))
             self.assertIn("Prefer official incident updates.", profile_path.read_text(encoding="utf-8"))
+            self.assertNotIn(str(profile_path), patch["diff_text"])
+
+    def test_profile_patch_suggestions_reject_private_fragments(self):
+        conn = sqlite3.connect(":memory:")
+        conn.row_factory = sqlite3.Row
+        monitor_state.init_db(conn)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            profile_path = Path(tmp) / "profile.md"
+            original = "# Profile\n\n## Search Rules\n1. Keep useful items.\n"
+            profile_path.write_text(original, encoding="utf-8")
+            monitor_state.upsert_profile(
+                conn,
+                {"id": "market-news", "path": str(profile_path), "enabled": True},
+            )
+
+            cases = [
+                (
+                    monitor_state.create_profile_patch_suggestion,
+                    {
+                        "profile_id": "market-news",
+                        "card_id": None,
+                        "note": "token=123456:ABCDEF_secret",
+                        "profile_path": profile_path,
+                    },
+                ),
+                (
+                    monitor_state.create_profile_preferences_patch_suggestion,
+                    {
+                        "profile_id": "market-news",
+                        "preferences_text": "Prefer remote work from C:\\Users\\Administrator\\private\\notes",
+                    },
+                ),
+            ]
+            for action, kwargs in cases:
+                with self.subTest(action=action.__name__):
+                    with self.assertRaisesRegex(monitor_state.MonitorStateError, "cannot include"):
+                        action(conn, **kwargs)
+
+            patch_count = conn.execute("SELECT COUNT(*) FROM profile_patch_suggestions").fetchone()[0]
+            self.assertEqual(patch_count, 0)
+            self.assertEqual(profile_path.read_text(encoding="utf-8"), original)
+
+    def test_profile_text_private_fragment_detector_covers_common_dumps(self):
+        cases = [
+            'MY_SECRET="plain-secret-value"',
+            "DATABASE_PASSWORD='plain-secret-value'",
+            "ghp_1234567890abcdefABCDEF1234567890abcd",
+            "github_pat_1234567890abcdefABCDEF_1234567890abcdefABCDEF123456",
+            'argv ["tgcs","scan"]',
+            "args=['tgcs','scan']",
+            "\\\\server\\share\\secret.txt",
+            "/tmp/private/secret.txt",
+        ]
+        for text in cases:
+            with self.subTest(text=text):
+                self.assertIsNotNone(monitor_state.profile_text_private_fragment_reason(text))
+
+    def test_profile_patch_rejects_existing_private_profile_text_before_storing_copy(self):
+        conn = sqlite3.connect(":memory:")
+        conn.row_factory = sqlite3.Row
+        monitor_state.init_db(conn)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            profile_path = Path(tmp) / "profile.md"
+            original = "# Profile\n\nOPENAI_API_KEY=sk-localSecret12345\n"
+            profile_path.write_text(original, encoding="utf-8")
+            monitor_state.upsert_profile(
+                conn,
+                {"id": "market-news", "path": str(profile_path), "enabled": True},
+            )
+
+            with patch.object(monitor_state, "PROJECT_ROOT", Path(tmp)):
+                with self.assertRaisesRegex(monitor_state.MonitorStateError, "cannot include"):
+                    monitor_state.create_profile_patch_suggestion(
+                        conn,
+                        profile_id="market-news",
+                        card_id=None,
+                        note="Prefer official incident updates.",
+                        profile_path=profile_path,
+                    )
+                with self.assertRaisesRegex(monitor_state.MonitorStateError, "cannot include"):
+                    monitor_state.create_profile_preferences_patch_suggestion(
+                        conn,
+                        profile_id="market-news",
+                        preferences_text="Prefer official incident updates.",
+                    )
+
+            rows = conn.execute("SELECT note, diff_text, proposed_profile_text FROM profile_patch_suggestions").fetchall()
+            self.assertEqual(rows, [])
+            self.assertEqual(profile_path.read_text(encoding="utf-8"), original)
+
+    def test_follow_up_private_note_rejects_before_feedback_write(self):
+        conn = sqlite3.connect(":memory:")
+        conn.row_factory = sqlite3.Row
+        monitor_state.init_db(conn)
+
+        cards = monitor_state.upsert_review_cards(
+            conn,
+            profile_id="market-news",
+            run_id="run-1",
+            items=[
+                {
+                    "topic": "New rule",
+                    "rating": "high",
+                    "decision_state": {"status": "new"},
+                    "source_message_refs": [{"channel": "source", "id": 1}],
+                }
+            ],
+        )
+
+        with self.assertRaisesRegex(monitor_state.MonitorStateError, "cannot include"):
+            monitor_state.set_card_action(
+                conn,
+                card_id=cards[0]["card_id"],
+                action="follow_up",
+                note="DATABASE_PASSWORD='plain-secret-value'",
+            )
+
+        feedback_count = conn.execute("SELECT COUNT(*) FROM feedback_events").fetchone()[0]
+        patch_count = conn.execute("SELECT COUNT(*) FROM profile_patch_suggestions").fetchone()[0]
+        self.assertEqual(feedback_count, 0)
+        self.assertEqual(patch_count, 0)
+        self.assertEqual(monitor_state.get_review_card(conn, cards[0]["card_id"])["status"], monitor_state.PENDING_STATUS)
 
     def test_dashboard_profile_patch_refuses_db_path_outside_project(self):
         conn = sqlite3.connect(":memory:")
