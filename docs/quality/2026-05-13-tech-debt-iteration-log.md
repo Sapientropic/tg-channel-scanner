@@ -1988,6 +1988,48 @@ Next:
 - Commit this evidence checkpoint, then continue until the 14:00 stop
   condition.
 
+## Slice 52: 14:00 Acceptance Handoff
+
+Status: completed.
+
+Actions:
+
+- Reached the explicit stop condition at `2026-05-13 14:00:01 +08:00`.
+- Stopped opening new implementation slices and switched to acceptance handoff.
+- Confirmed no staged changes remained before the final handoff update.
+
+Verification Summary:
+
+- Clean HEAD detached worktree gate from Slice 47:
+  - `python -m ruff check .` passed.
+  - `python -m pytest -q` passed: `435` tests, `2` skipped, `180` subtests.
+  - `cd dashboard; npm test -- --run` passed: `18` files, `131` tests.
+  - `cd dashboard; npm run build` passed.
+- Mixed working-tree gate from Slice 51:
+  - `python -m pytest -q` passed: `466` tests, `2` skipped, `180` subtests.
+  - `cd dashboard; npm test -- --run` passed: `18` files, `136` tests.
+  - `cd dashboard; npm run build` passed.
+
+Committed Scope:
+
+- v0.5 privacy and contract hardening for agent extraction requests,
+  report-contract helpers, shared backend/frontend fixtures, Desk action/source
+  boundaries, source access summaries, settings token/AI-key status, and
+  settings client status/mutation responses.
+- Canonical testing documentation and SPEC progress sync.
+
+Open Risks:
+
+- Existing unrelated dashboard/bot WIP remains uncommitted in the worktree.
+- Bot Gateway status fixture coverage is deferred until that WIP is deliberately
+  scoped into clean HEAD.
+- Live Telegram, live provider, real keyring backend behavior, and human product
+  acceptance were not exercised by local automated gates.
+
+Next:
+
+- Owner acceptance review.
+
 ## Slice 34: `agent_extraction_request_v1` Projection Helper Extraction
 
 Status: in progress.
