@@ -24,7 +24,7 @@ and contract tests that prevent silent product regressions.
 
 Observed from the 2026-05-14 local workspace:
 
-- Current branch: `sapientropic/tech-debt-cleanup-20260513`.
+- Current branch: `sapientropic/quality-iteration-spec-20260514`.
 - The dirty checkpoint backlog from the documentation handoff has been split,
   verified, and committed through packaging, report, scan, monitor, Bot Gateway,
   dashboard server tests, and dashboard settings UI slices.
@@ -163,6 +163,30 @@ the Runs surface:
   that opened the Runs tab, verified run health/recovered failure evidence, and
   confirmed a sanitized report link rendered.
 
+## Progress Update: 2026-05-14 Sanitizer Test Split
+
+The large legacy dashboard sanitizer test file was split without changing
+runtime sanitizer implementation:
+
+- The old `dashboard/src/domain/sanitize.test.ts` was removed.
+- Dashboard-state, inbox, setup, run artifact, optional summary, and profile
+  patch/source insight sanitizer coverage moved to
+  `dashboard/src/domain/sanitize-dashboard-state.test.ts`.
+- Desk action, feedback export/suggestion, action result, and artifact allowlist
+  coverage moved to
+  `dashboard/src/domain/sanitize-desk-actions-feedback.test.ts`.
+- Bot Gateway, bot identity, AI settings, scheduler, notification token, and
+  Telegram login status coverage moved to
+  `dashboard/src/domain/sanitize-desk-bot-settings.test.ts`.
+- Delivery test/chat detection, source import, and saved source library coverage
+  moved to
+  `dashboard/src/domain/sanitize-desk-source-delivery.test.ts`.
+- Cross-entrypoint compatibility coverage for the public, Desk-owned, and
+  dashboard re-exported source-import sanitizer moved to
+  `dashboard/src/domain/sanitize-entrypoint-compat.test.ts`.
+- Focused gates passed: `cd dashboard; npm test -- --run sanitize`,
+  `cd dashboard; npm test -- --run`, and `cd dashboard; npm run build`.
+
 ## Current Debt Snapshot: 2026-05-14
 
 The debt register below remains the long-form reasoning. This table is the
@@ -175,9 +199,9 @@ current triage view for what is still real after the later splits:
 | D3. `dashboard_server.py` boundaries | Artifact, git, scheduler, credentials, sources, and action execution helpers are split behind the old facade, but later product work has grown the facade back to `1657` lines. | Keep HTTP routing/profile creation in the facade for now; only split further if route handling or profile creation starts changing. |
 | D4. `monitor_state.py` boundaries | Mostly reduced to a `411` line facade. DB/schema, common privacy guards, review cards, alerts, feedback, profile patches, and dashboard projection are split. | Profile runtime/settings helpers are the only meaningful remaining state responsibility; split only with focused tests if that area changes. |
 | D5. `report.py` coupling | Mostly reduced. `report.py` is now `503` lines; report behavior moved into `report_*` modules. | Treat `report_extraction.py`, `report_html.py`, and `report_sources.py` as the next review units rather than reopening the old monolith. |
-| D6. Dashboard root/settings state | Actions, Profiles, Inbox, and Runs are now composition entrypoints. `inbox.tsx` is down to `137` lines and `runs.tsx` is down to `76` lines, each backed by focused submodules. Runtime settings remain the next UI concentration point. | Touch runtime settings only when that area changes; otherwise shift to sanitizer test debt or backend facade growth. |
-| D7. Runtime sanitizers | Dashboard sanitizer is now a `14` line facade. Dashboard state sanitizers are split by product area and Desk-owned helpers re-export `sanitize/desk.ts`. | Next useful test-debt slice is splitting the large legacy `sanitize.test.ts`; avoid adding a second sanitizer implementation. |
-| D8. Test concentration | Improved. Report, dashboard server, and monitor-state tests now live in focused directories, but several test files remain large. | Keep focused directories; next split targets are `tests/test_monitor.py`, `sanitize.test.ts`, and `tests/test_tgcs_cli.py`. |
+| D6. Dashboard root/settings state | Actions, Profiles, Inbox, and Runs are now composition entrypoints. `inbox.tsx` is down to `137` lines and `runs.tsx` is down to `76` lines, each backed by focused submodules. Runtime settings remain the next UI concentration point. | Touch runtime settings only when that area changes; otherwise shift to backend facade growth or large backend test concentration. |
+| D7. Runtime sanitizers | Dashboard sanitizer is now a `14` line facade. Dashboard state sanitizers are split by product area and Desk-owned helpers re-export `sanitize/desk.ts`. The former `1368` line legacy `sanitize.test.ts` is split into focused dashboard-state, Desk action/feedback, Desk bot/settings, Desk source/delivery, and entrypoint-compat files. | Keep these tests close to existing sanitizer modules; avoid adding a second sanitizer implementation. |
+| D8. Test concentration | Improved. Report, dashboard server, monitor-state, and dashboard sanitizer tests now live in focused files/directories, but several backend test files remain large. | Keep focused directories; next split targets are `tests/test_monitor.py`, `tests/test_tgcs_cli.py`, and dashboard-server growth if a route/profile boundary changes. |
 | D9. Packaging metadata | Mostly complete for local Python packaging. Build, staged wheel install, `pipx`, `uvx`, and Docker build/demo/doctor smokes passed. | Keep `signal-desk` as a source-checkout launcher until resources are package-safe; re-run Docker when Dockerfile/package-data/dependency metadata changes. |
 | D10. Documentation ownership | Current docs are aligned: this file is the debt authority, `docs/testing.md` is command authority, and quality logs are historical evidence. | Update this table and `docs/quality/task-state.md` whenever a new cleanup slice changes current status. |
 
@@ -191,6 +215,7 @@ Large current files are still the main maintainability signal:
 | Report rendering | `scripts/report_html.py` | 711 | HTML rendering is separated from extraction but remains large enough to merit focused tests before visual/report changes. |
 | Dashboard runtime settings | `dashboard/src/components/profiles/runtime-settings-control.tsx` | 394 | Profile runtime controls remain a focused but sizeable UI boundary with tuning semantics. |
 | Dashboard sanitize summary | `dashboard/src/domain/sanitize/dashboard-summary.ts` | 300 | Largest dashboard sanitizer submodule; owns optional summary/setup/source insight projections. |
+| Dashboard sanitizer tests | `dashboard/src/domain/sanitize-dashboard-state.test.ts` | 464 | Largest remaining sanitizer test file; now scoped to dashboard state rather than all sanitizer surfaces. |
 
 ## Product Constraints
 
@@ -248,7 +273,7 @@ report rendering, extraction providers, and dashboard API clients.
 
 Evidence:
 
-- Current branch is `sapientropic/tech-debt-cleanup-20260513`.
+- Current quality branch is `sapientropic/quality-iteration-spec-20260514`.
 - The previously dirty implementation backlog was committed as focused
   checkpoints instead of one mixed cleanup commit.
 - Every checkpoint ran `git diff --cached --check` plus a staged snapshot or
