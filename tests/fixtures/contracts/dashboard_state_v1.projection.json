@@ -1,0 +1,336 @@
+{
+  "schema_version": "dashboard_state_contract_fixture_v1",
+  "dashboard_state": {
+    "schema_version": "dashboard_state_v1",
+    "profiles": [
+      {
+        "schema_version": "dashboard_profile_v1",
+        "profile_id": "jobs-fast",
+        "display_name": "Jobs Fast",
+        "report_display_name": "Jobs Fast Report",
+        "display_path": "Profiles/jobs.md",
+        "enabled": true,
+        "alert_schedule_mode": "work_hours",
+        "source_topics": ["jobs"],
+        "scan_window_hours": 2,
+        "semantic_max_messages": 20,
+        "delivery_target_count": 1
+      }
+    ],
+    "runs": [
+      {
+        "run_id": "run-dashboard-contract",
+        "profile_id": "jobs-fast",
+        "display_name": "Jobs Fast",
+        "status": "complete",
+        "review_card_count": 4,
+        "alert_count": 1,
+        "report_artifact": {
+          "type": "report_html",
+          "path": "output/runs/run-dashboard-contract/report.html",
+          "category": "reports",
+          "format": "HTML",
+          "display_name": "Job Scan Report",
+          "display_path": "Reports/report.html"
+        },
+        "quality": {
+          "prefilter": "3/12",
+          "semantic_stage": "report_ran",
+          "llm_provider": "deepseek",
+          "cache_hit_rate": 0.91,
+          "latency_ms": 640,
+          "completion_tokens": 88,
+          "diagnostic_count": 1,
+          "diagnostic_warning_count": 1,
+          "diagnostic_failure_count": 0,
+          "top_diagnostic_code": "scan_incomplete"
+        }
+      }
+    ],
+    "inbox": [
+      {
+        "schema_version": "review_card_v1",
+        "card_id": "card-1",
+        "profile_id": "jobs-fast",
+        "title": "Another TypeScript platform role",
+        "rating": "high",
+        "decision_status": "new",
+        "source_refs": [
+          {
+            "channel": "jobs_good",
+            "id": 2,
+            "url": "https://t.me/jobs_good/2"
+          }
+        ],
+        "item": {
+          "schema_version": "monitor_item_projection_v1",
+          "topic": "Another TypeScript platform role",
+          "rating": "high",
+          "why": "Second high signal from the same source.",
+          "decision_state": {
+            "status": "new",
+            "semantic_cluster": "contract-high-2"
+          },
+          "source_message_refs": [
+            {
+              "channel": "jobs_good",
+              "id": 2
+            }
+          ]
+        },
+        "status": "pending",
+        "opportunity_status": "open",
+        "last_run_id": "run-dashboard-contract",
+        "report_path": "output/runs/run-dashboard-contract/report.md"
+      },
+      {
+        "schema_version": "review_card_v1",
+        "card_id": "card-2",
+        "profile_id": "jobs-fast",
+        "title": "Great TypeScript role",
+        "rating": "high",
+        "decision_status": "new",
+        "source_refs": [
+          {
+            "channel": "jobs_good",
+            "id": 1,
+            "url": "https://t.me/jobs_good/1"
+          }
+        ],
+        "item": {
+          "schema_version": "monitor_item_projection_v1",
+          "topic": "Great TypeScript role",
+          "rating": "high",
+          "why": "Matches the target profile.",
+          "decision_state": {
+            "status": "new",
+            "semantic_cluster": "contract-high-1"
+          },
+          "source_message_refs": [
+            {
+              "channel": "jobs_good",
+              "id": 1
+            }
+          ]
+        },
+        "status": "pending",
+        "opportunity_status": "open",
+        "last_run_id": "run-dashboard-contract",
+        "report_path": "output/runs/run-dashboard-contract/report.md"
+      }
+    ],
+    "delivery_targets": [
+      {
+        "schema_version": "delivery_target_v1",
+        "target_id": "telegram-bot-default",
+        "type": "telegram_bot",
+        "enabled": true,
+        "config": {
+          "chat_id": "123456",
+          "enabled": true,
+          "id": "telegram-bot-default",
+          "type": "telegram_bot"
+        },
+        "display_name": "Telegram Bot",
+        "status_label": "Live",
+        "detail": "Chat connected; live delivery is on."
+      }
+    ],
+    "feedback_summary": {
+      "schema_version": "dashboard_feedback_summary_v2",
+      "exportable_count": 2,
+      "by_action": {
+        "false_positive": 2
+      },
+      "by_rating": {
+        "low": 2
+      },
+      "by_decision_status": {
+        "new": 2
+      },
+      "next_action": {
+        "label": "Generate profile suggestions",
+        "detail": "Turn confirmed review decisions into local profile drafts. JSON export is only for CLI fallback."
+      }
+    },
+    "setup_status": {
+      "stage": "ready",
+      "next_step": "Review inbox",
+      "has_profiles": true,
+      "has_runs": true,
+      "delivery_configured": null,
+      "delivery_enabled": null,
+      "checks": [
+        {
+          "check_id": "profiles",
+          "status": "done"
+        },
+        {
+          "check_id": "first_run",
+          "status": "done"
+        },
+        {
+          "check_id": "delivery",
+          "status": "done"
+        }
+      ]
+    },
+    "opportunity_summary": {
+      "schema_version": "dashboard_opportunity_summary_v1",
+      "status": "complete",
+      "run_id": "run-dashboard-contract",
+      "profile_id": "jobs-fast",
+      "display_name": "Jobs Fast",
+      "scanned_count": 12,
+      "matched_count": 3,
+      "review_card_count": 4,
+      "alert_count": 1,
+      "high_actionable_count": 2,
+      "all_clear": false,
+      "top_items": [
+        {
+          "title": "Another TypeScript platform role",
+          "rating": "high",
+          "decision_status": "new"
+        },
+        {
+          "title": "Great TypeScript role",
+          "rating": "high",
+          "decision_status": "new"
+        }
+      ],
+      "decision_counts": {
+        "new": 4,
+        "changed": 0,
+        "seen": 0,
+        "recurring": 0,
+        "expired": 0,
+        "unknown": 0
+      },
+      "diagnostics": {
+        "failure_count": 0,
+        "warning_count": 1,
+        "top_code": "scan_incomplete"
+      },
+      "next_action": {
+        "label": "Review action signals",
+        "detail": "Review 2 high-priority new/changed cards in Inbox."
+      }
+    },
+    "source_insights": [
+      {
+        "channel": "jobs_good",
+        "display_name": "Jobs Good",
+        "kind": "promote",
+        "label": "Promote",
+        "reason": "2 high signals across 2 cards.",
+        "next_action": {
+          "label": "Keep source"
+        }
+      },
+      {
+        "channel": "jobs_noise",
+        "display_name": "Jobs Noise",
+        "kind": "prune",
+        "label": "Prune",
+        "reason": "2 false positives and no high signals.",
+        "next_action": {
+          "label": "Review source"
+        }
+      }
+    ],
+    "validation_summary": {
+      "schema_version": "dashboard_validation_summary_v1",
+      "card_count": 4,
+      "action_count": 2,
+      "triage_rate": 0.5,
+      "keep_rate": 0.0,
+      "false_positive_rate": 1.0
+    }
+  },
+  "frontend_input": {
+    "schema_version": "dashboard_state_v1",
+    "inbox": [
+      {
+        "schema_version": "review_card_v1",
+        "card_id": "card-unsafe",
+        "profile_id": "jobs-fast",
+        "title": "Unsafe payload probe",
+        "rating": "high",
+        "decision_status": "new",
+        "source_refs": [
+          {
+            "channel": "jobs_good",
+            "id": 7,
+            "url": "javascript:alert('XSS_DASHBOARD_CONTRACT_SHOULD_NOT_SURFACE')"
+          }
+        ],
+        "item": {
+          "why": "Safe summary.",
+          "raw_text": "RAW_DASHBOARD_CONTRACT_SHOULD_NOT_SURFACE",
+          "token": "SECRET_DASHBOARD_TOKEN_SHOULD_NOT_SURFACE",
+          "argv": ["--private-argv"]
+        },
+        "status": "pending",
+        "opportunity_status": "open",
+        "updated_at": "2026-05-13T00:00:00Z"
+      }
+    ],
+    "delivery_targets": [
+      {
+        "schema_version": "delivery_target_v1",
+        "target_id": "telegram-bot-default",
+        "type": "telegram_bot",
+        "enabled": true,
+        "config": {
+          "chat_id": "123456",
+          "bot_token": "SECRET_DASHBOARD_TOKEN_SHOULD_NOT_SURFACE",
+          "path": "C:/Users/Administrator/private/scan.jsonl",
+          "argv": ["--private-argv"]
+        },
+        "updated_at": "2026-05-13T00:00:00Z"
+      }
+    ]
+  },
+  "frontend_expected": {
+    "inbox": [
+      {
+        "schema_version": "review_card_v1",
+        "card_id": "card-unsafe",
+        "profile_id": "jobs-fast",
+        "title": "Unsafe payload probe",
+        "rating": "high",
+        "decision_status": "new",
+        "source_refs": [
+          {
+            "channel": "jobs_good",
+            "id": 7
+          }
+        ],
+        "item": {
+          "why": "Safe summary."
+        },
+        "status": "pending",
+        "opportunity_status": "open"
+      }
+    ],
+    "delivery_targets": [
+      {
+        "schema_version": "delivery_target_v1",
+        "target_id": "telegram-bot-default",
+        "type": "telegram_bot",
+        "enabled": true,
+        "config": {
+          "chat_id": "123456"
+        }
+      }
+    ]
+  },
+  "denied_strings": [
+    "RAW_DASHBOARD_CONTRACT_SHOULD_NOT_SURFACE",
+    "SECRET_DASHBOARD_TOKEN_SHOULD_NOT_SURFACE",
+    "C:/Users/Administrator/private/scan.jsonl",
+    "--private-argv",
+    "XSS_DASHBOARD_CONTRACT_SHOULD_NOT_SURFACE"
+  ]
+}

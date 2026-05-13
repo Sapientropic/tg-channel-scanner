@@ -294,7 +294,7 @@ Next:
 
 ## Slice 7: Feedback Export Path Hardening
 
-Status: in progress.
+Status: completed.
 
 Actions:
 
@@ -1207,3 +1207,61 @@ Next:
 
 - Stage and commit this checkpoint, then continue with the next Phase 1
   fixture group or another privacy boundary.
+
+## Slice 30: `dashboard_state_v1` Shared Projection Fixture
+
+Status: in progress.
+
+Actions:
+
+- Added `dashboard_state_v1.projection.json` as a shared fixture for a
+  representative Dashboard state projection covering profiles, runs, inbox,
+  delivery target status, feedback summary, setup status, opportunity summary,
+  source insights, and validation summary.
+- Added a Python backend contract test that builds an in-memory
+  `monitor_state.dashboard_snapshot()` from real state helpers, normalizes only
+  stable fields, and compares it to the shared fixture.
+- Added a new Vitest file that imports the same fixture and proves
+  `sanitizeDashboardState()` strips raw Telegram text, local paths, bot tokens,
+  argv, and unsafe source URLs without touching the existing dirty sanitizer
+  test file.
+
+Verification:
+
+- `python -m pytest tests/test_dashboard_state_contracts.py -q` passed:
+  `1` test and `5` subtests.
+- `python -m ruff check tests/test_dashboard_state_contracts.py` passed.
+- `cd dashboard; npm test -- --run dashboard-state-contract-fixtures` passed:
+  `1` test file, `1` test.
+- Mixed working tree broader gate passed:
+  `python -m pytest tests/test_dashboard_state_contracts.py tests/test_contract_privacy_fixtures.py tests/test_monitor_state.py -q`
+  passed `75` tests and `41` subtests.
+- Mixed working tree frontend fixture gate passed:
+  `cd dashboard; npm test -- --run dashboard-state-contract-fixtures contract-privacy-fixtures`
+  passed `2` test files and `2` tests.
+- Staged snapshot verification passed after checking out the index to a temp
+  directory and reusing only `dashboard/node_modules`:
+  Python passed `72` tests and `41` subtests; frontend fixture tests passed
+  `2` test files and `2` tests.
+- `git diff --check -- dashboard/src/domain/dashboard-state-contract-fixtures.test.ts tests/test_dashboard_state_contracts.py tests/fixtures/contracts/dashboard_state_v1.projection.json docs/quality/task-state.md docs/quality/2026-05-13-tech-debt-iteration-log.md`
+  passed.
+
+Reviewer Gate:
+
+- This implements Rawls' second recommended fixture slice, with the risk
+  mitigation they called out: lock stable fields and privacy denied strings
+  rather than taking a full brittle UI snapshot.
+
+Residual Risk:
+
+- The backend fixture intentionally normalizes volatile ids/timestamps and does
+  not claim complete Dashboard UI coverage. It locks the cross-boundary
+  projection shape and privacy behavior.
+- The fixture also normalizes fields currently affected by unrelated dirty WIP
+  (`diagnostic_info_count` and `opportunity_status`) so the committed test does
+  not depend on work outside this checkpoint.
+
+Next:
+
+- Stage and commit this checkpoint, then continue with Desk action/source
+  fixture coverage or another Phase 1 boundary.
