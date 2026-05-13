@@ -131,6 +131,7 @@ verification:
   - "python -m py_compile scripts/scan.py scripts/summarize.py scripts/media_ocr.py scripts/ocr_media.py scripts/report.py scripts/report_diagnostics.py scripts/daily_report.py scripts/doctor.py scripts/delivery.py scripts/monitor_state.py scripts/monitor.py scripts/monitor_runner.py scripts/monitor_execution.py scripts/monitor_manifest.py scripts/dashboard_projection.py scripts/dashboard_opportunities.py scripts/dashboard_setup.py scripts/dashboard_server.py -> passed"
   - "python -m ruff check . -> passed"
   - "python -m pytest -q -> 499 passed, 2 skipped, 198 subtests passed"
+  - "git diff --check -> passed after removing a trailing blank line from scripts/dashboard_projection.py"
 reviewer_status:
   - "Explorer review of the proposed split recommended a搬运式拆分: keep InboxView as facade, move filters/backlog, review-card/actions/source refs, and setup checklist into focused submodules."
   - "Post-diff reviewer found no blocking issues. Remaining risks were untracked new files, SSR-only test coverage, and preserving existing link sanitizer boundaries; untracked files are included in the checkpoint plan and the browser smoke covers the main interaction path."
