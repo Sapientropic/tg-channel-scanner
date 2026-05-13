@@ -402,7 +402,7 @@ Next:
 
 ## Slice 10: Desk Health URL Trust Boundary
 
-Status: in progress.
+Status: completed.
 
 Actions:
 
@@ -1367,6 +1367,48 @@ Residual Risk:
 - This does not exercise live Telegram access. It locks the serialization
   boundary from internal health payload to public Desk summary and frontend
   sanitizer behavior.
+
+Next:
+
+- Commit this checkpoint, then continue until the 14:00 stop condition.
+
+## Slice 33: `semantic_items_v1` Report Contract Extraction
+
+Status: in progress.
+
+Actions:
+
+- Added `scripts/report_contracts.py` as a pure JSON contract module for
+  `semantic_items_v1` schema version, private-field detection, source ref
+  validation, and semantic item validation.
+- Updated `scripts/report.py` to import `SEMANTIC_ITEMS_SCHEMA_VERSION` and
+  `validate_semantic_items()` from the new module while leaving provider,
+  prompt, Markdown, and HTML responsibilities unchanged.
+- Kept existing report helper names such as `build_message_lookup()` in
+  `report.py` to avoid widening the refactor beyond the contract boundary.
+
+Verification:
+
+- `python -m ruff check scripts/report.py scripts/report_contracts.py` passed.
+- `python -m pytest tests/test_contract_fixtures.py tests/test_report_contracts.py tests/test_agent_semantic_fallback.py tests/test_report.py -q`
+  passed `51` tests and `22` subtests.
+- Staged snapshot verification passed after checking out the index to a temp
+  directory: `python -m ruff check scripts/report.py scripts/report_contracts.py`
+  passed, and the same report contract test set passed `51` tests and `22`
+  subtests.
+
+Reviewer Gate:
+
+- This follows the spec's Phase 2 order for `report.py`: extract contract
+  validation before provider or rendering code. The blast radius is limited to
+  semantic item validation and schema constants.
+
+Residual Risk:
+
+- The new module intentionally duplicates a tiny source-ref normalization path
+  instead of moving all report source-ref helpers at once. That keeps this
+  checkpoint narrow; a later cleanup can consolidate helpers after more report
+  contracts are moved.
 
 Next:
 
