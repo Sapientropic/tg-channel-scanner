@@ -1832,6 +1832,37 @@ Next:
 
 - Commit, then continue until the 14:00 stop condition.
 
+## Slice 47: Second Clean HEAD Broad Gate
+
+Status: completed.
+
+Actions:
+
+- Reran the full clean branch gate in a detached `git worktree` after the
+  settings client fixture and testing-doc updates.
+
+Verification:
+
+- `python -m ruff check .` passed.
+- `python -m pytest -q` passed: `435` tests, `2` skipped, and `180` subtests.
+- `cd dashboard; npm test -- --run` passed: `18` test files and `131` tests.
+- `cd dashboard; npm run build` passed.
+
+Reviewer Gate:
+
+- Confirms the current committed branch state remains green independent of the
+  dirty dashboard/bot WIP in the main worktree.
+
+Residual Risk:
+
+- Same as Slice 41: live Telegram, live provider behavior, real keyring
+  backends, and human acceptance remain outside local automated gates.
+
+Next:
+
+- Commit this evidence checkpoint, then use remaining pre-14:00 time to update
+  the SPEC progress and future clean-HEAD boundaries.
+
 ## Slice 34: `agent_extraction_request_v1` Projection Helper Extraction
 
 Status: in progress.
