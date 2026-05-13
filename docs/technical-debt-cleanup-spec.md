@@ -331,6 +331,33 @@ boundary without changing `run_manifest_v1` or `monitor_run_result_v1`:
   tests/test_dashboard_state_contracts.py -q`, CI-list `py_compile`,
   `python -m ruff check .`, `python -m pytest -q`, and `git diff --check`.
 
+## Progress Update: 2026-05-14 Dashboard Opportunity Projection Split
+
+The dashboard projection module shed the opportunity-summary product boundary
+without changing dashboard state contracts:
+
+- `scripts/dashboard_opportunities.py` now owns `dashboard_opportunity_summary_v1`
+  assembly, high-actionable review-card ranking, decision counts, scan-input
+  replay total fallback, and opportunity next-action selection.
+- `scripts/dashboard_projection.py` still owns dashboard snapshot assembly,
+  run/report artifacts, delivery targets, profile patches, setup status, and
+  compatibility re-exports for opportunity helpers.
+- `tests/monitor_state/test_projection.py` now locks the
+  `monitor_state -> dashboard_projection -> dashboard_opportunities` facade
+  path for opportunity summary and next-action helpers.
+- The CI explicit `py_compile` list now includes `scripts/dashboard_projection.py`
+  and `scripts/dashboard_opportunities.py`.
+- Reviewer dispatch is still unavailable due account usage limits, so this
+  checkpoint uses a degraded reviewer gate. Focused opportunity tests already
+  cover top-item ranking, all-clear cadence, scan-input replay counts, handled
+  card exclusion, source-access failure next action, and dashboard-state
+  contract projection.
+- Focused and full gates passed: `python -m pytest
+  tests/monitor_state/test_projection.py tests/test_dashboard_state_contracts.py
+  -q`, `python -m pytest tests/monitor_state -q`, targeted and CI-list
+  `py_compile`, `python -m ruff check .`, `python -m pytest -q`, and
+  `git diff --check`.
+
 ## Current Debt Snapshot: 2026-05-14
 
 The debt register below remains the long-form reasoning. This table is the
@@ -354,8 +381,9 @@ Large current files are still the main maintainability signal:
 | Area | File | Lines | Why It Matters |
 | --- | ---: | ---: | --- |
 | Python server | `scripts/dashboard_server.py` | 1195 | HTTP routing, state payload assembly, route-level validation, and compatibility re-exports remain in the facade after profile creation moved out. |
-| Dashboard projection | `scripts/dashboard_projection.py` | 761 | Focused projection module for dashboard snapshots, run/report artifacts, delivery targets, profile patches, opportunity summaries, and setup status after profile projection moved out. |
+| Dashboard projection | `scripts/dashboard_projection.py` | 672 | Focused projection module for dashboard snapshots, run/report artifacts, delivery targets, profile patches, and setup status after profile and opportunity projection moved out. |
 | Dashboard profile projection | `scripts/dashboard_profiles.py` | 186 | Focused profile projection module for profile labels, matching summaries, report titles, and display paths. |
+| Dashboard opportunity projection | `scripts/dashboard_opportunities.py` | 210 | Focused opportunity summary module for action-signal ranking, decision counts, replay totals, and next actions. |
 | Python monitor runner | `scripts/monitor_runner.py` | 679 | Repeated-run orchestration is now focused on validation, DB writeback, review cards, delivery, and CLI routing after delivery, command execution, and manifest construction moved out. |
 | Monitor command execution | `scripts/monitor_execution.py` | 412 | Focused command-execution module for scan/report command construction, prefilter branching, and latest-manifest pointer writes. |
 | Monitor manifest projection | `scripts/monitor_manifest.py` | 186 | Focused run-manifest/result projection module for stable `run_manifest_v1` and `monitor_run_result_v1` payloads. |

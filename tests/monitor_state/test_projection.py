@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from scripts import dashboard_profiles, dashboard_projection, monitor_state
+from scripts import dashboard_opportunities, dashboard_profiles, dashboard_projection, monitor_state
 
 
 class MonitorStateProjectionTests(unittest.TestCase):
@@ -16,6 +16,8 @@ class MonitorStateProjectionTests(unittest.TestCase):
         self.assertIs(monitor_state.dashboard_profile_projection, dashboard_projection.dashboard_profile_projection)
         self.assertIs(dashboard_projection.dashboard_profile_projection, dashboard_profiles.dashboard_profile_projection)
         self.assertIs(dashboard_projection.profile_matching_summary, dashboard_profiles.profile_matching_summary)
+        self.assertIs(dashboard_projection.opportunity_summary, dashboard_opportunities.opportunity_summary)
+        self.assertIs(dashboard_projection.opportunity_next_action, dashboard_opportunities.opportunity_next_action)
         self.assertIs(monitor_state.delivery_target_from_row, dashboard_projection.delivery_target_from_row)
         self.assertIs(monitor_state.display_profile_path, dashboard_projection.display_profile_path)
 
