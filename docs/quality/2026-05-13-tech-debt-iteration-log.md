@@ -1210,7 +1210,7 @@ Next:
 
 ## Slice 30: `dashboard_state_v1` Shared Projection Fixture
 
-Status: in progress.
+Status: completed.
 
 Actions:
 
@@ -1367,6 +1367,44 @@ Residual Risk:
 - This does not exercise live Telegram access. It locks the serialization
   boundary from internal health payload to public Desk summary and frontend
   sanitizer behavior.
+
+Next:
+
+- Commit this checkpoint, then continue until the 14:00 stop condition.
+
+## Slice 35: Dashboard API Client Fixture Gate
+
+Status: in progress.
+
+Actions:
+
+- Added `dashboard/src/api/client-contract-fixtures.test.ts`.
+- Reused `desk_boundary_v1.json` to verify `loadDeskActions()`,
+  `loadDeskSources()`, and `runDeskAction()` accept the shared fixture payloads
+  at the fetch/client layer, not only at the domain sanitizer layer.
+- Added an action-id drift assertion so a mismatched Desk action result cannot
+  be silently rendered as the requested action.
+
+Verification:
+
+- `cd dashboard; npm test -- --run client-contract-fixtures client` passed:
+  `2` test files and `24` tests.
+- `git diff --check -- dashboard/src/api/client-contract-fixtures.test.ts`
+  passed.
+- Staged snapshot verification passed after checking out the index to a temp
+  directory and reusing only `dashboard/node_modules`: frontend passed `2`
+  test files and `24` tests.
+
+Reviewer Gate:
+
+- This is a focused follow-up to Rawls' Desk boundary recommendation. It locks
+  the same fixture through the API client, which is where schema-less or
+  mismatched backend payloads should fail before UI rendering.
+
+Residual Risk:
+
+- This covers the Desk action/source client paths. Other settings endpoints
+  still rely on their existing schema-specific client tests.
 
 Next:
 
