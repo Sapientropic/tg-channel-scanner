@@ -382,6 +382,30 @@ without changing dashboard state contracts:
   -q`, `python -m pytest tests/monitor_state -q`, CI-list `py_compile`,
   `python -m ruff check .`, and `python -m pytest -q`.
 
+## Progress Update: 2026-05-14 Desk Server Selection Split
+
+The dashboard server facade shed the local server selection and health boundary
+without changing loopback safety or auto-port behavior:
+
+- `scripts/desk_server_selection.py` now owns `desk_health_v1`, dashboard URL
+  normalization, host warnings, compatible existing-instance health checks,
+  TCP listener detection, auto-port selection, and loopback address parsing.
+- `scripts/dashboard_server.py` keeps the public helpers/constants/class as
+  compatibility wrappers and injects `socket`, `urlopen`, `ThreadingHTTPServer`,
+  `fetch_compatible_desk_health`, and `is_tcp_port_listening` so existing tests
+  and monkeypatch paths still work.
+- `tests/dashboard/test_server_selection_security.py` now locks the facade
+  constants/class path in addition to the existing loopback, health, auto-port,
+  and incompatible-listener security tests.
+- The CI explicit `py_compile` list now includes `scripts/desk_server_selection.py`.
+- Two reviewer signals found no code-level blocker. The compatibility reviewer
+  flagged the expected P1 staging risk while `scripts/desk_server_selection.py`
+  was untracked; this checkpoint stages the new module explicitly before commit.
+- Focused and full gates passed: `python -m pytest
+  tests/dashboard/test_server_selection_security.py tests/dashboard/test_status_endpoints.py
+  -q`, `python -m pytest tests/dashboard -q`, CI-list `py_compile`,
+  `python -m ruff check .`, `python -m pytest -q`, and `git diff --check`.
+
 ## Current Debt Snapshot: 2026-05-14
 
 The debt register below remains the long-form reasoning. This table is the
@@ -391,7 +415,7 @@ current triage view for what is still real after the later splits:
 | --- | --- | --- |
 | D1. WIP and branch hygiene | Cleared for the known backlog. The dirty implementation slices from the handoff are now checkpoint commits. | Keep using staged snapshot or clean worktree gates for future slices; do not use mixed-worktree gates as commit proof. |
 | D2. Contract sprawl | Materially improved. Shared fixtures now cover the high-risk Python/TypeScript contracts, but `docs/agent-cli-contract.md` is still long. | Keep the contract doc as an index and move new guarantees into fixtures first, prose second. |
-| D3. `dashboard_server.py` boundaries | Artifact, git, scheduler, credentials, sources, action execution, and profile creation helpers are split behind the old facade. The facade is currently `1367` lines and mainly owns route dispatch, loopback/POST checks, state payload assembly, and compatibility re-exports. | Keep profile runtime/review-patch route wiring in the facade until those areas change; next backend leverage is test concentration or focused Desk source/helper splits. |
+| D3. `dashboard_server.py` boundaries | Artifact, git, scheduler, credentials, sources, action execution, profile creation, and server selection helpers are split behind the old facade. The facade is currently `1284` lines and mainly owns route dispatch, loopback/POST checks, state payload assembly, and compatibility re-exports. | Keep profile runtime/review-patch route wiring in the facade until those areas change; next backend leverage is test concentration or focused Desk source/helper splits. |
 | D4. `monitor_state.py` boundaries | Mostly reduced to a `411` line facade. DB/schema, common privacy guards, review cards, alerts, feedback, profile patches, and dashboard projection are split. | Profile runtime/settings helpers are the only meaningful remaining state responsibility; split only with focused tests if that area changes. |
 | D5. `report.py` coupling | Mostly reduced. `report.py` is now `503` lines; report behavior moved into `report_*` modules. | Treat `report_extraction.py`, `report_html.py`, and `report_sources.py` as the next review units rather than reopening the old monolith. |
 | D6. Dashboard root/settings state | Actions, Profiles, Inbox, and Runs are now composition entrypoints. `inbox.tsx` is down to `137` lines and `runs.tsx` is down to `76` lines, each backed by focused submodules. Runtime settings remain the next UI concentration point. | Touch runtime settings only when that area changes; otherwise shift to backend facade growth or large backend test concentration. |
@@ -404,7 +428,8 @@ Large current files are still the main maintainability signal:
 
 | Area | File | Lines | Why It Matters |
 | --- | ---: | ---: | --- |
-| Python server | `scripts/dashboard_server.py` | 1367 | HTTP routing, state payload assembly, route-level validation, and compatibility re-exports remain in the facade after profile creation moved out. |
+| Python server | `scripts/dashboard_server.py` | 1284 | HTTP routing, state payload assembly, route-level validation, and compatibility re-exports remain in the facade after profile creation and server selection moved out. |
+| Desk server selection | `scripts/desk_server_selection.py` | 184 | Focused local server selection module for health payloads, loopback host checks, auto-port reuse, listener detection, and URL normalization. |
 | Dashboard projection | `scripts/dashboard_projection.py` | 486 | Focused projection module for dashboard snapshots, run/report artifacts, delivery target projection, and profile patches after profile, opportunity, and setup projection moved out. |
 | Dashboard profile projection | `scripts/dashboard_profiles.py` | 212 | Focused profile projection module for profile labels, matching summaries, report titles, and display paths. |
 | Dashboard opportunity projection | `scripts/dashboard_opportunities.py` | 210 | Focused opportunity summary module for action-signal ranking, decision counts, replay totals, and next actions. |

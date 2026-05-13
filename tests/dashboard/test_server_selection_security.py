@@ -3,10 +3,16 @@ import json
 from http import HTTPStatus
 from unittest.mock import patch
 
-from scripts import dashboard_server
+from scripts import dashboard_server, desk_server_selection
 
 
 class DashboardServerSelectionSecurityTests(unittest.TestCase):
+    def test_server_selection_helpers_stay_available_from_dashboard_facade(self):
+        self.assertIs(dashboard_server.DashboardServerSelection, desk_server_selection.DashboardServerSelection)
+        self.assertEqual(dashboard_server.DESK_HEALTH_SCHEMA_VERSION, desk_server_selection.DESK_HEALTH_SCHEMA_VERSION)
+        self.assertEqual(dashboard_server.DESK_APP_ID, desk_server_selection.DESK_APP_ID)
+
+
     def test_dashboard_host_warning_only_warns_for_non_loopback_hosts(self):
         self.assertIsNone(dashboard_server.dashboard_host_warning("127.0.0.1"))
         self.assertIsNone(dashboard_server.dashboard_host_warning("localhost"))

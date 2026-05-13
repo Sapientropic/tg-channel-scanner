@@ -1,15 +1,15 @@
-state: active_quality_iteration_dashboard_setup_projection_split_checkpoint
+state: active_quality_iteration_desk_server_selection_split_checkpoint
 mode: Standard
 run_shape: continuous_until_deadline
-slice_goal: "Continue the technical-debt SPEC with high-value dashboard/backend slices, including Inbox/Runs concentration cleanup, sanitizer test ownership cleanup, dashboard profile-creation facade cleanup, monitor/tgcs CLI test concentration cleanup, monitor delivery runtime cleanup, dashboard profile projection cleanup, monitor command execution cleanup, monitor manifest/result projection cleanup, dashboard opportunity projection cleanup, and dashboard setup projection cleanup, while preserving public props, review/run action names, sanitizer behavior, route contracts, monitor/tgcs CLI behavior, dashboard state contracts, run manifest contracts, monitor result contracts, and local-first privacy boundaries."
+slice_goal: "Continue the technical-debt SPEC with high-value dashboard/backend slices, including Inbox/Runs concentration cleanup, sanitizer test ownership cleanup, dashboard profile-creation facade cleanup, monitor/tgcs CLI test concentration cleanup, monitor delivery runtime cleanup, dashboard profile projection cleanup, monitor command execution cleanup, monitor manifest/result projection cleanup, dashboard opportunity projection cleanup, dashboard setup projection cleanup, and Desk server selection cleanup, while preserving public props, review/run action names, sanitizer behavior, route contracts, monitor/tgcs CLI behavior, dashboard state contracts, run manifest contracts, monitor result contracts, loopback safety, and local-first privacy boundaries."
 stop_condition: "Do not enter final closeout before 2026-05-14 14:00 Asia/Shanghai unless the user explicitly stops; if SPEC work is exhausted, research competitors/user pain points and expand ROADMAP/SPEC before continuing."
 handoff_policy: after_deadline_closeout
 continuation_policy: "Use docs/technical-debt-cleanup-spec.md as the debt authority; continue with one remaining boundary at a time and keep old facade exports until downstream callers move."
 intake_status: explicit_user_request
-gate_status: dashboard_setup_projection_split_gates_passed_reviewer_unavailable
+gate_status: desk_server_selection_split_gates_passed_review_clean
 blockers: []
 needs_human: []
-residual_risk: "This checkpoint is a backend dashboard setup projection split with degraded reviewer gate because reviewer dispatch hit account usage limits. It does not exercise live Telegram, live LLM/provider behavior, Scheduler/Credential Manager, Docker packaging install/build commands beyond CI compile parity, frontend browser smoke, or human product acceptance."
+residual_risk: "This checkpoint is a backend Desk server selection split. It does not exercise live Telegram, live LLM/provider behavior, Scheduler/Credential Manager, Docker packaging install/build commands beyond CI compile parity, frontend browser smoke, or human product acceptance."
 completed_slices:
   - "dashboard_server artifact helpers moved to scripts/desk_artifacts.py with dashboard_server re-export compatibility."
   - "dashboard_server git helpers moved to scripts/desk_git.py with dashboard_server wrapper compatibility."
@@ -40,6 +40,7 @@ completed_slices:
   - "Monitor manifest split: scripts/monitor_manifest.py now owns artifact collection, scan/semantic manifest sections, run_manifest_v1 assembly, manifest file writing, and monitor_run_result_v1 data projection; scripts/monitor_runner.py preserves validation, command execution, DB writeback, review-card upsert, delivery, and CLI envelope routing."
   - "Dashboard opportunity projection split: scripts/dashboard_opportunities.py now owns dashboard_opportunity_summary_v1 assembly, high-actionable review-card ranking, decision counts, scan-input replay count fallback, and opportunity next-action selection; dashboard_projection.py preserves compatibility re-exports."
   - "Dashboard setup projection split: scripts/dashboard_setup.py now owns dashboard_setup_status_v1 assembly, setup checklist rows, preferred setup profile selection, run/profile matching, source-attention detection, and source-recovery next-step copy; dashboard_projection.py preserves compatibility re-exports."
+  - "Desk server selection split: scripts/desk_server_selection.py now owns desk_health_v1 payloads, dashboard URL normalization, host warnings, compatible instance health checks, TCP listener detection, auto-port selection, and loopback address parsing; dashboard_server.py preserves public helpers/constants/class and patch-compatible wrappers."
 verification:
   - "python -m pytest tests/dashboard -q -> 149 passed, 71 subtests passed"
   - "python -m pytest tests/monitor_state -q -> 81 passed, 24 subtests passed"
@@ -132,6 +133,14 @@ verification:
   - "python -m ruff check . -> passed"
   - "python -m pytest -q -> 499 passed, 2 skipped, 198 subtests passed"
   - "git diff --check -> passed after removing a trailing blank line from scripts/dashboard_projection.py"
+  - "python -m py_compile scripts/dashboard_server.py scripts/desk_server_selection.py -> passed"
+  - "python -m ruff check scripts/dashboard_server.py scripts/desk_server_selection.py tests/dashboard/test_server_selection_security.py -> passed"
+  - "python -m pytest tests/dashboard/test_server_selection_security.py tests/dashboard/test_status_endpoints.py -q -> 19 passed, 2 subtests passed"
+  - "python -m pytest tests/dashboard -q -> 153 passed, 71 subtests passed"
+  - "python -m py_compile scripts/scan.py scripts/summarize.py scripts/media_ocr.py scripts/ocr_media.py scripts/report.py scripts/report_diagnostics.py scripts/daily_report.py scripts/doctor.py scripts/delivery.py scripts/monitor_state.py scripts/monitor.py scripts/monitor_runner.py scripts/monitor_execution.py scripts/monitor_manifest.py scripts/dashboard_projection.py scripts/dashboard_opportunities.py scripts/dashboard_setup.py scripts/desk_server_selection.py scripts/dashboard_server.py -> passed"
+  - "python -m ruff check . -> passed"
+  - "python -m pytest -q -> 500 passed, 2 skipped, 198 subtests passed"
+  - "git diff --check -> passed for the Desk server selection split working tree"
 reviewer_status:
   - "Explorer review of the proposed split recommended a搬运式拆分: keep InboxView as facade, move filters/backlog, review-card/actions/source refs, and setup checklist into focused submodules."
   - "Post-diff reviewer found no blocking issues. Remaining risks were untracked new files, SSR-only test coverage, and preserving existing link sanitizer boundaries; untracked files are included in the checkpoint plan and the browser smoke covers the main interaction path."
@@ -148,6 +157,7 @@ reviewer_status:
   - "Monitor manifest split reviewer dispatch was unavailable because both subagents hit usage limits. Degraded self-review checked run_manifest_v1/monitor_run_result_v1 field ownership against tests/test_contract_fixtures.py and confirmed monitor.PROJECT_ROOT patch still flows through monitor_config.relative_to_root and monitor_artifacts.artifact."
   - "Dashboard opportunity projection split reviewer dispatch remained unavailable because subagent usage was cooling down. Degraded local review relied on focused opportunity-summary tests for top-item ranking, all-clear cadence, scan-input replay totals, handled card exclusion, source-access failure next action, and dashboard-state contract projection."
   - "Dashboard setup projection split reviewer dispatch remained unavailable because subagent usage was cooling down. Degraded local review relied on focused setup-status tests for disabled profiles, first-run guidance, source-access failure priority, setup checklist details, and dashboard-state contract projection."
+  - "Desk server selection split security reviewer found no behavior or loopback-safety blocker. Compatibility reviewer found no code-level blocker; P1 staging risk for the new untracked scripts/desk_server_selection.py is addressed by staging that file explicitly before commit."
 operator_checks:
   - "Docker Desktop 4.65.0 / engine 29.2.1 reachable after startup; docker build -t tgcs-local-smoke:<temp> . -> exit 0"
   - "Docker demo container -> exit 0, generated one demo report in a temporary mounted output directory; temporary directory and image removed."
@@ -157,10 +167,10 @@ operator_checks:
   - "Live Windows Task Scheduler dry-run task with random name -> install exit 0, status installed, remove exit 0, final status not_installed."
   - "Live Windows Credential Manager smoke -> random secret write/read/delete passed; post-delete read returned empty."
   - "Live LLM structured call -> provider=deepseek, model=deepseek-v4-flash, JSON response status=TGCS_LIVE_LLM_OK, total_tokens=58."
-next_action: "Stage scripts/dashboard_setup.py, dashboard_projection facade changes, projection tests, CI compile coverage, and docs; commit the setup projection boundary checkpoint, then continue."
+next_action: "Stage scripts/desk_server_selection.py, dashboard_server facade wrappers, server-selection tests, CI compile coverage, and docs; commit the server-selection boundary checkpoint, then continue."
 candidate_slices:
-  - "Inspect scripts/dashboard_projection.py report/delivery/profile-patch helpers for another behavior-preserving projection split only if a clear ownership boundary exists."
+  - "Inspect scripts/dashboard_server.py for another focused route-adjacent helper boundary only if existing tests can preserve patch compatibility."
   - "Inspect scripts/monitor_runner.py for any remaining validation/DB-writeback helper boundary only if it can be split without obscuring run_profile flow or weakening manifest tests."
   - "Consider profile runtime/review-patch server helpers only when those route areas change next."
-last_update: "2026-05-14T07:44:46+08:00"
+last_update: "2026-05-14T07:53:40+08:00"
 checkpoint_ready: true

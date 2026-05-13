@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import ipaddress
 import json
 import mimetypes
 import os
@@ -15,13 +14,11 @@ import sys
 import webbrowser
 from collections.abc import Iterator
 from contextlib import contextmanager
-from dataclasses import dataclass
 from datetime import UTC, datetime
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from threading import Lock
-from urllib import error as urllib_error
 from urllib.parse import unquote, urlparse
 from urllib.request import urlopen
 
@@ -43,6 +40,7 @@ try:
         desk_git,
         desk_profiles,
         desk_scheduler,
+        desk_server_selection,
         desk_sources as _desk_sources_module,
         local_credentials as local_credentials,
         monitor_state,
@@ -70,6 +68,7 @@ except ModuleNotFoundError:
         desk_git,
         desk_profiles,
         desk_scheduler,
+        desk_server_selection,
         desk_sources as _desk_sources_module,
         local_credentials as local_credentials,
         monitor_state,
@@ -87,10 +86,10 @@ except ModuleNotFoundError:
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-DESK_HEALTH_SCHEMA_VERSION = "desk_health_v1"
-DESK_APP_ID = "tgcs-signal-desk"
-DESK_VERSION = "0.5.0-alpha.1"
-DESK_AUTO_PORT_END = 8799
+DESK_HEALTH_SCHEMA_VERSION = desk_server_selection.DESK_HEALTH_SCHEMA_VERSION
+DESK_APP_ID = desk_server_selection.DESK_APP_ID
+DESK_VERSION = desk_server_selection.DESK_VERSION
+DESK_AUTO_PORT_END = desk_server_selection.DESK_AUTO_PORT_END
 GIT_TIMEOUT_SECONDS = 25
 DESK_ACTION_TIMEOUT_SECONDS = 180
 DESK_SOURCE_ACCESS_HEALTH_SCHEMA_VERSION = "desk_source_access_health_v1"
@@ -99,7 +98,7 @@ DESK_SOURCE_ACCESS_HEALTH_MAX_AGE_HOURS = 24
 DESK_BOT_GATEWAY_STATE_FILENAME = "bot-gateway-state.json"
 DESK_BOT_GATEWAY_STALE_SECONDS = 120
 DESK_BOT_SUPPORTED_COMMANDS = ["/status", "/latest", "/sources", "/profiles", "/scan"]
-LOOPBACK_DASHBOARD_HOSTS = {"127.0.0.1", "localhost", "::1"}
+LOOPBACK_DASHBOARD_HOSTS = desk_server_selection.LOOPBACK_DASHBOARD_HOSTS
 SECRET_TOKEN_RE = re.compile(r"\b\d{5,12}:[A-Za-z0-9_-]{10,}\b")
 PROVIDER_KEY_RE = re.compile(r"\b(?:sk|sk-proj|sk-ant|ak)-[A-Za-z0-9_-]{12,}\b", re.IGNORECASE)
 BEARER_SECRET_RE = re.compile(r"(?i)\bAuthorization\s*:\s*Bearer\s+[A-Za-z0-9._~+/=-]{8,}")
@@ -208,14 +207,7 @@ DashboardDeskActionError = desk_scheduler.DashboardDeskActionError
 SourceAccessProbeError = _desk_sources_module.SourceAccessProbeError
 
 
-@dataclass(frozen=True)
-class DashboardServerSelection:
-    url: str
-    port: int
-    server: ThreadingHTTPServer | None
-    reused_existing: bool = False
-
-
+DashboardServerSelection = desk_server_selection.DashboardServerSelection
 
 
 def is_dashboard_report_artifact_name(name: str) -> bool:
@@ -223,82 +215,42 @@ def is_dashboard_report_artifact_name(name: str) -> bool:
 
 
 def dashboard_host_warning(host: str) -> str | None:
-    normalized = host.strip().lower()
-    if normalized in LOOPBACK_DASHBOARD_HOSTS:
-        return None
-    return (
-        "Dashboard host is not loopback. Dashboard state can include local workflow context "
-        "and report artifacts may include raw context; only bind this server to a trusted interface."
-    )
+    return desk_server_selection.dashboard_host_warning(host)
 
 
 def _browser_host(host: str) -> str:
-    normalized = str(host or "").strip()
-    if normalized in {"", "0.0.0.0"}:
-        return "127.0.0.1"
-    if normalized == "::":
-        return "::1"
-    return normalized
+    return desk_server_selection.browser_host(host)
 
 
 def dashboard_url(host: str, port: int) -> str:
-    browser_host = _browser_host(host)
-    if ":" in browser_host and not browser_host.startswith("["):
-        browser_host = f"[{browser_host}]"
-    return f"http://{browser_host}:{port}"
+    return desk_server_selection.dashboard_url(host, port)
 
 
 def desk_health(*, host: str, port: int) -> dict:
-    return {
-        "schema_version": DESK_HEALTH_SCHEMA_VERSION,
-        "app": DESK_APP_ID,
-        "version": DESK_VERSION,
-        "ok": True,
-        "url": dashboard_url(host, port),
-        "capabilities": [
-            "desk_actions_v1",
-            "desk_telegram_setup_v1",
-            "desk_notification_token_v1",
-            "desk_ai_settings_v1",
-            "desk_sources_v1",
-            "desk_source_assistant_v1",
-            "desk_scheduler_v1",
-            "dashboard_state_v1",
-        ],
-    }
+    return desk_server_selection.desk_health(host=host, port=port)
 
 
 def fetch_compatible_desk_health(host: str, port: int, *, timeout_seconds: float = 0.25) -> dict | None:
-    try:
-        with socket.create_connection((_browser_host(host), port), timeout=0.15):
-            pass
-    except OSError:
-        return None
-    try:
-        with urlopen(f"{dashboard_url(host, port)}/api/desk/health", timeout=timeout_seconds) as response:
-            payload = json.loads(response.read().decode("utf-8"))
-    except (OSError, urllib_error.URLError, TimeoutError, json.JSONDecodeError):
-        return None
-    if not isinstance(payload, dict):
-        return None
-    if payload.get("schema_version") != DESK_HEALTH_SCHEMA_VERSION:
-        return None
-    if payload.get("app") != DESK_APP_ID:
-        return None
-    health_url = str(payload.get("url") or "").strip()
-    if health_url:
-        parsed = urlparse(health_url)
-        if parsed.scheme != "http" or not parsed.hostname or not is_loopback_address(parsed.hostname) or parsed.port != port:
-            return None
-    return payload
+    return desk_server_selection.fetch_compatible_desk_health(
+        host,
+        port,
+        timeout_seconds=timeout_seconds,
+        socket_module=socket,
+        urlopen_fn=urlopen,
+        dashboard_url_fn=dashboard_url,
+        browser_host_fn=_browser_host,
+        is_loopback_address_fn=is_loopback_address,
+    )
 
 
 def is_tcp_port_listening(host: str, port: int, *, timeout_seconds: float = 0.15) -> bool:
-    try:
-        with socket.create_connection((_browser_host(host), port), timeout=timeout_seconds):
-            return True
-    except OSError:
-        return False
+    return desk_server_selection.is_tcp_port_listening(
+        host,
+        port,
+        timeout_seconds=timeout_seconds,
+        socket_module=socket,
+        browser_host_fn=_browser_host,
+    )
 
 
 def select_dashboard_server(
@@ -310,54 +262,19 @@ def select_dashboard_server(
 ) -> DashboardServerSelection:
     if handler_cls is None:
         handler_cls = DashboardHandler
-    ports = [port]
-    if auto_port:
-        ports.extend(range(port + 1, DESK_AUTO_PORT_END + 1))
-    last_error: OSError | None = None
-    for candidate in ports:
-        if auto_port:
-            health = fetch_compatible_desk_health(host, candidate)
-            if health:
-                return DashboardServerSelection(
-                    url=dashboard_url(host, candidate),
-                    port=candidate,
-                    server=None,
-                    reused_existing=True,
-                )
-            if is_tcp_port_listening(host, candidate):
-                # Windows can allow a second bind when an older local tool did
-                # not claim the port exclusively. Skip that URL so the browser
-                # cannot land on an unrelated directory listing or test server.
-                last_error = OSError(f"Port {candidate} is already used by another local service.")
-                continue
-        elif is_tcp_port_listening(host, candidate):
-            raise OSError(f"Port {candidate} is already used by another local service.")
-        try:
-            server = ThreadingHTTPServer((host, candidate), handler_cls)
-            return DashboardServerSelection(
-                url=dashboard_url(host, candidate),
-                port=candidate,
-                server=server,
-            )
-        except OSError as exc:
-            last_error = exc
-            if not auto_port:
-                raise
-    raise OSError(f"No available Signal Desk port in {port}-{DESK_AUTO_PORT_END}.") from last_error
+    return desk_server_selection.select_dashboard_server(
+        host=host,
+        port=port,
+        auto_port=auto_port,
+        handler_cls=handler_cls,
+        server_cls=ThreadingHTTPServer,
+        fetch_health_fn=fetch_compatible_desk_health,
+        is_port_listening_fn=is_tcp_port_listening,
+    )
 
 
 def is_loopback_address(value: object) -> bool:
-    text = str(value or "").strip().strip("[]")
-    if not text:
-        return False
-    if text.casefold() == "localhost":
-        return True
-    if text.startswith("::ffff:"):
-        text = text.removeprefix("::ffff:")
-    try:
-        return ipaddress.ip_address(text).is_loopback
-    except ValueError:
-        return False
+    return desk_server_selection.is_loopback_address(value)
 
 
 @contextmanager
