@@ -12,8 +12,10 @@ Fixture-backed contract coverage lives under `tests/fixtures/contracts/`.
 `run_manifest_v1` shape against those fixtures. Dashboard sanitizer fixtures
 are covered in `dashboard/src/domain/contract-privacy-fixtures.test.ts`,
 `dashboard/src/domain/desk-settings-contract-fixtures.test.ts`, and
-`dashboard/src/domain/sanitize.test.ts`. Add or update fixtures with contract
-changes so Python emitters and TypeScript consumers do not drift silently.
+`dashboard/src/domain/sanitize.test.ts`. API client fixture gates live in
+`dashboard/src/api/client-contract-fixtures.test.ts`. Add or update fixtures
+with contract changes so Python emitters, TypeScript sanitizers, and API
+clients do not drift silently.
 
 ## Envelope: `agent_envelope_v1`
 

@@ -1897,6 +1897,36 @@ Next:
 
 - Commit, then continue until the 14:00 stop condition.
 
+## Slice 49: Agent Contract Fixture Index Alignment
+
+Status: completed.
+
+Actions:
+
+- Updated `docs/agent-cli-contract.md` to mention
+  `dashboard/src/api/client-contract-fixtures.test.ts` alongside domain
+  sanitizer fixture gates.
+
+Verification:
+
+- `git diff --check -- docs/agent-cli-contract.md docs/quality/task-state.md docs/quality/2026-05-13-tech-debt-iteration-log.md`
+  passed.
+- `rg -n "client-contract-fixtures|TypeScript sanitizers|Fixture-backed contract coverage" docs/agent-cli-contract.md docs/quality/2026-05-13-tech-debt-iteration-log.md -S`
+  found the expected pointers.
+
+Reviewer Gate:
+
+- Keeps the stable agent contract doc aligned with the new client-layer fixture
+  gates added during this iteration.
+
+Residual Risk:
+
+- Documentation pointer only; no runtime behavior change.
+
+Next:
+
+- Commit, then continue until the 14:00 stop condition.
+
 ## Slice 34: `agent_extraction_request_v1` Projection Helper Extraction
 
 Status: in progress.
