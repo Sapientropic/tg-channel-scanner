@@ -1,0 +1,79 @@
+{
+  "schema_version": "run_manifest_v1",
+  "run_id": "run-contract",
+  "profile_id": "market-news",
+  "profile_path": "profiles/templates/market-news.md",
+  "source_registry_path": ".tgcs/sources.json",
+  "scan_window": {
+    "hours": 24
+  },
+  "source_filters": {
+    "topics": ["market-news"],
+    "source_ids": []
+  },
+  "alert_rule": {
+    "name": "high_new_or_changed"
+  },
+  "semantic": {
+    "max_messages": null,
+    "max_tokens": null
+  },
+  "alert_schedule": {
+    "mode": "all_day",
+    "delivery_enabled": true,
+    "suppressed_reason": ""
+  },
+  "prefilter": {
+    "enabled": false,
+    "keyword_count": 0,
+    "matched_count": null,
+    "semantic_stage": "not_applicable"
+  },
+  "status": "complete",
+  "artifact_summaries": [
+    {
+      "artifact_id": "scan:scan.jsonl",
+      "type": "scan",
+      "path": "scan.jsonl",
+      "run_id": "run-contract",
+      "category": "internal",
+      "format": "JSONL",
+      "display_name": "Scan",
+      "display_path": "Internal/scan.jsonl"
+    },
+    {
+      "artifact_id": "report_markdown:report.md",
+      "type": "report_markdown",
+      "path": "output/runs/run-contract/report.md",
+      "run_id": "run-contract",
+      "category": "reports",
+      "format": "Markdown",
+      "display_name": "Job Scan Report",
+      "display_path": "Reports/report.md"
+    },
+    {
+      "artifact_id": "report_html:report.html",
+      "type": "report_html",
+      "path": "output/runs/run-contract/report.html",
+      "run_id": "run-contract",
+      "category": "reports",
+      "format": "HTML",
+      "display_name": "Job Scan Report",
+      "display_path": "Reports/report.html"
+    }
+  ],
+  "report_status": "complete",
+  "alert_count": 1,
+  "review_card_count": 1,
+  "diagnostics": [
+    {
+      "code": "scan_incomplete",
+      "severity": "warning",
+      "message": "One source may be incomplete.",
+      "next_step": "Rerun with a narrower scan window."
+    }
+  ],
+  "error_summary": null,
+  "llm": null,
+  "delivery_attempts": []
+}

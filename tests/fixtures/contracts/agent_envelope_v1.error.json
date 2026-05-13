@@ -1,0 +1,17 @@
+{
+  "ok": false,
+  "data": null,
+  "error": {
+    "code": "registry_invalid",
+    "message": "Source registry is invalid.",
+    "retryable": false,
+    "next_step": "Run source_registry.py validate and fix the registry.",
+    "details": {
+      "path": ".tgcs/sources.json"
+    }
+  },
+  "meta": {
+    "schema_version": "agent_envelope_v1",
+    "command": "source_registry"
+  }
+}

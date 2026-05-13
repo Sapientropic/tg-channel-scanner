@@ -1,0 +1,26 @@
+{
+  "schema_version": "semantic_items_v1",
+  "items": [
+    {
+      "source_message_refs": [
+        {
+          "channel": "jobs",
+          "id": 42
+        }
+      ],
+      "company": "ACME Labs",
+      "role": "Senior TypeScript Engineer",
+      "topic": "Developer opportunity",
+      "rating": "high",
+      "why": "Strong TypeScript and React match.",
+      "decision_state": {
+        "schema_version": "decision_state_v1",
+        "status": "new",
+        "signals": ["new"],
+        "explanations": {
+          "match_confidence": "high"
+        }
+      }
+    }
+  ]
+}

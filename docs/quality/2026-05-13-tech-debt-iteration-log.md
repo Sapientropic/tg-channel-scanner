@@ -1158,3 +1158,52 @@ Next:
 
 - Commit this checkpoint, then continue with shared contract fixture coverage
   or another Phase 1 privacy negative test.
+
+## Slice 29: Shared Agent And Monitor Contract Fixtures
+
+Status: completed.
+
+Actions:
+
+- Added fixture-backed coverage for `agent_envelope_v1` success/error helpers,
+  valid and rejected `semantic_items_v1`, `monitor_run_result_v1`, and a
+  normalized `run_manifest_v1` shape.
+- Used a real `monitor.py run --scan-input --format json` path with a fake
+  report subprocess to compare monitor output and manifest projections against
+  golden fixtures without requiring Telegram or LLM credentials.
+- Updated `docs/agent-cli-contract.md` to point future contract changes at
+  `tests/fixtures/contracts/` and the matching Python/TypeScript fixture tests.
+
+Verification:
+
+- `python -m pytest tests/test_contract_fixtures.py -q` passed: `4` tests and
+  `2` subtests.
+- `python -m ruff check tests/test_contract_fixtures.py` passed.
+- `python -m pytest tests/test_contract_fixtures.py tests/test_report_contracts.py tests/test_agent_native_cli.py tests/test_agent_semantic_fallback.py tests/test_monitor.py -q`
+  passed: `37` tests and `22` subtests.
+- `git diff --check -- tests/test_contract_fixtures.py tests/fixtures/contracts docs/agent-cli-contract.md docs/quality/task-state.md docs/quality/2026-05-13-tech-debt-iteration-log.md`
+  passed.
+
+Reviewer Gate:
+
+- Independent explorer Rawls completed a read-only contract-gap review.
+- Accepted finding: the highest-value immediate slice is
+  `monitor_run_result_v1` plus `run_manifest_v1` fixtures because it avoids the
+  dashboard dirty WIP while locking the recently hardened delivery/monitor
+  serialization boundary.
+- Already covered in this slice: agent envelope and semantic-items fixtures,
+  matching Rawls' fourth suggested fixture group.
+- Deferred: dashboard-state and Desk-action/source fixture groups remain
+  valuable next slices, but dashboard domain/server files are currently dirty
+  and should be touched deliberately.
+
+Residual Risk:
+
+- The `run_manifest_v1` fixture intentionally compares a normalized manifest
+  shape rather than hashes, timestamps, and executed command argv because those
+  fields are run-local evidence, not stable cross-environment contract text.
+
+Next:
+
+- Stage and commit this checkpoint, then continue with the next Phase 1
+  fixture group or another privacy boundary.

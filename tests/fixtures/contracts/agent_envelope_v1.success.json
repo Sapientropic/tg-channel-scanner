@@ -1,0 +1,12 @@
+{
+  "ok": true,
+  "data": {
+    "status": "complete",
+    "count": 1
+  },
+  "error": null,
+  "meta": {
+    "schema_version": "agent_envelope_v1",
+    "command": "doctor"
+  }
+}

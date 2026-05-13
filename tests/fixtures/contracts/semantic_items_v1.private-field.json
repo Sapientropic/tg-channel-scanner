@@ -1,0 +1,26 @@
+{
+  "schema_version": "semantic_items_v1",
+  "items": [
+    {
+      "source_message_refs": [
+        {
+          "channel": "jobs",
+          "id": 42
+        }
+      ],
+      "company": "ACME Labs",
+      "role": "Senior TypeScript Engineer",
+      "rating": "high",
+      "why": "Strong TypeScript and React match.",
+      "raw_text": "RAW_TELEGRAM_BODY_SHOULD_NOT_RENDER",
+      "debug": {
+        "argv": ["tgcs", "report"],
+        "token": "123456:ABCDEF_secret"
+      }
+    }
+  ],
+  "denied_strings": [
+    "RAW_TELEGRAM_BODY_SHOULD_NOT_RENDER",
+    "123456:ABCDEF_secret"
+  ]
+}

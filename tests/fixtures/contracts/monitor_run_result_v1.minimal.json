@@ -1,0 +1,33 @@
+{
+  "schema_version": "monitor_run_result_v1",
+  "status": "complete",
+  "run_id": "run-contract",
+  "manifest_path": "output/runs/run-contract/run-manifest.json",
+  "db_path": ".tgcs/tgcs.db",
+  "report_path": "output/runs/run-contract/report.md",
+  "html_path": "output/runs/run-contract/report.html",
+  "review_card_count": 1,
+  "alert_count": 1,
+  "prefilter": {
+    "enabled": false,
+    "keyword_count": 0,
+    "matched_count": null,
+    "semantic_stage": "not_applicable"
+  },
+  "semantic": {
+    "max_messages": null,
+    "max_tokens": null
+  },
+  "diagnostics": [
+    {
+      "code": "scan_incomplete",
+      "severity": "warning",
+      "message": "One source may be incomplete.",
+      "next_step": "Rerun with a narrower scan window."
+    }
+  ],
+  "llm": null,
+  "delivery_attempts": [],
+  "extraction_request_path": null,
+  "items_output_path": null
+}
