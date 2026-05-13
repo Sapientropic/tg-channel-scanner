@@ -15,18 +15,21 @@ type DashboardStateContractFixture = {
 function pickFrontendContractState(value: unknown) {
   const state = sanitizeDashboardState(value);
   return {
-    inbox: state.inbox.map((card) => ({
-      schema_version: card.schema_version,
-      card_id: card.card_id,
-      profile_id: card.profile_id,
-      title: card.title,
-      rating: card.rating,
-      decision_status: card.decision_status,
-      source_refs: card.source_refs,
-      item: card.item,
-      status: card.status,
-      opportunity_status: card.opportunity_status ?? "open",
-    })),
+    inbox: state.inbox.map((card) => {
+      const contractCard = card as typeof card & { opportunity_status?: string };
+      return {
+        schema_version: card.schema_version,
+        card_id: card.card_id,
+        profile_id: card.profile_id,
+        title: card.title,
+        rating: card.rating,
+        decision_status: card.decision_status,
+        source_refs: card.source_refs,
+        item: card.item,
+        status: card.status,
+        opportunity_status: contractCard.opportunity_status ?? "open",
+      };
+    }),
     delivery_targets: state.delivery_targets.map((target) => ({
       schema_version: target.schema_version,
       target_id: target.target_id,

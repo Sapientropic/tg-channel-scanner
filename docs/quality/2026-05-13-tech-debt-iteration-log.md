@@ -1583,6 +1583,48 @@ Next:
 
 - Commit, then continue until the 14:00 stop condition.
 
+## Slice 40: Clean-HEAD Dashboard Fixture Build Fix
+
+Status: completed.
+
+Actions:
+
+- Ran an archive-based clean HEAD full gate. Ruff passed, but `pytest -q`
+  failed because `tests/test_posix_launchers.py` requires `.git` metadata, so
+  archive snapshots are not sufficient for the full Python suite.
+- Switched to a detached clean `git worktree` full gate. Ruff, pytest, and
+  Vitest passed there, but `npm run build` failed because
+  `dashboard-state-contract-fixtures.test.ts` referenced
+  `ReviewCard.opportunity_status`, a type field present only in unrelated dirty
+  WIP.
+- Fixed the fixture test to read `opportunity_status` through a local contract
+  cast, keeping the committed test independent from uncommitted type changes.
+
+Verification:
+
+- `cd dashboard; npm test -- --run dashboard-state-contract-fixtures desk-settings-contract-fixtures`
+  passed `2` test files and `2` tests.
+- `cd dashboard; npm run build` passed in the mixed worktree after the fix.
+- Staged snapshot verification passed after checking out the index to a temp
+  directory: dashboard fixture tests passed `2` test files and `2` tests, and
+  `npm run build` passed.
+
+Reviewer Gate:
+
+- This directly fixes a clean-HEAD build failure found by broad verification.
+  It avoids staging the unrelated `dashboard/src/domain/types.ts` WIP just to
+  satisfy the fixture test.
+
+Residual Risk:
+
+- The full clean worktree gate must be rerun after this commit to confirm all
+  broad checks remain green together.
+
+Next:
+
+- Commit, rerun full clean worktree verification, then continue until the
+  14:00 stop condition.
+
 ## Slice 34: `agent_extraction_request_v1` Projection Helper Extraction
 
 Status: in progress.
