@@ -1625,6 +1625,39 @@ Next:
 - Commit, rerun full clean worktree verification, then continue until the
   14:00 stop condition.
 
+## Slice 41: Clean HEAD Broad Gate
+
+Status: completed.
+
+Actions:
+
+- Reran the full broad gate in a detached `git worktree` at `HEAD`, not an
+  archive snapshot, so git-mode tests had `.git` metadata while unrelated WIP
+  stayed out of the verification.
+
+Verification:
+
+- `python -m ruff check .` passed.
+- `python -m pytest -q` passed: `435` tests, `2` skipped, and `180` subtests.
+- `cd dashboard; npm test -- --run` passed: `18` test files and `129` tests.
+- `cd dashboard; npm run build` passed.
+
+Reviewer Gate:
+
+- This closes the clean-HEAD build failure found in Slice 40 and proves the
+  committed branch state is currently green independent of the dirty worktree.
+
+Residual Risk:
+
+- Live Telegram, live LLM/provider behavior, keyring integration on real
+  platform backends, and human product acceptance are still outside this local
+  clean worktree gate.
+
+Next:
+
+- Commit this evidence checkpoint, then continue until the 14:00 stop
+  condition.
+
 ## Slice 34: `agent_extraction_request_v1` Projection Helper Extraction
 
 Status: in progress.
