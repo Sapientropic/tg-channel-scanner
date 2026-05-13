@@ -58,7 +58,7 @@ remains a source-checkout launcher until dashboard/templates/profile resources
 are moved behind package-safe resource loading.
 
 ```powershell
-python -m pytest tests/test_packaging_metadata.py tests/test_tgcs_cli.py -q
+python -m pytest tests/test_packaging_metadata.py tests/tgcs_cli -q
 python -m build
 pipx install --force --python python -e .
 tgcs demo

@@ -724,7 +724,7 @@ class BotGatewayTests(unittest.TestCase):
             self.assertFalse(lock.exists())
 
     def test_tgcs_bot_run_delegates_to_fixed_gateway_script(self):
-        from tests.test_tgcs_cli import load_tgcs_module
+        from tests.tgcs_cli import load_tgcs_module
 
         tgcs = load_tgcs_module(self)
 
@@ -743,7 +743,7 @@ class BotGatewayTests(unittest.TestCase):
         self.assertIn("--install-menu", cmd)
 
     def test_tgcs_bot_run_can_skip_default_menu_installation(self):
-        from tests.test_tgcs_cli import load_tgcs_module
+        from tests.tgcs_cli import load_tgcs_module
 
         tgcs = load_tgcs_module(self)
 
@@ -758,7 +758,7 @@ class BotGatewayTests(unittest.TestCase):
         self.assertIn("--skip-menu", cmd)
 
     def test_tgcs_bot_autostart_commands_delegate_to_gateway_script(self):
-        from tests.test_tgcs_cli import load_tgcs_module
+        from tests.tgcs_cli import load_tgcs_module
 
         tgcs = load_tgcs_module(self)
         calls: list[list[str]] = []
@@ -778,7 +778,7 @@ class BotGatewayTests(unittest.TestCase):
             self.assertNotIn("token", " ".join(call).lower())
 
     def test_tgcs_bot_llm_flag_is_explicit_opt_in(self):
-        from tests.test_tgcs_cli import load_tgcs_module
+        from tests.tgcs_cli import load_tgcs_module
 
         tgcs = load_tgcs_module(self)
         calls: list[list[str]] = []
