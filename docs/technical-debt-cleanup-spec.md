@@ -117,6 +117,28 @@ contract names:
   remove, Windows Credential Manager write/read/delete, and a structured
   DeepSeek `deepseek-v4-flash` LLM call.
 
+## Progress Update: 2026-05-14 Inbox Split Iteration
+
+The next quality branch continued the UI concentration cleanup without changing
+the `InboxView` public props, review action names, or domain filter rules:
+
+- `dashboard/src/components/inbox.tsx` is now a composition facade for inbox
+  state, filter selection, and list orchestration.
+- Review filter/backlog helpers moved to
+  `dashboard/src/components/inbox/filters.tsx`, while preserving the
+  `nextNonEmptyReviewFilter` re-export used by existing tests.
+- Review-card rendering, lifecycle actions, profile-tuning note behavior,
+  report chips, and source refs moved to
+  `dashboard/src/components/inbox/review-card.tsx`.
+- Setup banner, empty inbox state, first-use checklist, and app-first next-step
+  copy moved to `dashboard/src/components/inbox/setup.tsx`.
+- Component tests now lock open opportunity actions, source-ref link overflow,
+  and empty-state setup recovery details in addition to the existing filter
+  behavior tests.
+- Focused frontend gates passed: `cd dashboard; npm test -- --run inbox`,
+  `cd dashboard; npm test -- --run`, `cd dashboard; npm run build`, and
+  `git diff --check`.
+
 ## Current Debt Snapshot: 2026-05-14
 
 The debt register below remains the long-form reasoning. This table is the
@@ -126,10 +148,10 @@ current triage view for what is still real after the later splits:
 | --- | --- | --- |
 | D1. WIP and branch hygiene | Cleared for the known backlog. The dirty implementation slices from the handoff are now checkpoint commits. | Keep using staged snapshot or clean worktree gates for future slices; do not use mixed-worktree gates as commit proof. |
 | D2. Contract sprawl | Materially improved. Shared fixtures now cover the high-risk Python/TypeScript contracts, but `docs/agent-cli-contract.md` is still long. | Keep the contract doc as an index and move new guarantees into fixtures first, prose second. |
-| D3. `dashboard_server.py` boundaries | Much smaller at `1430` lines. Artifact, git, scheduler, credentials, sources, and action execution helpers are split behind the old facade. | Keep HTTP routing/profile creation in the facade for now; only split further if route handling or profile creation starts changing. |
+| D3. `dashboard_server.py` boundaries | Artifact, git, scheduler, credentials, sources, and action execution helpers are split behind the old facade, but later product work has grown the facade back to `1657` lines. | Keep HTTP routing/profile creation in the facade for now; only split further if route handling or profile creation starts changing. |
 | D4. `monitor_state.py` boundaries | Mostly reduced to a `411` line facade. DB/schema, common privacy guards, review cards, alerts, feedback, profile patches, and dashboard projection are split. | Profile runtime/settings helpers are the only meaningful remaining state responsibility; split only with focused tests if that area changes. |
 | D5. `report.py` coupling | Mostly reduced. `report.py` is now `503` lines; report behavior moved into `report_*` modules. | Treat `report_extraction.py`, `report_html.py`, and `report_sources.py` as the next review units rather than reopening the old monolith. |
-| D6. Dashboard root/settings state | Actions and Profiles are now composition entrypoints (`267` and `131` lines). `inbox.tsx`, `runs.tsx`, and the large runtime-settings control remain the next UI concentration points. | Split inbox/runs only with focused component tests and dashboard build coverage. |
+| D6. Dashboard root/settings state | Actions, Profiles, and Inbox are now composition entrypoints. `inbox.tsx` is down to `137` lines with filters/review-card/setup submodules; `runs.tsx` and runtime settings remain the next UI concentration points. | Split `runs.tsx` only with focused component tests and dashboard build coverage; touch runtime settings only when that area changes. |
 | D7. Runtime sanitizers | Dashboard sanitizer is now a `14` line facade. Dashboard state sanitizers are split by product area and Desk-owned helpers re-export `sanitize/desk.ts`. | Next useful test-debt slice is splitting the large legacy `sanitize.test.ts`; avoid adding a second sanitizer implementation. |
 | D8. Test concentration | Improved. Report, dashboard server, and monitor-state tests now live in focused directories, but several test files remain large. | Keep focused directories; next split targets are `tests/test_monitor.py`, `sanitize.test.ts`, and `tests/test_tgcs_cli.py`. |
 | D9. Packaging metadata | Mostly complete for local Python packaging. Build, staged wheel install, `pipx`, `uvx`, and Docker build/demo/doctor smokes passed. | Keep `signal-desk` as a source-checkout launcher until resources are package-safe; re-run Docker when Dockerfile/package-data/dependency metadata changes. |
@@ -139,12 +161,13 @@ Large current files are still the main maintainability signal:
 
 | Area | File | Lines | Why It Matters |
 | --- | ---: | ---: | --- |
-| Python server | `scripts/dashboard_server.py` | 1430 | HTTP routing and profile creation remain in the facade; product helpers are now split behind compatibility exports. |
-| Dashboard sanitize summary | `dashboard/src/domain/sanitize/dashboard-summary.ts` | 288 | Largest dashboard sanitizer submodule; owns optional summary/setup/source insight projections. |
-| Dashboard inbox | `dashboard/src/components/inbox.tsx` | 813 | Review buckets, setup checks, filters, source health, and review actions are concentrated. |
-| Dashboard projection | `scripts/dashboard_projection.py` | 910 | Focused projection module for dashboard snapshots, run/report artifacts, setup status, and opportunity summaries. |
-| Python monitor runner | `scripts/monitor_runner.py` | 879 | Repeated-run orchestration and manifest behavior are now a focused but still sizeable boundary. |
-| Report rendering | `scripts/report_html.py` | 610 | HTML rendering is separated from extraction but remains large enough to merit focused tests before visual/report changes. |
+| Python server | `scripts/dashboard_server.py` | 1657 | HTTP routing and profile creation remain in the facade; product helpers are split behind compatibility exports, but the facade is growing again. |
+| Dashboard projection | `scripts/dashboard_projection.py` | 1012 | Focused projection module for dashboard snapshots, run/report artifacts, setup status, and opportunity summaries. |
+| Python monitor runner | `scripts/monitor_runner.py` | 1008 | Repeated-run orchestration and manifest behavior are now a focused but still sizeable boundary. |
+| Report rendering | `scripts/report_html.py` | 711 | HTML rendering is separated from extraction but remains large enough to merit focused tests before visual/report changes. |
+| Dashboard runs | `dashboard/src/components/runs.tsx` | 687 | Run history, artifact links, health details, and source summaries remain concentrated in one view. |
+| Dashboard runtime settings | `dashboard/src/components/profiles/runtime-settings-control.tsx` | 394 | Profile runtime controls remain a focused but sizeable UI boundary with tuning semantics. |
+| Dashboard sanitize summary | `dashboard/src/domain/sanitize/dashboard-summary.ts` | 300 | Largest dashboard sanitizer submodule; owns optional summary/setup/source insight projections. |
 
 ## Product Constraints
 

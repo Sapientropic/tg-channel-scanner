@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { InboxView, nextNonEmptyReviewFilter } from "./inbox";
 import { inboxFilterOptions } from "../domain/inbox";
-import type { ReviewCard } from "../domain/types";
+import type { DashboardState, ReviewCard } from "../domain/types";
 
 function card(overrides: Partial<ReviewCard> = {}): ReviewCard {
   return {
@@ -125,5 +125,91 @@ describe("InboxView", () => {
 
     expect(html).toContain("No latest action cards");
     expect(html).toContain("Show High 1");
+  });
+
+  it("keeps open opportunity actions and profile tuning entry visible", () => {
+    const html = renderToStaticMarkup(
+      <InboxView
+        cards={[card()]}
+        latestRunId="run-1"
+        profileReportNames={{ "jobs-fast": "Jobs Report" }}
+        act={vi.fn()}
+        busy={false}
+      />,
+    );
+
+    expect(html).toContain('data-review-action="applied"');
+    expect(html).toContain('data-review-action="saved"');
+    expect(html).toContain('data-review-action="contacted"');
+    expect(html).toContain('data-review-action="dismissed"');
+    expect(html).toContain('data-review-action="duplicate"');
+    expect(html).toContain('data-review-action="tune"');
+    expect(html).not.toContain('data-review-action="reopen"');
+    expect(html).not.toContain('data-review-action="follow_up"');
+  });
+
+  it("renders source references as safe links with a capped overflow count", () => {
+    const html = renderToStaticMarkup(
+      <InboxView
+        cards={[
+          card({
+            source_refs: [
+              { channel: "javascript_jobs", id: 42 },
+              { channel: "python_jobs", id: 7 },
+              { channel: "rust_jobs", id: 9 },
+              { channel: "ts_jobs", id: 11 },
+              { channel: "overflow_jobs", id: 12 },
+            ],
+          }),
+        ]}
+        latestRunId="run-1"
+        profileReportNames={{ "jobs-fast": "Jobs Report" }}
+        act={vi.fn()}
+        busy={false}
+      />,
+    );
+
+    expect(html).toContain('href="https://t.me/javascript_jobs/42"');
+    expect(html).toContain("JavaScript Jobs");
+    expect(html).toContain("Python Jobs");
+    expect(html).toContain("Rust Jobs");
+    expect(html).toContain("TS Jobs");
+    expect(html).toContain("+1");
+    expect(html).not.toContain("Overflow Jobs");
+  });
+
+  it("shows setup recovery details in the empty inbox state", () => {
+    const setupStatus: DashboardState["setup_status"] = {
+      stage: "needs_scan",
+      next_step: "monitor run --dry-run",
+      has_runs: false,
+      checks: [
+        { check_id: "workspace", label: "Workspace", status: "done", detail: "Local state exists." },
+        { check_id: "source_access", label: "Source access", status: "active", detail: "Check recent messages before pruning." },
+        { check_id: "delivery", label: "Delivery", status: "todo", command: "tgcs delivery test --dry-run" },
+      ],
+    };
+
+    const html = renderToStaticMarkup(
+      <InboxView
+        cards={[]}
+        latestRunId="run-1"
+        setupStatus={setupStatus}
+        profileReportNames={{ "jobs-fast": "Jobs Report" }}
+        act={vi.fn()}
+        busy={false}
+        onOpenStart={vi.fn()}
+      />,
+    );
+
+    expect(html).toContain("Inbox clear");
+    expect(html).toContain("Next: Open Start and run the first practice scan.");
+    expect(html).toContain("Run first scan");
+    expect(html).toContain("Workspace");
+    expect(html).toContain("Done");
+    expect(html).toContain("Source access");
+    expect(html).toContain("Next");
+    expect(html).toContain("Check recent messages before pruning.");
+    expect(html).toContain("Troubleshooting command");
   });
 });

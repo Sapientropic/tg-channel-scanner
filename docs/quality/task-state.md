@@ -1,15 +1,15 @@
-state: remaining_tech_debt_deep_split_verified
+state: active_quality_iteration_inbox_split_checkpoint
 mode: Standard
-run_shape: parallel_boundary_cleanup
-slice_goal: "Split the remaining dashboard_server, monitor_state, Dashboard Actions/Profiles, dashboard projection, Desk credentials/sources/actions, and sanitizer debt while preserving API/schema/facade compatibility."
-stop_condition: "Focused backend, monitor-state, dashboard UI, sanitizer, and contract gates pass after the split."
-handoff_policy: evidence_backed_summary
+run_shape: continuous_until_deadline
+slice_goal: "Continue the technical-debt SPEC with high-value dashboard/backend slices, starting with Inbox concentration, while preserving public props, review action names, sanitizer behavior, and local-first privacy boundaries."
+stop_condition: "Do not enter final closeout before 2026-05-14 14:00 Asia/Shanghai unless the user explicitly stops; if SPEC work is exhausted, research competitors/user pain points and expand ROADMAP/SPEC before continuing."
+handoff_policy: after_deadline_closeout
 continuation_policy: "Use docs/technical-debt-cleanup-spec.md as the debt authority; continue with one remaining boundary at a time and keep old facade exports until downstream callers move."
 intake_status: explicit_user_request
-gate_status: full_gates_and_operator_checks_passed
+gate_status: frontend_inbox_gates_passed_review_clean
 blockers: []
 needs_human: []
-residual_risk: "Live checks passed on this workstation. Docker Desktop, Telegram session/API, Windows Task Scheduler, Windows Credential Manager, and the configured LLM provider are still environment-dependent release checks."
+residual_risk: "This checkpoint is a frontend component split. It does not exercise live Telegram, live LLM/provider behavior, Scheduler/Credential Manager, Docker packaging, or human product acceptance."
 completed_slices:
   - "dashboard_server artifact helpers moved to scripts/desk_artifacts.py with dashboard_server re-export compatibility."
   - "dashboard_server git helpers moved to scripts/desk_git.py with dashboard_server wrapper compatibility."
@@ -28,6 +28,7 @@ completed_slices:
   - "Dashboard profiles.tsx reduced to composition; Profiles subcomponents/model split under dashboard/src/components/profiles/."
   - "Sanitizer shared primitives added to dashboard/src/domain/sanitize/shared.ts with sanitize-shared Vitest coverage."
   - "dashboard/src/domain/sanitize/dashboard.ts reduced to a public facade; dashboard state sanitizers split into dashboard-common, dashboard-state, dashboard-review, dashboard-runs, dashboard-profiles, dashboard-delivery, and dashboard-summary modules."
+  - "Dashboard Inbox split: dashboard/src/components/inbox.tsx is now a 137-line composition facade; filters/backlog moved to dashboard/src/components/inbox/filters.tsx, review-card/actions/source refs moved to dashboard/src/components/inbox/review-card.tsx, and setup/empty-state checklist moved to dashboard/src/components/inbox/setup.tsx."
 verification:
   - "python -m pytest tests/dashboard -q -> 149 passed, 71 subtests passed"
   - "python -m pytest tests/monitor_state -q -> 81 passed, 24 subtests passed"
@@ -38,6 +39,14 @@ verification:
   - "python -m pytest -q -> 489 passed, 2 skipped, 195 subtests passed"
   - "cd dashboard; npm test -- --run -> 21 files, 147 tests passed"
   - "git diff --check -> passed"
+  - "cd dashboard; npm test -- --run inbox -> 2 files, 15 tests passed"
+  - "cd dashboard; npm test -- --run -> 21 files, 150 tests passed"
+  - "cd dashboard; npm run build -> passed"
+  - "git diff --check -> passed for the Inbox split working tree"
+  - "Playwright browser smoke against Vite dev server with mocked local API -> Review card visible, Tune profile expanded, profile note submitted as follow_up with trimmed local note; screenshot written under ignored output/playwright/."
+reviewer_status:
+  - "Explorer review of the proposed split recommended a搬运式拆分: keep InboxView as facade, move filters/backlog, review-card/actions/source refs, and setup checklist into focused submodules."
+  - "Post-diff reviewer found no blocking issues. Remaining risks were untracked new files, SSR-only test coverage, and preserving existing link sanitizer boundaries; untracked files are included in the checkpoint plan and the browser smoke covers the main interaction path."
 operator_checks:
   - "Docker Desktop 4.65.0 / engine 29.2.1 reachable after startup; docker build -t tgcs-local-smoke:<temp> . -> exit 0"
   - "Docker demo container -> exit 0, generated one demo report in a temporary mounted output directory; temporary directory and image removed."
@@ -47,10 +56,10 @@ operator_checks:
   - "Live Windows Task Scheduler dry-run task with random name -> install exit 0, status installed, remove exit 0, final status not_installed."
   - "Live Windows Credential Manager smoke -> random secret write/read/delete passed; post-delete read returned empty."
   - "Live LLM structured call -> provider=deepseek, model=deepseek-v4-flash, JSON response status=TGCS_LIVE_LLM_OK, total_tokens=58."
-next_action: "Commit as one compatibility-preserving refactor slice if no new edits land."
+next_action: "Commit the Inbox split as one compatibility-preserving frontend refactor checkpoint, then continue with the next high-value SPEC slice instead of closing out."
 candidate_slices:
-  - "Split dashboard inbox/runs components only with focused component tests and production build coverage."
+  - "Split dashboard runs.tsx only with focused component tests and production build coverage."
   - "Split large legacy dashboard/src/domain/sanitize.test.ts by dashboard/desk/fixture areas; keep current sanitizer modules as the implementation authority."
   - "Consider profile creation/profile runtime helpers only when those server/state areas change next."
-last_update: "2026-05-14T04:09:37+08:00"
+last_update: "2026-05-14T06:08:00+08:00"
 checkpoint_ready: true
