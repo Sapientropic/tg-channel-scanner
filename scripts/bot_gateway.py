@@ -25,37 +25,24 @@ from pathlib import Path
 from typing import Any
 
 try:
-    from scripts import dashboard_server, delivery, monitor_state, report
+    from scripts import bot_actions, bot_intents, dashboard_server, delivery, monitor_state
 except ModuleNotFoundError:
     _PROJECT_ROOT = str(Path(__file__).resolve().parent.parent)
     if _PROJECT_ROOT not in sys.path:
         sys.path.insert(0, _PROJECT_ROOT)
-    from scripts import dashboard_server, delivery, monitor_state, report
+    from scripts import bot_actions, bot_intents, dashboard_server, delivery, monitor_state
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_DB_PATH = PROJECT_ROOT / ".tgcs" / "tgcs.db"
-DEFAULT_CONFIG_PATH = PROJECT_ROOT / ".tgcs" / "profiles.toml"
 DEFAULT_BOT_STATE_PATH = PROJECT_ROOT / ".tgcs" / "bot-gateway-state.json"
+DEFAULT_BOT_LOCK_PATH = PROJECT_ROOT / ".tgcs" / "bot-gateway.lock"
 BOT_ALLOWED_CHAT_IDS_ENV = "TGCS_BOT_ALLOWED_CHAT_IDS"
+BOT_API_BASE_URL_ENV = "TGCS_BOT_API_BASE_URL"
 BOT_API_TIMEOUT_SECONDS = 20
 BOT_POLL_TIMEOUT_SECONDS = 30
 MAX_TELEGRAM_MESSAGE_LENGTH = 3900
 PENDING_SOURCE_PLAN_TTL_SECONDS = 15 * 60
-BOT_TOKEN_RE = re.compile(r"\b\d{5,12}:[A-Za-z0-9_-]{10,}\b")
-PROVIDER_KEY_RE = re.compile(r"\b(?:sk|sk-proj|sk-ant|ak)-[A-Za-z0-9_-]{12,}\b", re.IGNORECASE)
-ACCESS_TOKEN_RE = re.compile(r"\b(?:gh[pousr]_[A-Za-z0-9_]{12,}|github_pat_[A-Za-z0-9_]{20,}|xox[abprs]-[A-Za-z0-9-]{12,})\b", re.IGNORECASE)
-AUTHORIZATION_RE = re.compile(r"(?i)\bAuthorization\s*:\s*Bearer\s+[A-Za-z0-9._~+/=-]{8,}")
-ENV_SECRET_RE = re.compile(r"(?i)\b[A-Z0-9_]*(?:API[_-]?KEY|TOKEN|SECRET|PASSWORD)\b\s*=\s*(?:\"[^\"\r\n]+\"|'[^'\r\n]+'|[^\s`'\"]+)")
-KEY_VALUE_SECRET_RE = re.compile(r"(?i)\b(?:api[_-]?key|token|secret|password)\b\s*[:=]\s*(?:\"[^\"\r\n]+\"|'[^'\r\n]+'|[^\s`'\"]+)")
-ARGV_DUMP_RE = re.compile(r"(?i)\b(?:argv|args)\b\s*(?::|=)?\s*\[[^\]]*\]|\b(?:argv|args)\b\s*[:=]\s*[^\r\n]+")
-WINDOWS_PATH_RE = re.compile(r"[A-Za-z]:\\[^\s`'\"]+")
-UNC_PATH_RE = re.compile(r"\\\\[^\\\s]+\\[^\s`'\"]+")
-POSIX_PRIVATE_PATH_RE = re.compile(r"(?<!\w)/(?:home|Users|users|var|tmp|etc|private/tmp)/[^\s`'\"]+")
-CHAT_ID_FIELD_RE = re.compile(r"\bchat[_ -]?id\b\s*[:=]?\s*-?\d{5,20}\b", re.IGNORECASE)
-BARE_CHAT_ID_RE = re.compile(r"(?<![\w:])-?\d{8,20}(?!\w)")
-TRACEBACK_RE = re.compile(r"Traceback \(most recent call last\):.*", re.IGNORECASE | re.DOTALL)
-RAW_MESSAGE_FIELD_RE = re.compile(r'(?i)"(?:text|message|raw_message|body)"\s*:\s*"[^"]{12,}"')
 
 BOT_COMMANDS = [
     {"command": "start", "description": "Show the T-Sense bot menu"},
@@ -67,27 +54,16 @@ BOT_COMMANDS = [
     {"command": "profiles", "description": "List enabled profiles"},
     {"command": "settings", "description": "Show local setup guidance"},
 ]
+BOT_DISPLAY_NAME = "T-Sense"
+BOT_DESCRIPTION = (
+    "T-Sense is a local-first Telegram signal desk. It shows status, latest review cards, "
+    "dry-run scans, profiles, and source controls only while your local gateway is running."
+)
+BOT_SHORT_DESCRIPTION = "Local-first Telegram signal desk."
+BOT_AVATAR_PATH = PROJECT_ROOT / "docs" / "brand" / "bot-avatar.jpg"
 
-ALLOWED_INTENT_ACTIONS = {
-    "help",
-    "status",
-    "latest",
-    "scan",
-    "sources_summary",
-    "sources_plan",
-    "profiles",
-    "settings",
-}
-
-
-@dataclass(frozen=True)
-class BotIntent:
-    action: str
-    profile_id: str = "jobs-fast"
-    topic: str = "jobs"
-    instruction: str = ""
-    needs_confirmation: bool = False
-    source: str = "deterministic"
+ALLOWED_INTENT_ACTIONS = bot_intents.ALLOWED_INTENT_ACTIONS
+BotIntent = bot_intents.BotIntent
 
 
 @dataclass
@@ -102,19 +78,140 @@ class BotGatewayError(Exception):
     """Raised when the local bot gateway cannot complete a safe action."""
 
 
+def _lock_pid_alive(pid: int) -> bool:
+    if pid <= 0:
+        return False
+    if pid == os.getpid():
+        return True
+    if sys.platform.startswith("win"):
+        try:
+            completed = subprocess.run(
+                ["tasklist.exe", "/FI", f"PID eq {pid}", "/FO", "CSV", "/NH"],
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=2,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            return True
+        return completed.returncode == 0 and str(pid) in (completed.stdout or "")
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    except OSError:
+        return True
+    return True
+
+
+def _read_lock_pid(path: Path) -> int:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return 0
+    if not isinstance(payload, dict):
+        return 0
+    try:
+        return int(payload.get("pid") or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+class BotGatewayLock:
+    def __init__(self, path: Path = DEFAULT_BOT_LOCK_PATH):
+        self.path = path
+        self.acquired = False
+
+    def __enter__(self):
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        if self.path.exists():
+            existing_pid = _read_lock_pid(self.path)
+            if existing_pid and _lock_pid_alive(existing_pid):
+                raise BotGatewayError("Bot Gateway is already running. Stop the existing local gateway before starting another one.")
+            try:
+                self.path.unlink()
+            except OSError:
+                raise BotGatewayError("Bot Gateway lock is stale but could not be cleared.") from None
+        try:
+            fd = os.open(str(self.path), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        except FileExistsError:
+            raise BotGatewayError("Bot Gateway is already running. Stop the existing local gateway before starting another one.") from None
+        payload = json.dumps({"schema_version": "bot_gateway_lock_v1", "pid": os.getpid(), "created_at": monitor_state.utc_now()})
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(payload + "\n")
+        self.acquired = True
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        if self.acquired:
+            try:
+                if _read_lock_pid(self.path) == os.getpid():
+                    self.path.unlink(missing_ok=True)
+            except OSError:
+                pass
+        self.acquired = False
+        return False
+
+
 class TelegramBotApi:
-    def __init__(self, token: str, *, timeout_seconds: int = BOT_API_TIMEOUT_SECONDS):
+    def __init__(self, token: str, *, timeout_seconds: int = BOT_API_TIMEOUT_SECONDS, api_base_url: str | None = None):
         self.token = token
         self.timeout_seconds = timeout_seconds
+        self.api_base_url = (api_base_url or os.environ.get(BOT_API_BASE_URL_ENV) or "https://api.telegram.org").rstrip("/")
+
+    def method_url(self, method: str) -> str:
+        return f"{self.api_base_url}/bot{self.token}/{method}"
 
     def request(self, method: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
-        url = f"https://api.telegram.org/bot{self.token}/{method}"
+        url = self.method_url(method)
         data = json.dumps(payload or {}).encode("utf-8")
         request = urllib.request.Request(
             url,
             data=data,
             method="POST",
             headers={"Content-Type": "application/json; charset=utf-8"},
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=self.timeout_seconds) as response:
+                result = json.loads(response.read().decode("utf-8"))
+        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exc:
+            raise BotGatewayError(f"Telegram Bot API request failed: {method}") from exc
+        if not isinstance(result, dict) or result.get("ok") is not True:
+            description = result.get("description") if isinstance(result, dict) else ""
+            raise BotGatewayError(f"Telegram Bot API rejected {method}: {description or 'unknown error'}")
+        return result
+
+    def request_multipart(
+        self,
+        method: str,
+        fields: dict[str, str],
+        files: dict[str, tuple[str, bytes, str]],
+    ) -> dict[str, Any]:
+        boundary = "----tgcs-bot-boundary-" + secrets.token_urlsafe(12)
+        body = bytearray()
+        for name, value in fields.items():
+            body.extend(f"--{boundary}\r\n".encode("utf-8"))
+            body.extend(f'Content-Disposition: form-data; name="{name}"\r\n\r\n'.encode("utf-8"))
+            body.extend(value.encode("utf-8"))
+            body.extend(b"\r\n")
+        for name, (filename, content, content_type) in files.items():
+            body.extend(f"--{boundary}\r\n".encode("utf-8"))
+            body.extend(
+                (
+                    f'Content-Disposition: form-data; name="{name}"; filename="{filename}"\r\n'
+                    f"Content-Type: {content_type}\r\n\r\n"
+                ).encode("utf-8")
+            )
+            body.extend(content)
+            body.extend(b"\r\n")
+        body.extend(f"--{boundary}--\r\n".encode("utf-8"))
+        request = urllib.request.Request(
+            self.method_url(method),
+            data=bytes(body),
+            method="POST",
+            headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
         )
         try:
             with urllib.request.urlopen(request, timeout=self.timeout_seconds) as response:
@@ -139,7 +236,7 @@ class TelegramBotApi:
         return [item for item in updates if isinstance(item, dict)] if isinstance(updates, list) else []
 
     def send_message(self, chat_id: str, text: str, *, reply_markup: dict[str, Any] | None = None) -> None:
-        chunks = split_telegram_text(redact_telegram_reply(text))
+        chunks = split_telegram_text(bot_actions.redact_telegram_reply(text))
         for index, chunk in enumerate(chunks):
             payload: dict[str, Any] = {
                 "chat_id": chat_id,
@@ -159,24 +256,33 @@ class TelegramBotApi:
     def set_my_commands(self) -> None:
         self.request("setMyCommands", {"commands": BOT_COMMANDS})
 
+    def set_my_name(self, name: str) -> None:
+        self.request("setMyName", {"name": name})
 
-def redact_telegram_reply(text: object) -> str:
-    clean = str(text or "")
-    clean = TRACEBACK_RE.sub("Local action failed. Open Signal Desk Runs or Settings for details.", clean)
-    clean = BOT_TOKEN_RE.sub("[redacted-token]", clean)
-    clean = PROVIDER_KEY_RE.sub("[redacted-key]", clean)
-    clean = ACCESS_TOKEN_RE.sub("[redacted-token]", clean)
-    clean = AUTHORIZATION_RE.sub("Authorization: Bearer [redacted-key]", clean)
-    clean = ENV_SECRET_RE.sub(lambda match: f"{match.group(0).split('=')[0].strip()}=[redacted-secret]", clean)
-    clean = KEY_VALUE_SECRET_RE.sub(lambda match: re.split(r"[:=]", match.group(0), maxsplit=1)[0].strip() + "=[redacted-secret]", clean)
-    clean = ARGV_DUMP_RE.sub("argv=[redacted-argv]", clean)
-    clean = WINDOWS_PATH_RE.sub("[redacted-path]", clean)
-    clean = UNC_PATH_RE.sub("[redacted-path]", clean)
-    clean = POSIX_PRIVATE_PATH_RE.sub("[redacted-path]", clean)
-    clean = CHAT_ID_FIELD_RE.sub("chat_id [redacted-chat-id]", clean)
-    clean = RAW_MESSAGE_FIELD_RE.sub('"text":"[redacted-message]"', clean)
-    clean = BARE_CHAT_ID_RE.sub("[redacted-chat-id]", clean)
-    return clean.strip() or "Done."
+    def set_my_description(self, description: str) -> None:
+        self.request("setMyDescription", {"description": description})
+
+    def set_my_short_description(self, short_description: str) -> None:
+        self.request("setMyShortDescription", {"short_description": short_description})
+
+    def set_chat_menu_button(self) -> None:
+        self.request("setChatMenuButton", {"menu_button": {"type": "commands"}})
+
+    def set_my_profile_photo(self, photo_path: Path | str) -> None:
+        path = Path(photo_path)
+        if path.suffix.casefold() not in {".jpg", ".jpeg"}:
+            raise BotGatewayError("Bot profile photo asset must be a JPG image.")
+        try:
+            content = path.read_bytes()
+        except OSError as exc:
+            raise BotGatewayError("Bot profile photo asset is not available.") from exc
+        attach_name = "profile_photo"
+        payload = {"type": "static", "photo": f"attach://{attach_name}"}
+        self.request_multipart(
+            "setMyProfilePhoto",
+            {"photo": json.dumps(payload, separators=(",", ":"))},
+            {attach_name: ("bot-avatar.jpg", content, "image/jpeg")},
+        )
 
 
 def split_telegram_text(text: str) -> list[str]:
@@ -216,6 +322,28 @@ def load_state(path: Path = DEFAULT_BOT_STATE_PATH) -> dict[str, Any]:
 def save_state(state: dict[str, Any], path: Path = DEFAULT_BOT_STATE_PATH) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(state, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
+def write_gateway_state(
+    path: Path = DEFAULT_BOT_STATE_PATH,
+    *,
+    offset: int | None,
+    started_at: str,
+    authorized_chat_count: int,
+    commands_installed: bool,
+    last_poll_at: str | None = None,
+    pid: int | None = None,
+) -> None:
+    payload = {
+        "schema_version": "bot_gateway_state_v1",
+        "pid": int(pid if pid is not None else os.getpid()),
+        "started_at": started_at,
+        "last_poll_at": last_poll_at or monitor_state.utc_now(),
+        "authorized_chat_count": max(0, int(authorized_chat_count)),
+        "commands_installed": bool(commands_installed),
+        "offset": offset,
+    }
+    save_state(payload, path)
 
 
 def clean_chat_id(value: object) -> str:
@@ -311,17 +439,15 @@ def dashboard_snapshot(db_path: Path = DEFAULT_DB_PATH) -> dict[str, Any]:
 def source_summary() -> str:
     sources = dashboard_server.desk_sources()
     topics = ", ".join(sources.get("topics") or []) or "none"
-    return redact_telegram_reply(
-        "\n".join(
-            [
-                "Sources",
-                f"Total: {sources.get('source_count', 0)}",
-                f"Enabled: {sources.get('enabled_count', 0)}",
-                f"Topics: {topics}",
-                "",
-                "Send: add @channel, pause @channel, remove @channel",
-            ]
-        )
+    return "\n".join(
+        [
+            "Sources",
+            f"Total: {sources.get('source_count', 0)}",
+            f"Enabled: {sources.get('enabled_count', 0)}",
+            f"Topics: {topics}",
+            "",
+            "Send: add @channel, pause @channel, remove @channel",
+        ]
     )
 
 
@@ -336,7 +462,7 @@ def profile_summary(snapshot: dict[str, Any]) -> str:
         lines.append(f"- {label}: {status}")
     if len(profiles) > 12:
         lines.append(f"... {len(profiles) - 12} more")
-    return redact_telegram_reply("\n".join(lines))
+    return "\n".join(lines)
 
 
 def status_summary(snapshot: dict[str, Any]) -> str:
@@ -345,17 +471,15 @@ def status_summary(snapshot: dict[str, Any]) -> str:
     runs = [item for item in snapshot.get("runs") or [] if isinstance(item, dict)]
     inbox = [item for item in snapshot.get("inbox") or [] if isinstance(item, dict)]
     latest_run = runs[0] if runs else {}
-    return redact_telegram_reply(
-        "\n".join(
-            [
-                "T-Sense status",
-                f"Stage: {setup.get('stage') or 'unknown'}",
-                f"Next: {setup.get('next_step') or 'Open Signal Desk'}",
-                f"Pending review cards: {len(inbox)}",
-                f"Latest run: {latest_run.get('status') or 'none'} {latest_run.get('profile_id') or ''}".strip(),
-                f"Opportunity summary: {opportunity.get('title') or opportunity.get('status') or 'not ready'}",
-            ]
-        )
+    return "\n".join(
+        [
+            "T-Sense status",
+            f"Stage: {setup.get('stage') or 'unknown'}",
+            f"Next: {setup.get('next_step') or 'Open Signal Desk'}",
+            f"Pending review cards: {len(inbox)}",
+            f"Latest run: {latest_run.get('status') or 'none'} {latest_run.get('profile_id') or ''}".strip(),
+            f"Opportunity summary: {opportunity.get('title') or opportunity.get('status') or 'not ready'}",
+        ]
     )
 
 
@@ -378,146 +502,86 @@ def latest_summary(snapshot: dict[str, Any]) -> str:
         display_path = str(artifact.get("display_path") or artifact.get("path") or "")
         if display_path:
             lines.append(f"Report: {display_path}")
-    return redact_telegram_reply("\n".join(lines))
+    return "\n".join(lines)
 
 
-def run_dry_scan(profile_id: str, *, timeout_seconds: int = 900) -> str:
-    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{1,80}", profile_id):
-        raise BotGatewayError("Unsupported profile id.")
-    cmd = [
-        sys.executable,
-        str(PROJECT_ROOT / "scripts" / "monitor.py"),
-        "run",
-        "--profile-id",
-        profile_id,
-        "--config",
-        str(DEFAULT_CONFIG_PATH),
-        "--db",
-        str(DEFAULT_DB_PATH),
-        "--delivery-mode",
-        "dry-run",
-        "--format",
-        "json",
-    ]
-    try:
-        completed = subprocess.run(cmd, cwd=PROJECT_ROOT, check=False, capture_output=True, text=True, timeout=timeout_seconds)
-    except subprocess.TimeoutExpired as exc:
-        raise BotGatewayError("Dry scan timed out. Open Runs in Signal Desk for local diagnostics.") from exc
-    if completed.returncode != 0:
-        stderr = " ".join((completed.stderr or "").split())[:500]
-        raise BotGatewayError(f"Dry scan failed. {stderr or 'Open Runs in Signal Desk for diagnostics.'}")
-    snapshot = dashboard_snapshot()
-    return redact_telegram_reply("Dry scan finished.\n\n" + latest_summary(snapshot))
-
-
-def clean_topic(value: str) -> str:
-    topic = (value or "jobs").strip().casefold()
-    return topic if re.fullmatch(r"[a-z0-9][a-z0-9_-]{1,40}", topic) else "jobs"
-
-
-def deterministic_intent(text: str) -> BotIntent | None:
-    clean = text.strip()
-    lowered = clean.casefold()
-    if not clean or lowered in {"/start", "start", "menu", "/help", "help", "帮助"}:
-        return BotIntent(action="help")
-    if lowered.startswith("/status") or lowered in {"status", "状态"}:
-        return BotIntent(action="status")
-    if lowered.startswith("/latest") or lowered in {"latest", "最近", "最新"}:
-        return BotIntent(action="latest")
-    if lowered.startswith("/profiles") or lowered in {"profiles", "profile", "配置"}:
-        return BotIntent(action="profiles")
-    if lowered.startswith("/settings") or lowered in {"settings", "设置"}:
-        return BotIntent(action="settings")
-    if lowered.startswith("/scan") or "dry scan" in lowered or "跑一次" in lowered or "扫描" in lowered:
-        match = re.search(r"(?:/scan|profile)\s+([A-Za-z0-9][A-Za-z0-9_-]{1,80})", clean)
-        return BotIntent(action="scan", profile_id=match.group(1) if match else "jobs-fast")
-    if lowered.startswith("/sources") and len(clean.split()) <= 1:
-        return BotIntent(action="sources_summary")
-    source_words = ("source", "sources", "add ", "remove ", "delete ", "pause ", "disable ", "enable ", "resume ", "添加", "删除", "移除", "暂停", "启用")
-    has_handle = bool(re.search(r"(?:@|t\.me/)[A-Za-z0-9_]{5,64}|-?\d{5,20}", clean))
-    if lowered.startswith("/sources") or (has_handle and any(word in lowered for word in source_words)):
-        instruction = re.sub(r"^/sources\s*", "", clean, flags=re.IGNORECASE).strip() or clean
-        return BotIntent(action="sources_plan", instruction=instruction, topic="jobs", needs_confirmation=True)
+def latest_actionable_card(snapshot: dict[str, Any]) -> dict[str, Any] | None:
+    inbox = snapshot.get("inbox") if isinstance(snapshot.get("inbox"), list) else []
+    for card in inbox:
+        if not isinstance(card, dict):
+            continue
+        if str(card.get("opportunity_status") or "open").strip().lower() != "open":
+            continue
+        if str(card.get("card_id") or "").strip():
+            return card
     return None
 
 
-def llm_intent(text: str) -> BotIntent | None:
-    if not report.llm_key_available():
+def lifecycle_keyboard(card: dict[str, Any]) -> dict[str, Any] | None:
+    card_id = str(card.get("card_id") or "").strip()
+    if not card_id:
         return None
-    try:
-        from openai import OpenAI
-    except ImportError:
-        return None
-
-    base_url, model = report.resolve_llm_settings(None, report.DEFAULT_MODEL)
-    provider = report.llm_provider(base_url, model)
-    api_key = report.api_key_for_provider(provider)
-    if not api_key:
-        return None
-    system_prompt = (
-        "Map a Telegram chat message to one T-Sense bot intent. Return JSON only. "
-        "Allowed actions: help, status, latest, scan, sources_summary, sources_plan, profiles, settings. "
-        "For source changes, put the original user instruction in instruction and set needs_confirmation true. "
-        "Never return commands, file paths, shell, argv, tokens, or raw Telegram message data."
-    )
-    user_prompt = json.dumps(
-        {
-            "message": text[:2000],
-            "schema": {
-                "action": "status",
-                "profile_id": "jobs-fast",
-                "topic": "jobs",
-                "instruction": "",
-                "needs_confirmation": False,
-            },
-        },
-        ensure_ascii=False,
-    )
-    create_kwargs: dict[str, Any] = {
-        "model": model,
-        "messages": [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}],
-        "temperature": report.llm_temperature(provider),
+    return {
+        "inline_keyboard": [
+            [
+                {"text": "Applied", "callback_data": f"card:applied:{card_id}"},
+                {"text": "Save", "callback_data": f"card:saved:{card_id}"},
+            ],
+            [
+                {"text": "Contacted", "callback_data": f"card:contacted:{card_id}"},
+                {"text": "Dismiss", "callback_data": f"card:dismissed:{card_id}"},
+                {"text": "Duplicate", "callback_data": f"card:duplicate:{card_id}"},
+            ],
+        ]
     }
-    if provider in {"deepseek", "openai"}:
-        create_kwargs["response_format"] = {"type": "json_object"}
-    thinking_extra = report.minimax_thinking_extra(provider) or report.deepseek_thinking_extra(provider, model)
-    if thinking_extra:
-        create_kwargs["extra_body"] = thinking_extra
-    report.add_token_limit(create_kwargs, provider=provider, max_tokens=400)
-    try:
-        response = OpenAI(api_key=api_key, base_url=base_url).chat.completions.create(**create_kwargs)
-        payload = json.loads(report.strip_json_fence(response.choices[0].message.content or "{}"))
-    except Exception:
-        return None
-    if not isinstance(payload, dict):
-        return None
-    action = str(payload.get("action") or "").strip()
-    if action not in ALLOWED_INTENT_ACTIONS:
-        return None
-    instruction = str(payload.get("instruction") or "").strip()
-    profile_id = str(payload.get("profile_id") or "jobs-fast").strip()
-    topic = clean_topic(str(payload.get("topic") or "jobs"))
-    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{1,80}", profile_id):
-        profile_id = "jobs-fast"
-    return BotIntent(
-        action=action,
-        profile_id=profile_id,
-        topic=topic,
-        instruction=instruction,
-        needs_confirmation=bool(payload.get("needs_confirmation")) or action == "sources_plan",
-        source="llm",
+
+
+def lifecycle_status_label(status: object) -> str:
+    labels = {
+        "open": "Open",
+        "saved": "Saved",
+        "applied": "Applied",
+        "contacted": "Contacted",
+        "dismissed": "Dismissed",
+        "duplicate": "Duplicate",
+    }
+    return labels.get(str(status or "open").strip().lower(), "Open")
+
+
+def card_action_summary(card: dict[str, Any]) -> str:
+    label = lifecycle_status_label(card.get("opportunity_status"))
+    title = str(card.get("title") or "Review card").strip()
+    rating = str(card.get("rating") or "").strip()
+    detail = f"{label}: {title}"
+    if rating:
+        detail += f" ({rating})"
+    return detail
+
+
+def run_dry_scan(profile_id: str, *, timeout_seconds: int = 900) -> str:
+    _ = timeout_seconds
+    result = bot_actions.BotActionRegistry().execute(
+        BotIntent(action="scan_profile_dry_run", args={"profile_id": profile_id})
     )
+    if result.error_category:
+        raise BotGatewayError(result.text)
+    return result.text
+
+
+def clean_topic(value: str) -> str:
+    return bot_intents.clean_topic(value)
+
+
+def deterministic_intent(text: str) -> BotIntent | None:
+    return bot_intents.deterministic_intent(text)
+
+
+def llm_intent(text: str) -> BotIntent | None:
+    return bot_intents.llm_intent(text)
 
 
 def route_text_to_intent(text: str, *, use_llm: bool = False) -> BotIntent:
-    deterministic = deterministic_intent(text)
-    if deterministic:
-        return deterministic
-    if use_llm:
-        routed = llm_intent(text)
-        if routed:
-            return routed
-    return BotIntent(action="help")
+    return bot_intents.route_text_to_intent(text, use_llm=use_llm)
 
 
 def source_plan_preview(instruction: str, topic: str) -> tuple[str, dict[str, Any]]:
@@ -572,6 +636,7 @@ class BotGateway:
         self.fixed_allowed = allowed is not None
         self.allowed = allowed if allowed is not None else allowed_chat_ids(db_path, self.extra_allowed)
         self.pending_source_plans: dict[str, PendingSourcePlan] = {}
+        self.action_registry = bot_actions.BotActionRegistry()
 
     def refresh_allowed(self) -> None:
         if not self.fixed_allowed:
@@ -582,7 +647,7 @@ class BotGateway:
         return chat_is_allowed(chat_id, allowed=self.allowed)
 
     def send_message(self, chat_id: str, text: str, *, reply_markup: dict[str, Any] | None = None) -> None:
-        self.api.send_message(chat_id, redact_telegram_reply(text), reply_markup=reply_markup)
+        self.api.send_message(chat_id, bot_actions.redact_telegram_reply(text), reply_markup=reply_markup)
 
     def prune_pending_source_plans(self) -> None:
         now = time.time()
@@ -602,7 +667,9 @@ class BotGateway:
             self.send_message(chat_id, status_summary(dashboard_snapshot(self.db_path)))
             return
         if intent.action == "latest":
-            self.send_message(chat_id, latest_summary(dashboard_snapshot(self.db_path)))
+            snapshot = dashboard_snapshot(self.db_path)
+            card = latest_actionable_card(snapshot)
+            self.send_message(chat_id, latest_summary(snapshot), reply_markup=lifecycle_keyboard(card or {}))
             return
         if intent.action == "profiles":
             self.send_message(chat_id, profile_summary(dashboard_snapshot(self.db_path)))
@@ -613,9 +680,17 @@ class BotGateway:
         if intent.action == "sources_summary":
             self.send_message(chat_id, source_summary())
             return
-        if intent.action == "scan":
-            self.send_message(chat_id, f"Running {intent.profile_id} as dry-run. This can take a minute.")
-            self.send_message(chat_id, run_dry_scan(intent.profile_id))
+        if intent.action == "knowledge_answer":
+            result = self.action_registry.execute(intent)
+            self.send_message(chat_id, result.text, reply_markup=result.reply_markup)
+            return
+        if intent.action in {"scan", "scan_profile_dry_run"}:
+            if intent.profile_id == "jobs-fast":
+                self.send_message(chat_id, f"Running {intent.profile_id} as dry-run. This can take a minute.")
+            result = self.action_registry.execute(
+                BotIntent(action="scan_profile_dry_run", args={"profile_id": intent.profile_id})
+            )
+            self.send_message(chat_id, result.text, reply_markup=result.reply_markup)
             return
         if intent.action == "sources_plan":
             if not intent.instruction:
@@ -669,7 +744,10 @@ class BotGateway:
             return
         if data.startswith("scan:"):
             self.api.answer_callback_query(callback_query_id, "Starting dry scan")
-            self.dispatch_intent(chat_id, BotIntent(action="scan", profile_id=data.split(":", 1)[1] or "jobs-fast"))
+            self.dispatch_intent(
+                chat_id,
+                BotIntent(action="scan_profile_dry_run", args={"profile_id": data.split(":", 1)[1] or "jobs-fast"}),
+            )
             return
         if data.startswith("sources_apply:"):
             self.prune_pending_source_plans()
@@ -681,6 +759,28 @@ class BotGateway:
             self.api.answer_callback_query(callback_query_id, "Applying source plan")
             self.send_message(chat_id, apply_source_plan(plan.resolved_plan, plan.topic))
             self.pending_source_plans.pop(plan_id, None)
+            return
+        if data.startswith("card:"):
+            parts = data.split(":", 2)
+            if len(parts) != 3:
+                self.api.answer_callback_query(callback_query_id, "Card action expired.")
+                return
+            _, action, card_id = parts
+            if action not in monitor_state.LIFECYCLE_ACTIONS:
+                self.api.answer_callback_query(callback_query_id, "Unsupported card action.")
+                return
+            try:
+                conn = monitor_state.connect(self.db_path)
+                try:
+                    card = monitor_state.set_card_action(conn, card_id=card_id, action=action)
+                finally:
+                    conn.close()
+            except monitor_state.MonitorStateError:
+                self.api.answer_callback_query(callback_query_id, "Card is no longer available.")
+                return
+            label = lifecycle_status_label(card.get("opportunity_status"))
+            self.api.answer_callback_query(callback_query_id, f"Marked {label}")
+            self.send_message(chat_id, card_action_summary(card), reply_markup=lifecycle_keyboard(card) if card.get("opportunity_status") == "open" else None)
             return
         self.api.answer_callback_query(callback_query_id, "Unsupported action")
 
@@ -731,26 +831,96 @@ def install_menu() -> None:
     TelegramBotApi(load_bot_token()).set_my_commands()
 
 
+def apply_bot_identity(api: TelegramBotApi | None = None) -> dict[str, Any]:
+    bot_api = api or TelegramBotApi(load_bot_token())
+    steps: dict[str, dict[str, Any]] = {}
+
+    def run_step(name: str, operation) -> None:
+        try:
+            operation()
+        except Exception as exc:
+            # Identity setup is a setup convenience, not a critical runtime path.
+            # Keep going so a missing/invalid avatar does not prevent commands or
+            # descriptions from being applied, and never echo local paths or tokens.
+            steps[name] = {
+                "ok": False,
+                "error": bot_actions.redact_telegram_reply(str(exc))[:500],
+            }
+        else:
+            steps[name] = {"ok": True, "error": ""}
+
+    run_step("name", lambda: bot_api.set_my_name(BOT_DISPLAY_NAME))
+    run_step("description", lambda: bot_api.set_my_description(BOT_DESCRIPTION))
+    run_step("short_description", lambda: bot_api.set_my_short_description(BOT_SHORT_DESCRIPTION))
+    run_step("commands", bot_api.set_my_commands)
+    run_step("menu_button", bot_api.set_chat_menu_button)
+    run_step("profile_photo", lambda: bot_api.set_my_profile_photo(BOT_AVATAR_PATH))
+    return {
+        "schema_version": "bot_identity_apply_result_v1",
+        "name": BOT_DISPLAY_NAME,
+        "description_updated": bool(steps["description"]["ok"]),
+        "short_description_updated": bool(steps["short_description"]["ok"]),
+        "commands_installed": bool(steps["commands"]["ok"]),
+        "menu_button_updated": bool(steps["menu_button"]["ok"]),
+        "profile_photo_updated": bool(steps["profile_photo"]["ok"]),
+        "steps": steps,
+    }
+
+
 def run_loop(args: argparse.Namespace) -> int:
-    token = load_bot_token()
-    api = TelegramBotApi(token)
-    if not args.skip_menu:
-        api.set_my_commands()
-    extra_allowed = args.allow_chat_id or []
-    gateway = BotGateway(api, db_path=Path(args.db), use_llm=bool(args.llm) and not args.no_llm, extra_allowed=extra_allowed)
-    state_path = Path(args.state)
-    state = load_state(state_path)
-    offset = state.get("offset") if isinstance(state.get("offset"), int) else None
-    print("T-Sense bot gateway is running. Press Ctrl+C to stop.", flush=True)
-    print(f"Authorized chats: {len(gateway.allowed)}", flush=True)
-    while True:
-        updates = api.get_updates(offset=offset, timeout_seconds=args.poll_timeout)
-        for update in updates:
-            update_id = update.get("update_id")
-            if isinstance(update_id, int):
-                offset = update_id + 1
-                save_state({"offset": offset}, state_path)
-            gateway.handle_update(update)
+    with BotGatewayLock(Path(args.lock)):
+        token = load_bot_token()
+        api = TelegramBotApi(token)
+        commands_installed = False
+        if not args.skip_menu:
+            api.set_my_commands()
+            commands_installed = True
+        extra_allowed = args.allow_chat_id or []
+        gateway = BotGateway(api, db_path=Path(args.db), use_llm=bool(args.llm) and not args.no_llm, extra_allowed=extra_allowed)
+        state_path = Path(args.state)
+        state = load_state(state_path)
+        offset = state.get("offset") if isinstance(state.get("offset"), int) else None
+        started_at = monitor_state.utc_now()
+        write_gateway_state(
+            state_path,
+            offset=offset,
+            started_at=started_at,
+            authorized_chat_count=len(gateway.allowed),
+            commands_installed=commands_installed,
+        )
+        print("T-Sense bot gateway is running. Press Ctrl+C to stop.", flush=True)
+        print(f"Authorized chats: {len(gateway.allowed)}", flush=True)
+        while True:
+            updates = api.get_updates(offset=offset, timeout_seconds=args.poll_timeout)
+            gateway.refresh_allowed()
+            for update in updates:
+                update_id = update.get("update_id")
+                if isinstance(update_id, int):
+                    offset = update_id + 1
+                gateway.handle_update(update)
+            write_gateway_state(
+                state_path,
+                offset=offset,
+                started_at=started_at,
+                authorized_chat_count=len(gateway.allowed),
+                commands_installed=commands_installed,
+            )
+
+
+def autostart_status() -> dict[str, Any]:
+    conn = monitor_state.connect(DEFAULT_DB_PATH)
+    try:
+        return dashboard_server.desk_bot_gateway_status(conn)
+    finally:
+        conn.close()
+
+
+def install_autostart() -> dict[str, Any]:
+    return dashboard_server.run_desk_action("bot_gateway_install_autostart", body={"confirm": True})
+
+
+def remove_autostart() -> dict[str, Any]:
+    return dashboard_server.run_desk_action("bot_gateway_remove_autostart", body={"confirm": True})
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -760,16 +930,25 @@ def build_parser() -> argparse.ArgumentParser:
     run = subparsers.add_parser("run", help="Long-poll Telegram Bot updates and run safe local actions.")
     run.add_argument("--db", default=str(DEFAULT_DB_PATH))
     run.add_argument("--state", default=str(DEFAULT_BOT_STATE_PATH))
+    run.add_argument("--lock", default=str(DEFAULT_BOT_LOCK_PATH))
     run.add_argument("--allow-chat-id", action="append", default=[], help="Authorize a Telegram chat id for this process.")
     run.add_argument("--poll-timeout", type=int, default=BOT_POLL_TIMEOUT_SECONDS)
     run.add_argument("--install-menu", action="store_true", help="Install the Telegram command menu before polling; this is now the default.")
     run.add_argument("--skip-menu", action="store_true", help="Skip command menu installation before polling.")
-    run.add_argument("--llm", action="store_true", help="Opt in to optional LLM routing for free-form messages.")
-    run.add_argument("--no-llm", action="store_true", help="Keep free-form routing local-only; this is the default.")
+    run.add_argument("--llm", action="store_true", help="Opt in to optional LLM routing and knowledge answers for free-form messages.")
+    run.add_argument("--no-llm", action="store_true", help="Keep free-form routing and knowledge answers local-only; this is the default.")
     run.set_defaults(func=run_loop)
 
     menu = subparsers.add_parser("install-menu", help="Install Telegram Bot command menu.")
     menu.set_defaults(func=lambda _args: install_menu() or 0)
+    identity = subparsers.add_parser("apply-identity", help="Apply T-Sense bot name, descriptions, and command menu.")
+    identity.set_defaults(func=lambda _args: print(json.dumps(apply_bot_identity(), ensure_ascii=False)) or 0)
+    status = subparsers.add_parser("status", help="Show local Bot Gateway and background status.")
+    status.set_defaults(func=lambda _args: print(json.dumps(autostart_status(), ensure_ascii=False)) or 0)
+    install_bg = subparsers.add_parser("install-autostart", help="Start Bot Gateway automatically at user login.")
+    install_bg.set_defaults(func=lambda _args: print(json.dumps(install_autostart(), ensure_ascii=False)) or 0)
+    remove_bg = subparsers.add_parser("remove-autostart", help="Remove the Bot Gateway login task.")
+    remove_bg.set_defaults(func=lambda _args: print(json.dumps(remove_autostart(), ensure_ascii=False)) or 0)
     return parser
 
 

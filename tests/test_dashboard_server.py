@@ -853,6 +853,203 @@ class DashboardServerGitTests(unittest.TestCase):
         self.assertNotIn(str(project_root), result["detail"])
         self.assertIn("project folder", result["detail"])
 
+    def test_bot_gateway_autostart_install_requires_confirmation(self):
+        with patch.object(dashboard_server, "_run_scheduler_command") as run_mock:
+            with self.assertRaises(dashboard_server.DashboardDeskActionError) as raised:
+                dashboard_server.run_desk_action("bot_gateway_install_autostart", body={})
+
+        run_mock.assert_not_called()
+        self.assertIn("confirmation", str(raised.exception))
+
+    def test_bot_gateway_autostart_install_uses_fixed_windows_login_task(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project_root = Path(tmp)
+            scripts_dir = project_root / "scripts"
+            scripts_dir.mkdir()
+            bot_script = scripts_dir / "bot_gateway.py"
+            bot_script.write_text("# bot gateway\n", encoding="utf-8")
+            pythonw = project_root / "pythonw.exe"
+            pythonw.write_text("", encoding="utf-8")
+            completed = subprocess.CompletedProcess(["schtasks.exe"], 0, stdout="SUCCESS\n", stderr="")
+            calls: list[list[str]] = []
+
+            def fake_run(args):
+                calls.append(args)
+                return completed
+
+            with patch.object(dashboard_server.sys, "platform", "win32"):
+                with patch.object(dashboard_server, "PROJECT_ROOT", project_root):
+                    with patch.object(dashboard_server, "_pythonw_entry", return_value=pythonw):
+                        with patch.object(
+                            dashboard_server,
+                            "desk_notification_token_status",
+                            return_value={"configured": True, "source": "keyring"},
+                        ):
+                            with patch.object(dashboard_server, "_run_scheduler_command", side_effect=fake_run):
+                                result = dashboard_server.run_desk_action(
+                                    "bot_gateway_install_autostart",
+                                    body={"confirm": True},
+                                )
+
+        args = calls[0]
+        trigger = args[args.index("/TR") + 1]
+        self.assertEqual(args[0], "schtasks.exe")
+        self.assertIn("/Create", args)
+        self.assertIn("/SC", args)
+        self.assertIn("ONLOGON", args)
+        self.assertIn(dashboard_server.DESK_BOT_GATEWAY_TASK_NAME, args)
+        self.assertIn(str(pythonw), trigger)
+        self.assertIn(str(bot_script), trigger)
+        self.assertIn("run --poll-timeout", trigger)
+        self.assertNotIn("123456", trigger)
+        self.assertNotIn("token", trigger.lower())
+        self.assertEqual(calls[1], ["schtasks.exe", "/Run", "/TN", dashboard_server.DESK_BOT_GATEWAY_TASK_NAME])
+        self.assertEqual(result["status"], "success")
+        self.assertNotIn(str(project_root), result["detail"])
+
+    def test_bot_gateway_autostart_blocks_when_token_missing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project_root = Path(tmp)
+            (project_root / "scripts").mkdir()
+            (project_root / "scripts" / "bot_gateway.py").write_text("# bot gateway\n", encoding="utf-8")
+
+            with patch.object(dashboard_server.sys, "platform", "win32"):
+                with patch.object(dashboard_server, "PROJECT_ROOT", project_root):
+                    with patch.object(
+                        dashboard_server,
+                        "desk_notification_token_status",
+                        return_value={"configured": False, "source": "not_configured"},
+                    ):
+                        with patch.object(dashboard_server, "_run_scheduler_command") as run_mock:
+                            result = dashboard_server.run_desk_action(
+                                "bot_gateway_install_autostart",
+                                body={"confirm": True},
+                            )
+
+        run_mock.assert_not_called()
+        self.assertEqual(result["status"], "blocked")
+        self.assertIn("token", result["detail"].lower())
+        self.assertNotIn(str(project_root), json.dumps(result, ensure_ascii=False))
+
+    def test_bot_gateway_autostart_status_is_included_with_gateway_health(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            conn = monitor_state.connect(root / ".tgcs" / "tgcs.db")
+            completed = subprocess.CompletedProcess(
+                ["schtasks.exe"],
+                0,
+                stdout=f"TaskName: {root}\\private\\bot\n",
+                stderr="",
+            )
+            try:
+                with patch.object(dashboard_server.sys, "platform", "win32"):
+                    with patch.object(dashboard_server, "PROJECT_ROOT", root):
+                        with patch.object(
+                            dashboard_server,
+                            "desk_notification_token_status",
+                            return_value={"configured": True, "source": "keyring"},
+                        ):
+                            with patch.object(dashboard_server, "_run_scheduler_command", return_value=completed):
+                                status = dashboard_server.desk_bot_gateway_status(conn)
+            finally:
+                conn.close()
+
+        rendered = json.dumps(status, ensure_ascii=False)
+        self.assertTrue(status["background"]["installed"])
+        self.assertEqual(status["background"]["status"], "installed")
+        self.assertTrue(status["background"]["can_remove"])
+        self.assertNotIn(str(root), rendered)
+
+    def test_bot_gateway_autostart_writes_macos_launch_agent_with_fixed_argv(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp) / "home"
+            project_root = Path(tmp) / "repo"
+            home.mkdir()
+            (project_root / "scripts").mkdir(parents=True)
+            bot_script = project_root / "scripts" / "bot_gateway.py"
+            bot_script.write_text("# bot gateway\n", encoding="utf-8")
+            python = project_root / "python"
+            python.write_text("", encoding="utf-8")
+            calls: list[list[str]] = []
+
+            def fake_run(args):
+                calls.append(args)
+                return subprocess.CompletedProcess(args, 0, stdout="", stderr="")
+
+            with patch.object(dashboard_server.sys, "platform", "darwin"):
+                with patch.object(dashboard_server.Path, "home", return_value=home):
+                    with patch.object(dashboard_server, "PROJECT_ROOT", project_root):
+                        with patch.object(dashboard_server, "_pythonw_entry", return_value=python):
+                            with patch.object(
+                                dashboard_server,
+                                "desk_notification_token_status",
+                                return_value={"configured": True, "source": "keyring"},
+                            ):
+                                with patch.object(dashboard_server, "_run_scheduler_command", side_effect=fake_run):
+                                    result = dashboard_server.run_desk_action(
+                                        "bot_gateway_install_autostart",
+                                        body={"confirm": True},
+                                    )
+
+            plist_path = home / "Library" / "LaunchAgents" / "com.sapientropic.tsense.bot-gateway.plist"
+            plist = plistlib.loads(plist_path.read_bytes())
+
+        self.assertEqual(result["status"], "success")
+        self.assertEqual(plist["Label"], "com.sapientropic.tsense.bot-gateway")
+        self.assertEqual(plist["ProgramArguments"], [str(python), str(bot_script), "run", "--poll-timeout", "8"])
+        self.assertEqual(plist["KeepAlive"], {"Crashed": True})
+        self.assertIn(["launchctl", "load", "-w", str(plist_path)], calls)
+
+    def test_bot_gateway_autostart_writes_linux_systemd_service_with_fixed_argv(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp) / "home"
+            project_root = Path(tmp) / "repo"
+            runtime_dir = Path(tmp) / "runtime"
+            home.mkdir()
+            runtime_dir.mkdir()
+            (project_root / "scripts").mkdir(parents=True)
+            bot_script = project_root / "scripts" / "bot_gateway.py"
+            bot_script.write_text("# bot gateway\n", encoding="utf-8")
+            python = project_root / "python"
+            python.write_text("", encoding="utf-8")
+            calls: list[list[str]] = []
+
+            def fake_run(args):
+                calls.append(args)
+                return subprocess.CompletedProcess(args, 0, stdout="", stderr="")
+
+            with patch.object(dashboard_server.sys, "platform", "linux"):
+                with patch.dict(dashboard_server.os.environ, {"XDG_RUNTIME_DIR": str(runtime_dir)}, clear=False):
+                    with patch.object(
+                        dashboard_server,
+                        "shutil",
+                        SimpleNamespace(which=lambda name: "/usr/bin/systemctl" if name == "systemctl" else None),
+                        create=True,
+                    ):
+                        with patch.object(dashboard_server.Path, "home", return_value=home):
+                            with patch.object(dashboard_server, "PROJECT_ROOT", project_root):
+                                with patch.object(dashboard_server, "_pythonw_entry", return_value=python):
+                                    with patch.object(
+                                        dashboard_server,
+                                        "desk_notification_token_status",
+                                        return_value={"configured": True, "source": "keyring"},
+                                    ):
+                                        with patch.object(dashboard_server, "_run_scheduler_command", side_effect=fake_run):
+                                            result = dashboard_server.run_desk_action(
+                                                "bot_gateway_install_autostart",
+                                                body={"confirm": True},
+                                            )
+
+            service_path = home / ".config" / "systemd" / "user" / "tsense-bot-gateway.service"
+            service_text = service_path.read_text(encoding="utf-8")
+
+        self.assertEqual(result["status"], "success")
+        self.assertIn(str(python), service_text)
+        self.assertIn(str(bot_script), service_text)
+        self.assertIn("Restart=on-failure", service_text)
+        self.assertIn(["systemctl", "--user", "daemon-reload"], calls)
+        self.assertIn(["systemctl", "--user", "enable", "--now", "tsense-bot-gateway.service"], calls)
+
     def test_desk_scheduler_status_uses_manual_preview_on_non_systemd_linux_without_subprocess(self):
         with patch.object(dashboard_server.sys, "platform", "linux"):
             with patch.object(
@@ -1504,6 +1701,92 @@ class DashboardServerGitTests(unittest.TestCase):
         self.assertTrue(result["ok"])
         self.assertEqual(result["chat_id"], "456789")
         self.assertEqual(result["source"], "telegram_session")
+
+    def test_bot_gateway_status_uses_sanitized_state_and_authorized_count(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            conn = monitor_state.connect(root / ".tgcs" / "tgcs.db")
+            try:
+                monitor_state.upsert_delivery_target(
+                    conn,
+                    {
+                        "id": "telegram-bot-default",
+                        "type": "telegram_bot",
+                        "enabled": True,
+                        "config": {"chat_id": "123456"},
+                    },
+                )
+                state_path = root / ".tgcs" / "bot-gateway-state.json"
+                state_path.write_text(
+                    json.dumps(
+                        {
+                            "schema_version": "bot_gateway_state_v1",
+                            "pid": 123,
+                            "started_at": "2026-05-12T12:00:00Z",
+                            "last_poll_at": "2026-05-12T12:00:20Z",
+                            "authorized_chat_count": 1,
+                            "commands_installed": True,
+                            "offset": 9,
+                        }
+                    ),
+                    encoding="utf-8",
+                )
+                with patch.object(dashboard_server, "PROJECT_ROOT", root):
+                    with patch.object(
+                        dashboard_server,
+                        "desk_notification_token_status",
+                        return_value={"configured": True, "source": "keyring"},
+                    ):
+                        status = dashboard_server.desk_bot_gateway_status(
+                            conn,
+                            now=datetime(2026, 5, 12, 12, 1, tzinfo=UTC),
+                        )
+            finally:
+                conn.close()
+
+        status_text = json.dumps(status, ensure_ascii=False)
+        self.assertEqual(status["schema_version"], "desk_bot_gateway_status_v1")
+        self.assertEqual(status["gateway_status"], "running")
+        self.assertTrue(status["token_configured"])
+        self.assertEqual(status["authorized_chat_count"], 1)
+        self.assertEqual(status["supported_commands"], ["/status", "/latest", "/sources", "/profiles", "/scan"])
+        self.assertNotIn("123456", status_text)
+        self.assertNotIn("token", status_text.lower().replace("token_configured", ""))
+
+    def test_bot_identity_endpoint_returns_sanitized_local_result(self):
+        from scripts import bot_gateway
+
+        class FakeHandler:
+            path = "/api/desk/bot-identity/apply"
+            client_address = ("127.0.0.1", 12345)
+            status = None
+            payload = None
+
+            def _read_json_body(self):
+                return {}
+
+            def _json(self, status, payload):
+                self.status = status
+                self.payload = payload
+
+        result = {
+            "schema_version": "bot_identity_apply_result_v1",
+            "name": "T-Sense",
+            "description_updated": True,
+            "short_description_updated": True,
+            "commands_installed": True,
+            "profile_photo_updated": False,
+        }
+        with patch.object(bot_gateway, "apply_bot_identity", return_value=result) as apply_mock:
+            handler = FakeHandler()
+            dashboard_server.DashboardHandler.do_POST(handler)
+
+        apply_mock.assert_called_once_with()
+        self.assertEqual(handler.status, HTTPStatus.OK)
+        self.assertEqual(handler.payload["identity"], result)
+        rendered = json.dumps(handler.payload, ensure_ascii=False)
+        self.assertNotIn("token", rendered.lower())
+        self.assertNotIn("chat", rendered.lower())
 
     def test_notification_token_status_prefers_env_without_echoing_token(self):
         stored = dashboard_server.local_credentials.StoredSecret(

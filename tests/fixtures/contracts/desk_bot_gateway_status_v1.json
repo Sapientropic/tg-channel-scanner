@@ -1,0 +1,82 @@
+{
+  "bot_gateway": {
+    "schema_version": "desk_bot_gateway_status_v1",
+    "token_configured": true,
+    "authorized_chat_count": 1,
+    "gateway_status": "running",
+    "commands_installed": true,
+    "supported_commands": ["/status", "/latest", "/sources", "/profiles", "/scan"],
+    "local_first_note": "Bot replies while the local gateway is running. Background mode starts it again at login.",
+    "start_command": "./tgcs bot run",
+    "background": {
+      "schema_version": "desk_bot_gateway_background_status_v1",
+      "backend": "windows_schtasks",
+      "available": true,
+      "installed": true,
+      "status": "installed",
+      "can_install": true,
+      "can_remove": true,
+      "detail": "Bot Gateway starts at Windows login.",
+      "next_action": "You can turn it off from Settings.",
+      "checked_at": "2026-05-12T12:01:00Z"
+    },
+    "started_at": "2026-05-12T12:00:00Z",
+    "last_poll_at": "2026-05-12T12:00:20Z"
+  },
+  "identity": {
+    "schema_version": "bot_identity_apply_result_v1",
+    "name": "T-Sense",
+    "description_updated": true,
+    "short_description_updated": true,
+    "commands_installed": true,
+    "menu_button_updated": true,
+    "profile_photo_updated": true
+  },
+  "frontend_input": {
+    "bot_gateway": {
+      "schema_version": "desk_bot_gateway_status_v1",
+      "token_configured": true,
+      "authorized_chat_count": 1,
+      "gateway_status": "running",
+      "commands_installed": true,
+      "supported_commands": ["/status", "/latest", "/sources", "/profiles", "/scan", 123],
+      "local_first_note": "Bot replies while the local gateway is running. Background mode starts it again at login.",
+      "start_command": "./tgcs bot run",
+      "background": {
+        "schema_version": "desk_bot_gateway_background_status_v1",
+        "backend": "windows_schtasks",
+        "available": true,
+        "installed": true,
+        "status": "installed",
+        "can_install": true,
+        "can_remove": true,
+        "detail": "Bot Gateway starts at Windows login.",
+        "next_action": "You can turn it off from Settings.",
+        "checked_at": "2026-05-12T12:01:00Z",
+        "token": "BOT_GATEWAY_TOKEN_SHOULD_NOT_SURFACE"
+      },
+      "started_at": "2026-05-12T12:00:00Z",
+      "last_poll_at": "2026-05-12T12:00:20Z",
+      "chat_id": "12345678901",
+      "token": "BOT_GATEWAY_TOKEN_SHOULD_NOT_SURFACE",
+      "path": "C:\\Users\\Administrator\\private\\bot-gateway-state.json"
+    },
+    "identity": {
+      "schema_version": "bot_identity_apply_result_v1",
+      "name": "T-Sense",
+      "description_updated": true,
+      "short_description_updated": true,
+      "commands_installed": true,
+      "menu_button_updated": true,
+      "profile_photo_updated": true,
+      "chat_id": "12345678901",
+      "token": "BOT_GATEWAY_TOKEN_SHOULD_NOT_SURFACE",
+      "path": "C:\\Users\\Administrator\\private\\bot-avatar.jpg"
+    }
+  },
+  "denied_strings": [
+    "BOT_GATEWAY_TOKEN_SHOULD_NOT_SURFACE",
+    "12345678901",
+    "C:\\Users\\Administrator\\private"
+  ]
+}

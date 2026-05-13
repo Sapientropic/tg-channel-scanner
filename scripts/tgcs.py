@@ -1053,11 +1053,17 @@ def build_parser() -> argparse.ArgumentParser:
     bot_run.add_argument("--poll-timeout", type=int, default=0)
     bot_run.add_argument("--install-menu", action="store_true", help="Install the bot command menu before polling; this is now the default.")
     bot_run.add_argument("--skip-menu", action="store_true", help="Skip command menu installation before polling.")
-    bot_run.add_argument("--llm", action="store_true", help="Opt in to optional LLM routing.")
-    bot_run.add_argument("--no-llm", action="store_true", help="Keep free-form routing local-only; this is the default.")
+    bot_run.add_argument("--llm", action="store_true", help="Opt in to optional LLM routing and knowledge answers.")
+    bot_run.add_argument("--no-llm", action="store_true", help="Keep free-form routing and knowledge answers local-only; this is the default.")
     bot_run.set_defaults(func=run_bot)
     bot_menu = bot_subparsers.add_parser("install-menu", help="Install the Telegram Bot command menu.")
     bot_menu.set_defaults(func=run_bot)
+    bot_install_autostart = bot_subparsers.add_parser("install-autostart", help="Start the local Bot Gateway automatically at login.")
+    bot_install_autostart.set_defaults(func=run_bot)
+    bot_remove_autostart = bot_subparsers.add_parser("remove-autostart", help="Remove the local Bot Gateway login task.")
+    bot_remove_autostart.set_defaults(func=run_bot)
+    bot_status = bot_subparsers.add_parser("status", help="Show local Bot Gateway and background status.")
+    bot_status.set_defaults(func=run_bot)
 
     return parser
 

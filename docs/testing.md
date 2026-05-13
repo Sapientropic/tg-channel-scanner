@@ -20,12 +20,12 @@ Use this for schema, sanitizer, privacy, report-contract, and dashboard-boundary
 changes:
 
 ```powershell
-python -m pytest tests/test_contract_fixtures.py tests/test_report_contracts.py tests/test_contract_privacy_fixtures.py tests/test_dashboard_state_contracts.py tests/test_desk_contract_fixtures.py tests/test_desk_source_access_contracts.py tests/test_desk_settings_contracts.py tests/test_agent_semantic_fallback.py tests/test_report.py -q
+python -m pytest tests/test_contract_fixtures.py tests/test_report_contracts.py tests/test_contract_privacy_fixtures.py tests/test_dashboard_state_contracts.py tests/test_desk_contract_fixtures.py tests/test_desk_source_access_contracts.py tests/test_desk_settings_contracts.py tests/test_bot_gateway_contracts.py tests/test_agent_semantic_fallback.py tests/test_report.py -q
 ```
 
 ```powershell
 Push-Location dashboard
-npm test -- --run contract-privacy-fixtures dashboard-state-contract-fixtures desk-contract-fixtures desk-source-access-contract-fixtures desk-settings-contract-fixtures client-contract-fixtures sanitize client
+npm test -- --run contract-privacy-fixtures dashboard-state-contract-fixtures desk-contract-fixtures desk-source-access-contract-fixtures desk-settings-contract-fixtures bot-gateway-contract-fixtures client-contract-fixtures sanitize client
 Pop-Location
 ```
 
@@ -34,7 +34,7 @@ Pop-Location
 Use this for monitor, dashboard server, bot gateway, and decision-state changes:
 
 ```powershell
-python -m pytest tests/test_monitor.py tests/test_monitor_state.py tests/test_dashboard_server.py tests/test_bot_gateway.py tests/test_decision_intelligence.py -q
+python -m pytest tests/test_monitor.py tests/test_monitor_state.py tests/test_dashboard_server.py tests/test_bot_gateway.py tests/test_bot_gateway_contracts.py tests/test_decision_intelligence.py -q
 ```
 
 ## Full Local Gate

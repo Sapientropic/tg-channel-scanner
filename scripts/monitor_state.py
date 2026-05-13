@@ -38,12 +38,24 @@ PROFILE_RUNTIME_SETTING_LIMITS = {
 
 PENDING_STATUS = "pending"
 HANDLED_STATUSES = {"kept", "skipped", "false_positive", "follow_up"}
-REVIEW_ACTIONS = {"keep", "skip", "false_positive", "follow_up"}
+OPEN_OPPORTUNITY_STATUS = "open"
+OPPORTUNITY_STATUSES = {"open", "saved", "applied", "contacted", "dismissed", "duplicate"}
+LIFECYCLE_ACTIONS = {"applied", "contacted", "saved", "dismissed", "duplicate", "reopen"}
+PREFERENCE_ACTIONS = {"keep", "skip", "false_positive", "follow_up"}
+REVIEW_ACTIONS = PREFERENCE_ACTIONS | LIFECYCLE_ACTIONS
 ACTION_TO_STATUS = {
     "keep": "kept",
     "skip": "skipped",
     "false_positive": "false_positive",
     "follow_up": "follow_up",
+}
+LIFECYCLE_ACTION_TO_STATUS = {
+    "applied": "applied",
+    "contacted": "contacted",
+    "saved": "saved",
+    "dismissed": "dismissed",
+    "duplicate": "duplicate",
+    "reopen": OPEN_OPPORTUNITY_STATUS,
 }
 # Review-card item_json is a derived decision surface, not a transcript store.
 # Keep provider/media text fields out even when OCR/STT is enabled upstream.
@@ -259,6 +271,9 @@ def init_db(conn: sqlite3.Connection) -> None:
             source_refs_json TEXT NOT NULL,
             item_json TEXT NOT NULL,
             status TEXT NOT NULL,
+            opportunity_status TEXT NOT NULL DEFAULT 'open',
+            opportunity_updated_at TEXT NOT NULL DEFAULT '',
+            duplicate_of_card_id TEXT,
             first_run_id TEXT NOT NULL,
             last_run_id TEXT NOT NULL,
             report_path TEXT,
@@ -324,6 +339,9 @@ def init_db(conn: sqlite3.Connection) -> None:
         """
     )
     _ensure_column(conn, "profile_patch_suggestions", "base_profile_hash", "TEXT")
+    _ensure_column(conn, "review_cards", "opportunity_status", "TEXT NOT NULL DEFAULT 'open'")
+    _ensure_column(conn, "review_cards", "opportunity_updated_at", "TEXT NOT NULL DEFAULT ''")
+    _ensure_column(conn, "review_cards", "duplicate_of_card_id", "TEXT")
     conn.execute(
         "INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES (?, ?)",
         (STATE_SCHEMA_VERSION, utc_now()),
@@ -334,7 +352,16 @@ def init_db(conn: sqlite3.Connection) -> None:
 def _ensure_column(conn: sqlite3.Connection, table: str, column: str, definition: str) -> None:
     columns = {row["name"] for row in conn.execute(f"PRAGMA table_info({table})").fetchall()}
     if column not in columns:
-        conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
+        try:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
+        except sqlite3.OperationalError as exc:
+            # Dashboard startup fires several local API requests in parallel.
+            # Each request opens its own SQLite connection and runs init_db; if
+            # two connections race through the same ADD COLUMN migration, the
+            # loser may see "duplicate column name" after its table_info check.
+            # Treat that as success rather than surfacing a transient 500.
+            if "duplicate column name" not in str(exc).casefold():
+                raise
 
 
 def upsert_profile(conn: sqlite3.Connection, config: dict[str, Any]) -> None:
@@ -751,10 +778,17 @@ def upsert_review_cards(
         decision_status = str(state.get("status") or "unknown")
         refs = _source_refs(item)
         existing = conn.execute(
-            "SELECT status, first_run_id, created_at, handled_at FROM review_cards WHERE card_id = ?",
+            """
+            SELECT status, opportunity_status, opportunity_updated_at, duplicate_of_card_id,
+                   first_run_id, created_at, handled_at
+            FROM review_cards WHERE card_id = ?
+            """,
             (card_id,),
         ).fetchone()
         status = existing["status"] if existing else PENDING_STATUS
+        opportunity_status = existing["opportunity_status"] if existing else OPEN_OPPORTUNITY_STATUS
+        opportunity_updated_at = existing["opportunity_updated_at"] if existing else ""
+        duplicate_of_card_id = existing["duplicate_of_card_id"] if existing else None
         first_run_id = existing["first_run_id"] if existing else run_id
         created_at = existing["created_at"] if existing else now
         handled_at = existing["handled_at"] if existing else None
@@ -762,10 +796,11 @@ def upsert_review_cards(
             """
             INSERT OR REPLACE INTO review_cards(
                 card_id, profile_id, item_key, title, rating, decision_status,
-                source_refs_json, item_json, status, first_run_id, last_run_id,
+                source_refs_json, item_json, status, opportunity_status,
+                opportunity_updated_at, duplicate_of_card_id, first_run_id, last_run_id,
                 report_path, dashboard_url, created_at, updated_at, handled_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 card_id,
@@ -777,6 +812,9 @@ def upsert_review_cards(
                 stable_json(refs),
                 stable_json(_sanitize_item(item)),
                 status,
+                opportunity_status,
+                opportunity_updated_at,
+                duplicate_of_card_id,
                 first_run_id,
                 run_id,
                 report_path,
@@ -818,6 +856,9 @@ def _card_from_row(row: sqlite3.Row, source_link_lookup: dict[str, dict[str, Any
         "source_refs": source_refs,
         "item": item,
         "status": row["status"],
+        "opportunity_status": row["opportunity_status"] or OPEN_OPPORTUNITY_STATUS,
+        "opportunity_updated_at": row["opportunity_updated_at"] or "",
+        "duplicate_of_card_id": row["duplicate_of_card_id"] or None,
         "first_run_id": row["first_run_id"],
         "last_run_id": row["last_run_id"],
         "report_path": preferred_report_path(str(row["report_path"] or "")),
@@ -942,6 +983,13 @@ def alert_candidates(
             continue
         item = card.get("item") if isinstance(card.get("item"), dict) else {}
         state = item.get("decision_state") if isinstance(item.get("decision_state"), dict) else {}
+        # Opportunity lifecycle is real handling progress. Once a card is saved,
+        # applied, dismissed, or marked duplicate it should not re-enter the
+        # normal alert lane; preference feedback remains a separate learning
+        # signal handled through feedback_events below.
+        opportunity_status = str(card.get("opportunity_status") or OPEN_OPPORTUNITY_STATUS).strip().lower()
+        if opportunity_status != OPEN_OPPORTUNITY_STATUS:
+            continue
         if card.get("status") in HANDLED_STATUSES:
             continue
         if (
@@ -1035,10 +1083,26 @@ def set_card_action(
     note = " ".join(str(note or "").split())
     if note:
         note = require_profile_text_without_private_fragments("Review note", note)
-    if action == "follow_up" and not note:
-        raise MonitorStateError("Follow-up note is required.")
     card = get_review_card(conn, card_id)
     now = utc_now()
+    if action in LIFECYCLE_ACTIONS:
+        opportunity_status = LIFECYCLE_ACTION_TO_STATUS[action]
+        handled_at = None if opportunity_status == OPEN_OPPORTUNITY_STATUS else now
+        # Lifecycle actions are local processing state, not preference training.
+        # Do not write feedback_events here; exports must only contain explicit
+        # matching-learning choices such as keep/skip/false_positive/follow_up.
+        conn.execute(
+            """
+            UPDATE review_cards
+            SET opportunity_status = ?, opportunity_updated_at = ?, handled_at = ?, updated_at = ?
+            WHERE card_id = ?
+            """,
+            (opportunity_status, now, handled_at, now, card_id),
+        )
+        conn.commit()
+        return get_review_card(conn, card_id)
+    if action == "follow_up" and not note:
+        raise MonitorStateError("Follow-up note is required.")
     status = ACTION_TO_STATUS[action]
     conn.execute(
         "UPDATE review_cards SET status = ?, handled_at = ?, updated_at = ? WHERE card_id = ?",

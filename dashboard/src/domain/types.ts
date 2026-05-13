@@ -167,6 +167,42 @@ export type DeskNotificationTokenStatus = {
   detail: string;
 };
 
+export type DeskBotGatewayStatus = {
+  schema_version: "desk_bot_gateway_status_v1";
+  token_configured: boolean;
+  authorized_chat_count: number;
+  gateway_status: "running" | "stale" | "not_detected" | string;
+  commands_installed: boolean;
+  supported_commands: string[];
+  local_first_note: string;
+  start_command: string;
+  background: DeskBotGatewayBackgroundStatus;
+  started_at?: string;
+  last_poll_at?: string;
+};
+
+export type DeskBotGatewayBackgroundStatus = {
+  schema_version: "desk_bot_gateway_background_status_v1";
+  backend: string;
+  available: boolean;
+  installed: boolean;
+  status: "installed" | "not_installed" | "manual" | "unavailable" | "unknown" | string;
+  can_install: boolean;
+  can_remove: boolean;
+  detail: string;
+  next_action: string;
+  checked_at?: string;
+};
+
+export type DeskBotIdentityResult = {
+  schema_version: "bot_identity_apply_result_v1";
+  name: string;
+  description_updated: boolean;
+  short_description_updated: boolean;
+  commands_installed: boolean;
+  profile_photo_updated: boolean;
+};
+
 export type DeskAiProviderStatus = {
   provider: string;
   label: string;

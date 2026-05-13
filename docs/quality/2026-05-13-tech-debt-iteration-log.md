@@ -2109,3 +2109,41 @@ Residual Risk:
 Next:
 
 - Commit this checkpoint, then continue until the 14:00 stop condition.
+
+## Slice 53: Bot Gateway WIP Checkpoint Isolation
+
+Status: completed.
+
+Actions:
+
+- Re-verified clean `HEAD` in a detached worktree before touching the WIP
+  checkpoint.
+- Built a separate clean-worktree candidate patch for Bot Gateway runtime,
+  monitor lifecycle state, dashboard server Bot Gateway APIs, CLI entrypoints,
+  and typed dashboard API/sanitizer contracts.
+- Excluded non-Bot WIP from the candidate patch, including source assistant
+  planning changes, dashboard port-selection changes, Git/update UI, and broader
+  Settings UI integration.
+- Added `desk_bot_gateway_status_v1` fixture coverage shared by Python backend
+  tests and dashboard TypeScript sanitizer tests.
+
+Verification:
+
+- Clean `HEAD` detached worktree gate passed: `ruff`, full `pytest` (`435
+  passed, 2 skipped, 180 subtests passed`), dashboard full Vitest (`131`
+  tests), and dashboard build.
+- Candidate clean-worktree Bot Gateway gate passed: `ruff` on touched Python
+  files; `pytest tests/test_bot_gateway.py tests/test_bot_gateway_contracts.py
+  tests/test_dashboard_server.py tests/test_monitor_state.py -q` passed `247`
+  tests and `92` subtests; dashboard `bot-gateway-contract-fixtures client`
+  Vitest passed `27` tests; dashboard build passed.
+- Staged snapshot gate passed with the same Bot Gateway command set, proving the
+  checkpoint commit independently of unrelated worktree WIP.
+- `git diff --cached --check` passed.
+
+Residual Risk:
+
+- Live Telegram API calls, real scheduler installation, keyring access, and LLM
+  knowledge-answer behavior remain operator checks.
+- The frontend Settings panel integration for Bot Gateway exists in the dirty
+  worktree but is intentionally not part of this checkpoint.

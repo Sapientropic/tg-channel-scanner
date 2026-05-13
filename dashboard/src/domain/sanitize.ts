@@ -5,6 +5,8 @@ export {
   sanitizeDeskActions,
   sanitizeDeskActionResult,
   sanitizeDeskAiSettingsStatus,
+  sanitizeDeskBotIdentityResult,
+  sanitizeDeskBotGatewayStatus,
   sanitizeDeskNotificationTokenStatus,
   sanitizeDeskSchedulerStatus,
   sanitizeDeskSourcesResult,

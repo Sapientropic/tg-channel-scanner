@@ -3,6 +3,8 @@ import type {
   DeskActionResult,
   DeskAiProviderStatus,
   DeskAiSettingsStatus,
+  DeskBotIdentityResult,
+  DeskBotGatewayStatus,
   DeskNotificationTokenStatus,
   DeskSchedulerStatus,
   DeskSource,
@@ -389,6 +391,86 @@ export function sanitizeDeskNotificationTokenStatus(value: unknown): DeskNotific
     sanitized.local_store_label = localStoreLabel;
   }
   return sanitized;
+}
+
+export function sanitizeDeskBotGatewayStatus(value: unknown): DeskBotGatewayStatus | null {
+  if (!isRecord(value) || value.schema_version !== "desk_bot_gateway_status_v1") {
+    return null;
+  }
+  const gatewayStatus = optionalString(value.gateway_status);
+  const localFirstNote = optionalString(value.local_first_note);
+  const startCommand = optionalString(value.start_command);
+  const background = sanitizeDeskBotGatewayBackgroundStatus(value.background);
+  if (!gatewayStatus || !localFirstNote || !startCommand || !background) {
+    return null;
+  }
+  const sanitized: DeskBotGatewayStatus = {
+    schema_version: "desk_bot_gateway_status_v1",
+    token_configured: value.token_configured === true,
+    authorized_chat_count: nonNegativeIntegerOrDefault(value.authorized_chat_count, 0),
+    gateway_status: gatewayStatus,
+    commands_installed: value.commands_installed === true,
+    supported_commands: stringArray(value.supported_commands),
+    local_first_note: localFirstNote,
+    start_command: startCommand,
+    background,
+  };
+  const startedAt = optionalString(value.started_at);
+  const lastPollAt = optionalString(value.last_poll_at);
+  if (startedAt) {
+    sanitized.started_at = startedAt;
+  }
+  if (lastPollAt) {
+    sanitized.last_poll_at = lastPollAt;
+  }
+  return sanitized;
+}
+
+export function sanitizeDeskBotGatewayBackgroundStatus(value: unknown): DeskBotGatewayStatus["background"] | null {
+  if (!isRecord(value) || value.schema_version !== "desk_bot_gateway_background_status_v1") {
+    return null;
+  }
+  const backend = optionalString(value.backend);
+  const status = optionalString(value.status);
+  const detail = optionalString(value.detail);
+  const nextAction = optionalString(value.next_action);
+  if (!backend || !status || !detail || !nextAction) {
+    return null;
+  }
+  const sanitized: DeskBotGatewayStatus["background"] = {
+    schema_version: "desk_bot_gateway_background_status_v1",
+    backend,
+    available: value.available === true,
+    installed: value.installed === true,
+    status,
+    can_install: value.can_install === true,
+    can_remove: value.can_remove === true,
+    detail,
+    next_action: nextAction,
+  };
+  const checkedAt = optionalString(value.checked_at);
+  if (checkedAt) {
+    sanitized.checked_at = checkedAt;
+  }
+  return sanitized;
+}
+
+export function sanitizeDeskBotIdentityResult(value: unknown): DeskBotIdentityResult | null {
+  if (!isRecord(value) || value.schema_version !== "bot_identity_apply_result_v1") {
+    return null;
+  }
+  const name = optionalString(value.name);
+  if (!name) {
+    return null;
+  }
+  return {
+    schema_version: "bot_identity_apply_result_v1",
+    name,
+    description_updated: value.description_updated === true,
+    short_description_updated: value.short_description_updated === true,
+    commands_installed: value.commands_installed === true,
+    profile_photo_updated: value.profile_photo_updated === true,
+  };
 }
 
 export function sanitizeDeskAiSettingsStatus(value: unknown): DeskAiSettingsStatus | null {

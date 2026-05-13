@@ -11,6 +11,19 @@ from scripts import monitor_state
 
 
 class MonitorStateTests(unittest.TestCase):
+    def test_ensure_column_treats_duplicate_column_race_as_success(self):
+        class EmptyCursor:
+            def fetchall(self):
+                return []
+
+        class RacingConnection:
+            def execute(self, sql):
+                if str(sql).startswith("PRAGMA table_info"):
+                    return EmptyCursor()
+                raise sqlite3.OperationalError("duplicate column name: opportunity_status")
+
+        monitor_state._ensure_column(RacingConnection(), "review_cards", "opportunity_status", "TEXT")
+
     def test_init_db_is_idempotent(self):
         conn = sqlite3.connect(":memory:")
         conn.row_factory = sqlite3.Row
@@ -52,6 +65,68 @@ class MonitorStateTests(unittest.TestCase):
         self.assertEqual(cards[0]["status"], "kept")
         self.assertEqual(cards[0]["last_run_id"], "run-2")
         self.assertEqual(monitor_state.alert_candidates(cards), [])
+
+    def test_lifecycle_action_suppresses_alerts_without_feedback_export(self):
+        conn = sqlite3.connect(":memory:")
+        conn.row_factory = sqlite3.Row
+        monitor_state.init_db(conn)
+        cards = monitor_state.upsert_review_cards(
+            conn,
+            profile_id="jobs-fast",
+            run_id="run-1",
+            items=[
+                {
+                    "topic": "Frontend role",
+                    "rating": "high",
+                    "decision_state": {"status": "new", "semantic_cluster": "role-1"},
+                    "monitor_freshness": {"freshest_source_at": "2026-05-08T08:30:00Z"},
+                    "source_message_refs": [{"channel": "jobs", "id": 1}],
+                }
+            ],
+        )
+
+        updated = monitor_state.set_card_action(conn, card_id=cards[0]["card_id"], action="applied")
+
+        self.assertEqual(updated["opportunity_status"], "applied")
+        self.assertIsNotNone(updated["opportunity_updated_at"])
+        self.assertEqual(monitor_state.export_feedback_entries(conn), [])
+        self.assertEqual(monitor_state.feedback_summary(conn)["exportable_count"], 0)
+        self.assertEqual(
+            monitor_state.alert_candidates(
+                [updated],
+                alert_rule={"max_age_minutes": 60},
+                now=datetime(2026, 5, 8, 9, 0, tzinfo=UTC),
+            ),
+            [],
+        )
+
+    def test_reopen_lifecycle_restores_actionable_open_status(self):
+        conn = sqlite3.connect(":memory:")
+        conn.row_factory = sqlite3.Row
+        monitor_state.init_db(conn)
+        cards = monitor_state.upsert_review_cards(
+            conn,
+            profile_id="jobs-fast",
+            run_id="run-1",
+            items=[
+                {
+                    "topic": "Frontend role",
+                    "rating": "high",
+                    "decision_state": {"status": "new", "semantic_cluster": "role-1"},
+                    "monitor_freshness": {"freshest_source_at": "2026-05-08T08:30:00Z"},
+                    "source_message_refs": [{"channel": "jobs", "id": 1}],
+                }
+            ],
+        )
+
+        monitor_state.set_card_action(conn, card_id=cards[0]["card_id"], action="dismissed")
+        reopened = monitor_state.set_card_action(conn, card_id=cards[0]["card_id"], action="reopen")
+
+        self.assertEqual(reopened["opportunity_status"], "open")
+        self.assertEqual(
+            [card["card_id"] for card in monitor_state.alert_candidates([reopened])],
+            [cards[0]["card_id"]],
+        )
 
     def test_review_card_title_uses_role_when_company_is_placeholder(self):
         conn = sqlite3.connect(":memory:")
@@ -2300,12 +2375,7 @@ class MonitorStateTests(unittest.TestCase):
             cases = [
                 (
                     monitor_state.create_profile_patch_suggestion,
-                    {
-                        "profile_id": "market-news",
-                        "card_id": None,
-                        "note": "token=123456:ABCDEF_secret",
-                        "profile_path": profile_path,
-                    },
+                    {"profile_id": "market-news", "card_id": None, "note": "token=123456:ABCDEF_secret", "profile_path": profile_path},
                 ),
                 (
                     monitor_state.create_profile_preferences_patch_suggestion,

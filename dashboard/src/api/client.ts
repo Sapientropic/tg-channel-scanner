@@ -1,6 +1,8 @@
 import {
   sanitizeDashboardState,
   sanitizeDeskAiSettingsStatus,
+  sanitizeDeskBotIdentityResult,
+  sanitizeDeskBotGatewayStatus,
   sanitizeDeskActions,
   sanitizeDeskActionResult,
   sanitizeDeskNotificationTokenStatus,
@@ -21,6 +23,8 @@ import type {
   DeskAction,
   DeskActionResult,
   DeskAiSettingsStatus,
+  DeskBotIdentityResult,
+  DeskBotGatewayStatus,
   DeskNotificationTokenStatus,
   DeskSchedulerStatus,
   DeskSourcesResult,
@@ -209,6 +213,25 @@ export async function loadDeskNotificationTokenStatus(signal?: AbortSignal): Pro
   const response = await fetch("/api/desk/notification-token/status", { signal });
   const payload = await readJson(response);
   return readDeskNotificationTokenStatus(payload.token, "Invalid notification token response");
+}
+
+export async function loadDeskBotGatewayStatus(signal?: AbortSignal): Promise<DeskBotGatewayStatus> {
+  const response = await fetch("/api/desk/bot-gateway-status", { signal });
+  const payload = await readJson(response);
+  const result = sanitizeDeskBotGatewayStatus(payload.bot_gateway);
+  if (!result) {
+    throw new Error("Invalid Bot Gateway status response");
+  }
+  return result;
+}
+
+export async function applyDeskBotIdentity(): Promise<DeskBotIdentityResult> {
+  const payload = await postJson("/api/desk/bot-identity/apply", {});
+  const result = sanitizeDeskBotIdentityResult(payload.identity);
+  if (!result) {
+    throw new Error("Invalid bot identity response");
+  }
+  return result;
 }
 
 export async function loadDeskAiSettingsStatus(signal?: AbortSignal): Promise<DeskAiSettingsStatus> {
