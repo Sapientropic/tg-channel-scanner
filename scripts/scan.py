@@ -1,776 +1,175 @@
-"""Cross-platform Telegram channel scanner with optional media OCR.
+"""CLI facade for the Telegram scanner.
 
-Uses Telethon (MTProto user client) to read channel messages directly.
-When OCR is explicitly enabled, media messages (photos, videos, voice)
-are downloaded to temp files, OCR'd, and cleaned up in one pass.
-
-Reads config and session from ~/.config/tgcli/ for backward compatibility.
+The scanner is split into source loading, metadata, media projection, config,
+and Telethon runtime modules.  This file keeps the historical `scripts.scan`
+API stable for tests and source-checkout launchers.
 """
 
 from __future__ import annotations
 
 import argparse
 import asyncio
-import getpass
-import json
 import os
 import sys
-import tomllib
-from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Callable, Iterable
 
 from telethon import TelegramClient
-from telethon.errors import SessionPasswordNeededError
 from telethon.sessions import StringSession
-from telethon.tl.types import MessageMediaPhoto
 
 try:
     import openai
 except ImportError:
     openai = None  # type: ignore[assignment]
 
-# Ensure project root is importable for scripts.media_ocr
-_PROJECT_ROOT = str(Path(__file__).resolve().parent.parent)
-if _PROJECT_ROOT not in sys.path:
-    sys.path.insert(0, _PROJECT_ROOT)
+try:
+    from scripts import agent_cli
+    from scripts import scan_config as _scan_config
+    from scripts import scan_media_projection as _scan_media_projection
+    from scripts import scan_metadata as _scan_metadata
+    from scripts import scan_sources as _scan_sources
+    from scripts import telegram_scan as _telegram_scan
+except ModuleNotFoundError:
+    _PROJECT_ROOT = Path(__file__).resolve().parent.parent
+    if str(_PROJECT_ROOT) not in sys.path:
+        sys.path.insert(0, str(_PROJECT_ROOT))
+    from scripts import agent_cli
+    from scripts import scan_config as _scan_config
+    from scripts import scan_media_projection as _scan_media_projection
+    from scripts import scan_metadata as _scan_metadata
+    from scripts import scan_sources as _scan_sources
+    from scripts import telegram_scan as _telegram_scan
 
-from scripts import agent_cli, local_credentials, source_registry
-from scripts.media_ocr import OcrConfig, process_message
+DEFAULT_HOURS = _scan_config.DEFAULT_HOURS
+DEFAULT_MAX_LIMIT = _scan_config.DEFAULT_MAX_LIMIT
+DEFAULT_DELAY_SECONDS = _scan_config.DEFAULT_DELAY_SECONDS
+DEFAULT_MAX_FLOOD_WAIT_SECONDS = _scan_config.DEFAULT_MAX_FLOOD_WAIT_SECONDS
+DEFAULT_XAI_BASE_URL = _scan_config.DEFAULT_XAI_BASE_URL
+DEFAULT_OPENAI_BASE_URL = _scan_config.DEFAULT_OPENAI_BASE_URL
+DEFAULT_XAI_OCR_MODEL = _scan_config.DEFAULT_XAI_OCR_MODEL
+DEFAULT_OPENAI_OCR_MODEL = _scan_config.DEFAULT_OPENAI_OCR_MODEL
+DEFAULT_STT_MODEL = _scan_config.DEFAULT_STT_MODEL
+DEFAULT_VIDEO_FRAMES = _scan_config.DEFAULT_VIDEO_FRAMES
+LOCAL_OCR_SECRET_TARGETS = _scan_config.LOCAL_OCR_SECRET_TARGETS
+LOGIN_QUIT_COMMANDS = _scan_config.LOGIN_QUIT_COMMANDS
+LOGIN_RESEND_COMMANDS = _scan_config.LOGIN_RESEND_COMMANDS
+CONFIG_DIR = _scan_config.CONFIG_DIR
+CONFIG_PATH = _scan_config.CONFIG_PATH
+SESSION_PATH = _scan_config.SESSION_PATH
 
-DEFAULT_HOURS = 24
-DEFAULT_MAX_LIMIT = 5000
-DEFAULT_DELAY_SECONDS = 1.0
-DEFAULT_MAX_FLOOD_WAIT_SECONDS = 300
+ScanError = _scan_config.ScanError
+ScannerConfig = _scan_config.ScannerConfig
+EnvAwareArgumentParser = _scan_config.EnvAwareArgumentParser
+positive_int = _scan_config.positive_int
+non_negative_float = _scan_config.non_negative_float
+positive_int_with_label = _scan_config.positive_int_with_label
+non_negative_float_with_label = _scan_config.non_negative_float_with_label
+env_default = _scan_config.env_default
+parse_since = _scan_config.parse_since
+cutoff_from_args = _scan_config.cutoff_from_args
+ai_secret = _scan_config.ai_secret
 
-DEFAULT_XAI_BASE_URL = "https://api.x.ai/v1"
-DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1"
-DEFAULT_XAI_OCR_MODEL = "grok-4.1-fast"
-DEFAULT_OPENAI_OCR_MODEL = "gpt-4o-mini"
-DEFAULT_STT_MODEL = "whisper-1"
-DEFAULT_VIDEO_FRAMES = 3
-LOCAL_OCR_SECRET_TARGETS = {
-    "OPENAI_API_KEY": "tgcs.signal-desk.openai-api-key",
-    "XAI_API_KEY": "tgcs.signal-desk.xai-api-key",
-}
-LOGIN_QUIT_COMMANDS = {"q", "quit", "exit", "cancel"}
-LOGIN_RESEND_COMMANDS = {"r", "resend"}
+ChannelResult = _scan_sources.ChannelResult
+ScanSource = _scan_sources.ScanSource
+load_channel_list = _scan_sources.load_channel_list
+source_from_channel_list_entry = _scan_sources.source_from_channel_list_entry
+source_from_registry_entry = _scan_sources.source_from_registry_entry
+load_scan_sources = _scan_sources.load_scan_sources
+scan_hours = _scan_sources.scan_hours
+parse_message_date = _scan_sources.parse_message_date
+filter_messages = _scan_sources.filter_messages
+_filter_raw_messages = _scan_sources._filter_raw_messages
+write_jsonl = _scan_sources.write_jsonl
+_source_health_base = _scan_sources._source_health_base
+source_access_failure_reason = _scan_sources.source_access_failure_reason
+_health_from_result = _scan_sources._health_from_result
+_health_from_failure = _scan_sources._health_from_failure
 
-CONFIG_DIR = Path(
-    os.environ.get("TG_SCANNER_CONFIG_DIR")
-    or os.environ.get("TGCLI_CONFIG_DIR")
-    or os.path.join(
-        os.environ.get("USERPROFILE", os.path.expanduser("~")),
-        ".config",
-        "tgcli",
-    )
-)
-CONFIG_PATH = CONFIG_DIR / "config.toml"
-SESSION_PATH = CONFIG_DIR / "session"
+meta_path_for_output = _scan_metadata.meta_path_for_output
+build_scan_metadata = _scan_metadata.build_scan_metadata
+write_scan_metadata = _scan_metadata.write_scan_metadata
 
+_resolve_ocr_settings = _scan_media_projection._resolve_ocr_settings
+_extract_video_meta = _scan_media_projection._extract_video_meta
+message_to_dict = _scan_media_projection.message_to_dict
 
-class ScanError(Exception):
-    pass
+_load_config_impl = _scan_config.load_config
+_make_ocr_config_impl = _scan_media_projection._make_ocr_config
+_interactive_login_impl = _telegram_scan.interactive_login
+_resolve_entity_impl = _telegram_scan.resolve_entity
+_read_channel_impl = _telegram_scan.read_channel
+_run_scan_impl = _telegram_scan._run_scan
 
-
-@dataclass
-class ChannelResult:
-    channel: str
-    messages: list[dict]
-    raw_count: int
-    skipped_missing_date: int
-    limit: int
-    incomplete: bool
-    ocr_count: int = 0
-    stderr: str = ""
-
-
-@dataclass
-class ScanSource:
-    channel: str
-    source_id: str | None = None
-    username: str | None = None
-    channel_id: int | None = None
-    label: str | None = None
-    topics: list[str] | None = None
-    priority: str | None = None
-    expected_language: str | None = None
-    scan_window_hours: int | None = None
-
-
-@dataclass
-class ScannerConfig:
-    api_id: int
-    api_hash: str
-    session_string: str
-
-
-# ---------------------------------------------------------------------------
-# CLI helpers
-# ---------------------------------------------------------------------------
-
-class EnvAwareArgumentParser(argparse.ArgumentParser):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self._env_default_validators: list[tuple[str, Callable[[str], object]]] = []
-
-    def register_env_default(self, name: str, converter) -> None:
-        self._env_default_validators.append((name, converter))
-
-    def parse_known_args(self, args=None, namespace=None):
-        # Validate environment-backed defaults before argparse handles --help.
-        # Otherwise a bad SCAN_* value can either hide behind help output or
-        # fail later with a traceback, depending on argparse internals.
-        for name, converter in self._env_default_validators:
-            value = os.environ.get(name)
-            if value is None:
-                continue
-            try:
-                converter(value)
-            except argparse.ArgumentTypeError as exc:
-                self.error(str(exc))
-        return super().parse_known_args(args, namespace)
-
-
-def positive_int(value: str) -> int:
-    try:
-        parsed = int(value)
-    except ValueError as exc:
-        raise argparse.ArgumentTypeError("must be an integer") from exc
-    if parsed <= 0:
-        raise argparse.ArgumentTypeError("must be greater than zero")
-    return parsed
-
-
-def non_negative_float(value: str) -> float:
-    try:
-        parsed = float(value)
-    except ValueError as exc:
-        raise argparse.ArgumentTypeError("must be a number") from exc
-    if parsed < 0:
-        raise argparse.ArgumentTypeError("must be zero or greater")
-    return parsed
-
-
-def positive_int_with_label(label: str):
-    def convert(value: str) -> int:
-        try:
-            return positive_int(value)
-        except argparse.ArgumentTypeError as exc:
-            raise argparse.ArgumentTypeError(f"{label} {exc}") from exc
-
-    return convert
-
-
-def non_negative_float_with_label(label: str):
-    def convert(value: str) -> float:
-        try:
-            return non_negative_float(value)
-        except argparse.ArgumentTypeError as exc:
-            raise argparse.ArgumentTypeError(f"{label} {exc}") from exc
-
-    return convert
-
-
-def env_default(name: str, fallback: int | float | str) -> str:
-    return os.environ.get(name, str(fallback))
-
-
-def parse_since(value: str) -> datetime:
-    text = value.strip()
-    if not text:
-        raise argparse.ArgumentTypeError("--since cannot be empty")
-    if text.endswith("Z"):
-        text = f"{text[:-1]}+00:00"
-    try:
-        parsed = datetime.fromisoformat(text)
-    except ValueError as exc:
-        raise argparse.ArgumentTypeError(
-            "--since must be ISO-8601, e.g. 2026-05-06T07:30:00Z"
-        ) from exc
-    if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=UTC)
-    return parsed.astimezone(UTC)
-
-
-def cutoff_from_args(hours: int, since: datetime | None) -> datetime:
-    if since is not None:
-        return since
-    return datetime.now(UTC) - timedelta(hours=hours)
-
-
-# ---------------------------------------------------------------------------
-# Pure helpers (sync, no Telethon dependency)
-# ---------------------------------------------------------------------------
-
-def load_channel_list(path: Path) -> list[str]:
-    channels: list[str] = []
-    with path.open(encoding="utf-8") as handle:
-        for raw in handle:
-            line = raw.strip()
-            if not line or line.startswith("#"):
-                continue
-            channels.append(line)
-    return channels
-
-
-def source_from_channel_list_entry(channel: str) -> ScanSource:
-    original = str(channel or "").strip()
-    normalized = source_registry.normalize_channel_name(original)
-    username = normalized if not normalized.lstrip("-").isdigit() else None
-    channel_id = int(normalized) if normalized.lstrip("-").isdigit() else None
-    return ScanSource(
-        channel=original,
-        source_id=source_registry.source_id_for(username, channel_id),
-        username=username,
-        channel_id=channel_id,
-        label=original,
-        topics=[],
-        priority="normal",
-        expected_language="",
-        scan_window_hours=None,
-    )
-
-
-def source_from_registry_entry(entry: dict) -> ScanSource:
-    channel = source_registry.channel_value(entry)
-    return ScanSource(
-        channel=channel,
-        source_id=entry.get("source_id"),
-        username=entry.get("username"),
-        channel_id=entry.get("channel_id"),
-        label=entry.get("label") or channel,
-        topics=list(entry.get("topics") or []),
-        priority=entry.get("priority"),
-        expected_language=entry.get("expected_language"),
-        scan_window_hours=entry.get("scan_window_hours"),
-    )
-
-
-def load_scan_sources(args) -> tuple[list[ScanSource], dict | None]:
-    if args.source_registry:
-        payload = source_registry.load_registry(args.source_registry)
-        issues = source_registry.validate_registry(payload)
-        if issues:
-            raise ScanError(source_registry.validation_message(issues))
-        return [
-            source_from_registry_entry(entry)
-            for entry in source_registry.enabled_sources(payload)
-            if source_registry.channel_value(entry)
-        ], payload
-    if not args.channel_list:
-        raise ScanError("Missing source input. Pass a channel list or --source-registry.")
-    channels = load_channel_list(args.channel_list)
-    return [source_from_channel_list_entry(channel) for channel in channels], None
-
-
-def scan_hours(args) -> int:
-    return args.hours_flag or args.hours or DEFAULT_HOURS
-
-
-def parse_message_date(value: object) -> datetime | None:
-    if not isinstance(value, str) or not value.strip():
-        return None
-    text = value.strip()
-    if text.endswith("Z"):
-        text = f"{text[:-1]}+00:00"
-    try:
-        parsed = datetime.fromisoformat(text)
-    except ValueError:
-        return None
-    if parsed.tzinfo is None:
-        return parsed.replace(tzinfo=UTC)
-    return parsed.astimezone(UTC)
-
-
-def filter_messages(
-    messages: Iterable[dict], cutoff: datetime
-) -> tuple[list[dict], int]:
-    kept: list[dict] = []
-    skipped_missing_date = 0
-    cutoff_utc = cutoff.astimezone(UTC)
-    for message in messages:
-        message_date = parse_message_date(message.get("date"))
-        if message_date is None:
-            skipped_missing_date += 1
-            continue
-        if message_date >= cutoff_utc:
-            kept.append(message)
-    return kept, skipped_missing_date
-
-
-def _filter_raw_messages(
-    messages: list, cutoff: datetime
-) -> tuple[list, int]:
-    """Filter Telethon Message objects by cutoff."""
-    cutoff_utc = cutoff.astimezone(UTC)
-    kept: list = []
-    skipped = 0
-    for m in messages:
-        if m.date is None:
-            skipped += 1
-            continue
-        d = m.date if m.date.tzinfo else m.date.replace(tzinfo=UTC)
-        if d.astimezone(UTC) >= cutoff_utc:
-            kept.append(m)
-    return kept, skipped
-
-
-def write_jsonl(path: Path, messages: Iterable[dict]) -> int:
-    count = 0
-    with path.open("a", encoding="utf-8", newline="\n") as handle:
-        for message in messages:
-            handle.write(json.dumps(message, ensure_ascii=False))
-            handle.write("\n")
-            count += 1
-    return count
-
-
-def meta_path_for_output(output_path: Path) -> Path:
-    return output_path.with_suffix(".meta.json")
-
-
-def build_scan_metadata(
-    *,
-    started_at: datetime,
-    completed_at: datetime,
-    cutoff: datetime,
-    channel_list_path: Path,
-    channels: list[str],
-    output_path: Path,
-    errors_path: Path,
-    total_written: int,
-    failed_channels: list[str],
-    incomplete_channels: list[str],
-    total_ocr: int,
-    ocr_enabled: bool,
-    hours: int,
-    source_health: list[dict] | None = None,
-    source_registry_path: Path | None = None,
-) -> dict:
-    payload = {
-        "scan_date": started_at.astimezone(UTC).date().isoformat(),
-        "scan_started_at": started_at.astimezone(UTC).isoformat(),
-        "scan_completed_at": completed_at.astimezone(UTC).isoformat(),
-        "scan_window": f"Last {hours} hours",
-        "cutoff": cutoff.astimezone(UTC).isoformat(),
-        "channel_list_path": str(channel_list_path),
-        "channels": channels,
-        "channel_count": len(channels),
-        "total_messages_collected": total_written,
-        "failed_channels": failed_channels,
-        "failure_count": len(failed_channels),
-        "incomplete_channels": incomplete_channels,
-        "incomplete_count": len(incomplete_channels),
-        "ocr_enabled": ocr_enabled,
-        "ocr_count": total_ocr,
-        "output_path": str(output_path),
-        "errors_path": str(errors_path),
-    }
-    if source_registry_path:
-        payload["source_registry_path"] = str(source_registry_path)
-    if source_health is not None:
-        payload["source_health"] = source_health
-    return payload
-
-
-def write_scan_metadata(path: Path, metadata: dict) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        json.dumps(metadata, ensure_ascii=False, indent=2) + "\n",
-        encoding="utf-8",
-    )
-
-
-# ---------------------------------------------------------------------------
-# Config & auth
-# ---------------------------------------------------------------------------
 
 def load_config() -> ScannerConfig:
-    api_id: int | None = None
-    api_hash: str | None = None
-
-    if CONFIG_PATH.exists():
-        with CONFIG_PATH.open("rb") as f:
-            cfg = tomllib.load(f)
-        api_id = cfg.get("api_id")
-        api_hash = cfg.get("api_hash")
-
-    env_id = os.environ.get("TELEGRAM_API_ID")
-    if env_id and not api_id:
-        api_id = int(env_id)
-    env_hash = os.environ.get("TELEGRAM_API_HASH")
-    if env_hash and not api_hash:
-        api_hash = env_hash
-
-    if not api_id or not api_hash:
-        raise ScanError(
-            f"Missing API credentials. Edit {CONFIG_PATH} "
-            "or set TELEGRAM_API_ID / TELEGRAM_API_HASH."
-        )
-
-    session_string = ""
-    if SESSION_PATH.exists():
-        session_string = SESSION_PATH.read_text(encoding="utf-8").strip()
-
-    return ScannerConfig(
-        api_id=api_id, api_hash=api_hash, session_string=session_string
-    )
+    _sync_modules()
+    return _load_config_impl()
 
 
-def _resolve_ocr_settings(args) -> tuple[str, str, str, str]:
-    xai_key = ai_secret("XAI_API_KEY")
-    openai_key = ai_secret("OPENAI_API_KEY")
-    provider = args.ocr_provider
-    if provider is None:
-        if xai_key:
-            provider = "xai"
-        elif openai_key:
-            provider = "openai"
-        else:
-            provider = "xai"
-
-    if provider == "xai":
-        if not xai_key:
-            raise ScanError("OCR provider xai requires XAI_API_KEY.")
-        base_url = args.ocr_base_url or DEFAULT_XAI_BASE_URL
-        model = args.ocr_model or DEFAULT_XAI_OCR_MODEL
-        return provider, xai_key, base_url, model
-
-    if provider == "openai":
-        if not openai_key:
-            raise ScanError("OCR provider openai requires OPENAI_API_KEY.")
-        base_url = args.ocr_base_url or DEFAULT_OPENAI_BASE_URL
-        model = args.ocr_model or DEFAULT_OPENAI_OCR_MODEL
-        return provider, openai_key, base_url, model
-
-    api_key = xai_key or openai_key
-    if not api_key:
-        raise ScanError("OCR provider custom requires XAI_API_KEY or OPENAI_API_KEY.")
-    if not args.ocr_base_url:
-        raise ScanError("OCR provider custom requires --ocr-base-url.")
-    model = args.ocr_model or DEFAULT_OPENAI_OCR_MODEL
-    return provider, api_key, args.ocr_base_url, model
-
-
-def ai_secret(env_name: str) -> str | None:
-    value = os.environ.get(env_name, "").strip()
-    if value:
-        return value
-    target = LOCAL_OCR_SECRET_TARGETS.get(env_name)
-    if not target:
-        return None
-    try:
-        stored = local_credentials.read_secret(target)
-    except local_credentials.CredentialStoreError:
-        return None
-    return stored.secret.strip() if stored and stored.secret.strip() else None
-
-
-def _make_ocr_config(args) -> OcrConfig | None:
-    """Create OcrConfig only when OCR is explicitly enabled."""
-    if args.no_ocr or not args.ocr:
-        return None
-    if openai is None:
-        raise ScanError("OCR requires optional dependency: pip install -r requirements-llm.txt")
-
-    provider, api_key, base_url, model = _resolve_ocr_settings(args)
-    stt_base_url = args.ocr_stt_base_url or base_url
-    args.ocr_effective_provider = provider
-    args.ocr_effective_base_url = base_url
-
-    vision_client = openai.OpenAI(base_url=base_url, api_key=api_key)
-    stt_client = openai.OpenAI(
-        base_url=stt_base_url, api_key=api_key,
-    )
-    return OcrConfig(
-        client=vision_client,
-        model=model,
-        stt_client=stt_client,
-        stt_model=args.ocr_stt_model,
-        language=args.ocr_language,
-        full_video=args.ocr_full_video,
-        video_frames=args.ocr_video_frames,
-        prompt=args.ocr_prompt,
-    )
-
-
-def _read_login_value(prompt: str, *, secret: bool = False) -> str:
-    try:
-        value = getpass.getpass(prompt) if secret else input(prompt)
-    except (EOFError, KeyboardInterrupt) as exc:
-        raise ScanError("Login cancelled.") from exc
-    value = value.strip()
-    if value.casefold() in LOGIN_QUIT_COMMANDS:
-        raise ScanError("Login cancelled.")
-    return value
-
-
-async def _prompt_phone_and_send_code(client: TelegramClient, max_attempts: int) -> str:
-    for _attempt in range(max_attempts):
-        phone = _read_login_value("Enter your phone number with country code (or q to quit): ")
-        if not phone:
-            print("Phone number cannot be empty. Try again or type q to quit.", file=sys.stderr)
-            continue
-        try:
-            await client.send_code_request(phone)
-        except Exception as exc:
-            print(f"Telegram rejected that phone number: {exc}", file=sys.stderr)
-            continue
-        return phone
-    raise ScanError("Could not send Telegram login code after multiple attempts.")
-
-
-async def _prompt_two_factor_password(client: TelegramClient, max_attempts: int) -> None:
-    for _attempt in range(max_attempts):
-        password = _read_login_value("Enter your Telegram 2FA password (or q to quit): ", secret=True)
-        if not password:
-            print("Two-factor password cannot be empty. Try again or type q to quit.", file=sys.stderr)
-            continue
-        try:
-            await client.sign_in(password=password)
-        except Exception as exc:
-            print(f"Telegram rejected that 2FA password: {exc}", file=sys.stderr)
-            continue
-        return
-    raise ScanError("Could not complete Telegram 2FA after multiple attempts.")
-
-
-async def _prompt_code_and_sign_in(
-    client: TelegramClient,
-    phone: str,
-    max_attempts: int,
-) -> None:
-    for _attempt in range(max_attempts):
-        code = _read_login_value(
-            "Enter the Telegram verification code, or type resend to request a new code: "
-        )
-        if not code:
-            print("Verification code cannot be empty. Try again or type resend.", file=sys.stderr)
-            continue
-        if code.casefold() in LOGIN_RESEND_COMMANDS:
-            try:
-                await client.send_code_request(phone)
-            except Exception as exc:
-                print(f"Could not resend Telegram code: {exc}", file=sys.stderr)
-            else:
-                print("Telegram code resent.", file=sys.stderr)
-            continue
-        try:
-            await client.sign_in(phone, code)
-        except SessionPasswordNeededError:
-            await _prompt_two_factor_password(client, max_attempts)
-            return
-        except Exception as exc:
-            print(f"Telegram rejected that verification code: {exc}", file=sys.stderr)
-            continue
-        return
-    raise ScanError("Could not complete Telegram login after multiple verification attempts.")
+def _make_ocr_config(args: argparse.Namespace):
+    _sync_modules()
+    return _make_ocr_config_impl(args)
 
 
 async def interactive_login(client: TelegramClient, *, max_attempts: int = 3) -> None:
-    print("No active Telegram session. Starting interactive login...")
-    print("Type q at any prompt to cancel.", file=sys.stderr)
+    _sync_modules()
+    return await _interactive_login_impl(client, max_attempts=max_attempts)
 
-    phone = await _prompt_phone_and_send_code(client, max_attempts)
-    await _prompt_code_and_sign_in(client, phone, max_attempts)
-
-    session_string = StringSession.save(client.session)
-    SESSION_PATH.parent.mkdir(parents=True, exist_ok=True)
-    SESSION_PATH.write_text(session_string, encoding="utf-8")
-    print(f"Session saved to {SESSION_PATH}")
-
-
-# ---------------------------------------------------------------------------
-# Entity resolution
-# ---------------------------------------------------------------------------
 
 async def resolve_entity(client: TelegramClient, name: str):
-    name = name.strip()
-    if name.lstrip("-").isdigit():
-        entity_id = int(name)
-        try:
-            return await client.get_entity(entity_id)
-        except Exception:
-            pass
-        # Fallback: search dialogs for matching ID
-        async for dialog in client.iter_dialogs():
-            if dialog.entity.id == entity_id:
-                return dialog.entity
-        raise ScanError(f"Cannot resolve entity: {name}")
-    try:
-        return await client.get_entity(name)
-    except Exception:
-        pass
-    name_lower = name.lower()
-    async for dialog in client.iter_dialogs():
-        if dialog.name.lower() == name_lower:
-            return dialog.entity
-    raise ScanError(f"Cannot resolve channel: {name}")
+    _sync_modules()
+    return await _resolve_entity_impl(client, name)
 
-
-# ---------------------------------------------------------------------------
-# Message conversion & reading
-# ---------------------------------------------------------------------------
-
-def _extract_video_meta(msg) -> dict | None:
-    """Extract video metadata (duration, size, dimensions) from a message."""
-    doc = getattr(msg.media, "document", None)
-    if not doc:
-        return None
-    from telethon.tl.types import DocumentAttributeVideo
-    for attr in (doc.attributes or []):
-        if isinstance(attr, DocumentAttributeVideo):
-            return {
-                "video_duration": round(attr.duration, 1),
-                "video_width": attr.w,
-                "video_height": attr.h,
-                "video_file_size": doc.size,
-            }
-    return None
-
-
-def message_to_dict(msg, channel_name: str) -> dict:
-    media_type = None
-    has_photo = False
-    media_group = None
-    if msg.media:
-        media_type = type(msg.media).__name__
-        has_photo = isinstance(msg.media, MessageMediaPhoto)
-        if msg.voice:
-            media_group = "voice"
-        elif msg.video:
-            media_group = "video"
-        elif has_photo:
-            media_group = "photo"
-
-    reply_to_msg_id = None
-    if msg.reply_to:
-        reply_to_msg_id = msg.reply_to.reply_to_msg_id
-
-    forward = None
-    origin_message_ref = None
-    if msg.forward:
-        fwd = msg.forward
-        forward = {}
-        if hasattr(fwd, 'from_id') and fwd.from_id:
-            forward["from_id"] = str(fwd.from_id)
-        if getattr(fwd, 'channel_post', None):
-            forward["channel_post"] = fwd.channel_post
-        if getattr(fwd, 'from_name', None):
-            forward["from_name"] = fwd.from_name
-        if fwd.date:
-            forward["date"] = fwd.date.isoformat()
-        if getattr(fwd, "channel_post", None):
-            origin_channel = getattr(fwd, "from_name", None) or str(getattr(fwd, "from_id", "") or "")
-            if origin_channel:
-                origin_message_ref = {
-                    "channel": origin_channel,
-                    "id": int(fwd.channel_post),
-                }
-
-    result = {
-        "id": msg.id,
-        "message_ref": {"channel": channel_name, "id": msg.id},
-        "date": msg.date.isoformat() if msg.date else None,
-        "text": msg.text or "",
-        "sender_id": msg.sender_id,
-        "channel": channel_name,
-        "reply_to_msg_id": reply_to_msg_id,
-        "has_photo": has_photo,
-        "media_type": media_type,
-        "media_group": media_group,
-        "forward": forward,
-    }
-    if origin_message_ref:
-        result["origin_message_ref"] = origin_message_ref
-
-    # Attach video metadata for "is this worth watching?" decisions
-    if media_group == "video":
-        video_meta = _extract_video_meta(msg)
-        if video_meta:
-            result.update(video_meta)
-
-    return result
-
-
-# ---------------------------------------------------------------------------
-# Channel reading (with integrated OCR)
-# ---------------------------------------------------------------------------
 
 async def read_channel(
     client: TelegramClient,
     entity,
     channel_name: str,
-    cutoff: datetime,
+    cutoff,
     max_limit: int,
-    ocr: OcrConfig | None = None,
+    ocr=None,
 ) -> ChannelResult:
-    """Stream messages via iter_messages, stop immediately at cutoff.
+    _sync_modules()
+    return await _read_channel_impl(client, entity, channel_name, cutoff, max_limit, ocr)
 
-    Uses iter_messages with early termination: as soon as we encounter a
-    message older than cutoff, we break — no exponential doubling, no
-    over-fetching. max_limit serves as a safety cap against runaway reads.
-    """
-    cutoff_utc = cutoff.astimezone(UTC)
-    safety_cap = max_limit
 
-    kept_msgs: list = []
-    raw_count = 0
-    skipped_missing_date = 0
-    hit_cutoff = False
+async def _run_scan(args: argparse.Namespace) -> int:
+    _sync_modules()
+    return await _run_scan_impl(args)
 
-    async for msg in client.iter_messages(entity, limit=safety_cap):
-        raw_count += 1
-        if msg.date is None:
-            skipped_missing_date += 1
-            continue
-        d = msg.date if msg.date.tzinfo else msg.date.replace(tzinfo=UTC)
-        if d.astimezone(UTC) < cutoff_utc:
-            hit_cutoff = True
-            break
-        kept_msgs.append(msg)
 
-    exhausted_limit = raw_count >= safety_cap
+_LOAD_CONFIG_WRAPPER = load_config
+_MAKE_OCR_CONFIG_WRAPPER = _make_ocr_config
+_INTERACTIVE_LOGIN_WRAPPER = interactive_login
+_RESOLVE_ENTITY_WRAPPER = resolve_entity
+_READ_CHANNEL_WRAPPER = read_channel
 
-    # OCR media
-    ocr_texts: dict[int, str] = {}
-    ocr_count = 0
-    ocr_errors: list[str] = []
-    if ocr:
-        for m in kept_msgs:
-            if m.media:
-                try:
-                    text = await process_message(client, m, ocr)
-                except Exception as exc:
-                    ocr_errors.append(f"OCR failed for message {m.id}: {exc}")
-                    continue
-                if text:
-                    ocr_texts[m.id] = text
-                    ocr_count += 1
-                    print(f"    OCR [{channel_name}:{m.id}] -> {len(text)} chars", file=sys.stderr)
 
-    dicts = [message_to_dict(m, channel_name) for m in kept_msgs]
-    for d in dicts:
-        if d["id"] in ocr_texts:
-            d["ocr_text"] = ocr_texts[d["id"]]
+def _patched_or_impl(name: str, wrapper, impl):
+    value = globals()[name]
+    return impl if value is wrapper else value
 
-    return ChannelResult(
-        channel=channel_name,
-        messages=dicts,
-        raw_count=raw_count,
-        skipped_missing_date=skipped_missing_date,
-        limit=safety_cap,
-        incomplete=exhausted_limit and not hit_cutoff,
-        ocr_count=ocr_count,
-        stderr="\n".join(ocr_errors),
+
+def _sync_modules() -> None:
+    _scan_config.CONFIG_PATH = CONFIG_PATH
+    _scan_config.SESSION_PATH = SESSION_PATH
+    _scan_media_projection.openai = openai
+    _telegram_scan.SESSION_PATH = SESSION_PATH
+    _telegram_scan.StringSession = StringSession
+    _telegram_scan.TelegramClient = TelegramClient
+    _telegram_scan.load_config = _patched_or_impl("load_config", _LOAD_CONFIG_WRAPPER, _load_config_impl)
+    _telegram_scan._make_ocr_config = _patched_or_impl(
+        "_make_ocr_config",
+        _MAKE_OCR_CONFIG_WRAPPER,
+        _make_ocr_config_impl,
     )
+    _telegram_scan.interactive_login = _patched_or_impl(
+        "interactive_login",
+        _INTERACTIVE_LOGIN_WRAPPER,
+        _interactive_login_impl,
+    )
+    _telegram_scan.resolve_entity = _patched_or_impl("resolve_entity", _RESOLVE_ENTITY_WRAPPER, _resolve_entity_impl)
+    _telegram_scan.read_channel = _patched_or_impl("read_channel", _READ_CHANNEL_WRAPPER, _read_channel_impl)
 
-
-# ---------------------------------------------------------------------------
-# CLI
-# ---------------------------------------------------------------------------
 
 def build_parser() -> argparse.ArgumentParser:
     parser = EnvAwareArgumentParser(
@@ -790,7 +189,10 @@ def build_parser() -> argparse.ArgumentParser:
         help="Text file with one channel username per line",
     )
     parser.add_argument(
-        "hours", nargs="?", type=positive_int, default=None,
+        "hours",
+        nargs="?",
+        type=positive_int,
+        default=None,
         help=f"Look back this many hours (default: {DEFAULT_HOURS})",
     )
     parser.add_argument("--hours", dest="hours_flag", type=positive_int)
@@ -801,19 +203,9 @@ def build_parser() -> argparse.ArgumentParser:
         help="Complete interactive Telegram login and exit without scanning.",
     )
     parser.add_argument("--since", type=parse_since, help="Precise ISO-8601 cutoff.")
-    parser.add_argument(
-        "--initial-limit",
-        default=os.environ.get("SCAN_INITIAL_LIMIT"),
-        help=argparse.SUPPRESS,
-    )
-    parser.add_argument(
-        "--max-limit", type=max_limit_type,
-        default=env_default("SCAN_MAX_LIMIT", DEFAULT_MAX_LIMIT),
-    )
-    parser.add_argument(
-        "--delay", type=delay_type,
-        default=env_default("SCAN_DELAY", DEFAULT_DELAY_SECONDS),
-    )
+    parser.add_argument("--initial-limit", default=os.environ.get("SCAN_INITIAL_LIMIT"), help=argparse.SUPPRESS)
+    parser.add_argument("--max-limit", type=max_limit_type, default=env_default("SCAN_MAX_LIMIT", DEFAULT_MAX_LIMIT))
+    parser.add_argument("--delay", type=delay_type, default=env_default("SCAN_DELAY", DEFAULT_DELAY_SECONDS))
     parser.add_argument("--output-dir", type=Path, default=Path("output"))
     parser.add_argument(
         "--output",
@@ -831,9 +223,9 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
 
-    # OCR options
     ocr_group = parser.add_argument_group(
-        "OCR", "Media OCR is off by default; pass --ocr to upload media to an OCR API."
+        "OCR",
+        "Media OCR is off by default; pass --ocr to upload media to an OCR API.",
     )
     ocr_group.add_argument("--ocr", action="store_true", help="Enable media OCR/STT")
     ocr_group.add_argument(
@@ -856,18 +248,24 @@ def build_parser() -> argparse.ArgumentParser:
     ocr_group.add_argument("--ocr-stt-base-url", default=None)
     ocr_group.add_argument("--ocr-stt-model", default=DEFAULT_STT_MODEL)
     ocr_group.add_argument("--ocr-language", default=None, help="Language hint for voice STT (e.g. 'ru', 'en')")
-    ocr_group.add_argument("--ocr-full-video", action="store_true", help="Download full video for audio STT (default: thumbnail only)")
+    ocr_group.add_argument(
+        "--ocr-full-video",
+        action="store_true",
+        help="Download full video for audio STT (default: thumbnail only)",
+    )
     ocr_group.add_argument("--ocr-video-frames", type=positive_int, default=DEFAULT_VIDEO_FRAMES)
-    ocr_group.add_argument("--ocr-prompt", default=(
-        "Extract all text from this image exactly as written. "
-        "Output only the extracted text, nothing else."
-    ))
+    ocr_group.add_argument(
+        "--ocr-prompt",
+        default=(
+            "Extract all text from this image exactly as written. "
+            "Output only the extracted text, nothing else."
+        ),
+    )
     agent_cli.add_format_argument(parser)
-
     return parser
 
 
-def warn_deprecated_options(argv: list[str] | None, args) -> None:
+def warn_deprecated_options(argv: list[str] | None, args: argparse.Namespace) -> None:
     raw_args = list(sys.argv[1:] if argv is None else argv)
     has_initial_limit_arg = any(
         value == "--initial-limit" or value.startswith("--initial-limit=")
@@ -879,394 +277,6 @@ def warn_deprecated_options(argv: list[str] | None, args) -> None:
             "scan.py streams until --max-limit.",
             file=sys.stderr,
         )
-
-
-def _print_progress(args, text: str, *, error: bool = False) -> None:
-    stream = sys.stderr if error or agent_cli.is_json_format(args) else sys.stdout
-    print(text, file=stream)
-
-
-def _source_health_base(source: ScanSource) -> dict:
-    return {
-        "source_id": source.source_id,
-        "channel": source.channel,
-        "username": source.username,
-        "channel_id": source.channel_id,
-        "label": source.label,
-        "topics": source.topics or [],
-        "priority": source.priority,
-        "expected_language": source.expected_language,
-        "scan_window_hours": source.scan_window_hours,
-        "raw_count": 0,
-        "kept_count": 0,
-        "oldest_message_at": None,
-        "newest_message_at": None,
-        "incomplete": False,
-        "failure": None,
-        "last_error": None,
-        "ocr_count": 0,
-    }
-
-
-def source_access_failure_reason(exc: Exception) -> str:
-    name = exc.__class__.__name__.casefold()
-    text = str(exc).casefold()
-    if "floodwait" in name or "flood wait" in text or "too many requests" in text:
-        return "rate_limited"
-    if "timeout" in name or "timed out" in text or "timeout" in text:
-        return "timeout"
-    if any(marker in text for marker in ("cannot resolve", "cannot resolve channel", "cannot resolve entity", "could not find the input entity", "no user has")):
-        return "cannot_resolve_entity"
-    if any(marker in text for marker in ("private", "forbidden", "not a participant", "invite", "permission")):
-        return "permission_or_private"
-    return "access_error"
-
-
-def _health_from_result(source: ScanSource, result: ChannelResult, kept_count: int) -> dict:
-    health = _source_health_base(source)
-    message_dates = [
-        parsed
-        for parsed in (parse_message_date(message.get("date")) for message in result.messages)
-        if parsed is not None
-    ]
-    health.update(
-        {
-            "channel": result.channel,
-            "raw_count": result.raw_count,
-            "kept_count": kept_count,
-            "oldest_message_at": min(message_dates).isoformat() if message_dates else None,
-            "newest_message_at": max(message_dates).isoformat() if message_dates else None,
-            "incomplete": result.incomplete,
-            "ocr_count": result.ocr_count,
-        }
-    )
-    return health
-
-
-def _health_from_failure(source: ScanSource, exc: Exception) -> dict:
-    health = _source_health_base(source)
-    health.update({
-        "failure": type(exc).__name__,
-        "failure_reason": source_access_failure_reason(exc),
-        "last_error": str(exc),
-    })
-    return health
-
-
-async def _run_scan(args) -> int:
-    json_mode = agent_cli.is_json_format(args)
-    login_only = getattr(args, "login_only", False)
-
-    if login_only:
-        sources: list[ScanSource] = []
-        registry_payload = None
-        channels: list[str] = []
-    else:
-        try:
-            sources, registry_payload = load_scan_sources(args)
-        except (OSError, source_registry.RegistryError, ScanError) as exc:
-            agent_cli.emit_error(
-                args,
-                code="source_input_invalid",
-                message=str(exc),
-                retryable=False,
-                next_step="Fix --source-registry or channel list, then rerun scan.",
-            )
-            return agent_cli.EXIT_VALIDATION
-        if not sources:
-            message = "No enabled sources to scan."
-            agent_cli.emit_error(
-                args,
-                code="source_input_empty",
-                message=message,
-                retryable=False,
-                next_step="Enable at least one source or add channels to the list.",
-            )
-            return agent_cli.EXIT_VALIDATION if json_mode else 1
-
-        channels = [source.channel for source in sources]
-
-    try:
-        config = load_config()
-    except ScanError as exc:
-        agent_cli.emit_error(
-            args,
-            code="telegram_credentials_missing",
-            message=str(exc),
-            retryable=False,
-            next_step="Configure TELEGRAM_API_ID and TELEGRAM_API_HASH.",
-        )
-        return agent_cli.EXIT_AUTH if json_mode else 1
-
-    client = TelegramClient(
-        StringSession(config.session_string),
-        config.api_id,
-        config.api_hash,
-        flood_sleep_threshold=args.max_flood_wait_seconds,
-    )
-    await client.connect()
-
-    try:
-        if not await client.is_user_authorized():
-            if login_only and json_mode:
-                await client.disconnect()
-                agent_cli.emit_error(
-                    args,
-                    code="telegram_login_interactive_required",
-                    message="Telegram login requires an interactive terminal.",
-                    retryable=False,
-                    next_step="Run tgcs login in a terminal.",
-                )
-                return agent_cli.EXIT_AUTH
-            if json_mode:
-                await client.disconnect()
-                agent_cli.emit_error(
-                    args,
-                    code="telegram_session_unauthorized",
-                    message="Telegram session is not authorized.",
-                    retryable=False,
-                    next_step="Run a human-mode scan once to complete Telegram login.",
-                )
-                return agent_cli.EXIT_AUTH
-            if not sys.stdin.isatty():
-                await client.disconnect()
-                agent_cli.emit_error(
-                    args,
-                    code="telegram_login_interactive_required",
-                    message="Telegram login requires an interactive terminal.",
-                    retryable=False,
-                    next_step="Run tgcs login in a terminal.",
-                )
-                return agent_cli.EXIT_AUTH
-            await interactive_login(client)
-    except ScanError:
-        await client.disconnect()
-        raise
-
-    if login_only:
-        await client.disconnect()
-        if json_mode:
-            agent_cli.emit_success(args, {"status": "authorized"})
-        else:
-            print("Telegram session is ready.")
-        return agent_cli.EXIT_SUCCESS
-
-    try:
-        ocr = _make_ocr_config(args)
-    except ScanError as exc:
-        await client.disconnect()
-        agent_cli.emit_error(
-            args,
-            code="ocr_config_invalid",
-            message=str(exc),
-            retryable=False,
-            next_step="Disable --ocr or configure the selected OCR provider.",
-        )
-        return agent_cli.EXIT_VALIDATION if json_mode else 1
-
-    if ocr:
-        _print_progress(
-            args,
-            "OCR enabled: "
-            f"{ocr.model} @ {args.ocr_effective_base_url} "
-            f"({args.ocr_effective_provider})",
-        )
-    else:
-        _print_progress(args, "OCR disabled: pass --ocr to upload media to an OCR/STT API")
-
-    hours = scan_hours(args)
-    cutoff = cutoff_from_args(hours, args.since)
-    args.output_dir.mkdir(parents=True, exist_ok=True)
-    started_at = datetime.now(UTC)
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    output_path = args.output or (args.output_dir / f"scan_{timestamp}.jsonl")
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    errors_path = output_path.with_suffix(".errors.log")
-    meta_path = meta_path_for_output(output_path)
-
-    _print_progress(args, f"Scan started: {started_at.isoformat(timespec='seconds')}")
-    _print_progress(args, f"Precise cutoff: {cutoff.isoformat()}")
-    if args.source_registry:
-        _print_progress(args, f"Source registry: {args.source_registry}")
-    else:
-        _print_progress(args, f"Channel list: {args.channel_list}")
-    _print_progress(args, f"Output: {output_path}")
-    _print_progress(args, "---")
-
-    failures = 0
-    incomplete = 0
-    total_written = 0
-    total_ocr = 0
-    failed_channels: list[str] = []
-    incomplete_channels: list[str] = []
-    source_health: list[dict] = []
-
-    with errors_path.open("w", encoding="utf-8", newline="\n") as errors:
-        for index, scan_source in enumerate(sources, start=1):
-            channel_name = scan_source.channel
-            _print_progress(args, f"[{index}] Reading: {channel_name}")
-            try:
-                entity = await resolve_entity(client, channel_name)
-                # Use title for display if channel_name is a bare numeric ID
-                display_name = channel_name
-                if channel_name.lstrip("-").isdigit():
-                    title = getattr(entity, "title", None) or getattr(entity, "first_name", None)
-                    if title:
-                        display_name = title
-                result = await read_channel(
-                    client=client,
-                    entity=entity,
-                    channel_name=display_name,
-                    cutoff=cutoff,
-                    max_limit=args.max_limit,
-                    ocr=ocr,
-                )
-            except ScanError as exc:
-                failures += 1
-                failed_channels.append(channel_name)
-                errors.write(f"[{channel_name}] ERROR: {exc}\n")
-                source_health.append(_health_from_failure(scan_source, exc))
-                _print_progress(
-                    args,
-                    f"  Failed: {channel_name} (see {errors_path.name})",
-                    error=True,
-                )
-            except Exception as exc:
-                failures += 1
-                failed_channels.append(channel_name)
-                errors.write(f"[{channel_name}] ERROR: {exc}\n")
-                source_health.append(_health_from_failure(scan_source, exc))
-                _print_progress(
-                    args,
-                    f"  Failed: {channel_name}: {exc} (see {errors_path.name})",
-                    error=True,
-                )
-            else:
-                written = write_jsonl(output_path, result.messages)
-                total_written += written
-                total_ocr += result.ocr_count
-                source_health.append(_health_from_result(scan_source, result, written))
-                if result.skipped_missing_date:
-                    errors.write(
-                        f"[{channel_name}] skipped {result.skipped_missing_date} "
-                        "messages without parseable date\n"
-                    )
-                if result.stderr:
-                    for line in result.stderr.splitlines():
-                        errors.write(f"[{channel_name}] {line}\n")
-                if result.incomplete:
-                    incomplete += 1
-                    incomplete_channels.append(channel_name)
-                    errors.write(
-                        f"[{channel_name}] INCOMPLETE: read {result.raw_count} rows at "
-                        f"max limit {result.limit}; raise SCAN_MAX_LIMIT or narrow the window.\n"
-                    )
-                    _print_progress(
-                        args,
-                        f"  Incomplete at limit {result.limit}; see {errors_path.name}",
-                        error=True,
-                    )
-                ocr_info = f", {result.ocr_count} media OCR'd" if result.ocr_count else ""
-                _print_progress(
-                    args,
-                    f"  {written} messages kept from {result.raw_count} rows "
-                    f"(limit {result.limit}){ocr_info}",
-                )
-
-            if index < len(channels) and args.delay:
-                await asyncio.sleep(args.delay)
-
-    await client.disconnect()
-    completed_at = datetime.now(UTC)
-    metadata = build_scan_metadata(
-        started_at=started_at,
-        completed_at=completed_at,
-        cutoff=cutoff,
-        channel_list_path=args.channel_list or Path(""),
-        channels=channels,
-        output_path=output_path,
-        errors_path=errors_path,
-        total_written=total_written,
-        failed_channels=failed_channels,
-        incomplete_channels=incomplete_channels,
-        total_ocr=total_ocr,
-        ocr_enabled=ocr is not None,
-        hours=hours,
-        source_health=source_health,
-        source_registry_path=args.source_registry,
-    )
-    if registry_payload is not None:
-        metadata["source_registry_source_count"] = len(registry_payload.get("sources", []))
-    write_scan_metadata(meta_path, metadata)
-
-    _print_progress(args, "---")
-    _print_progress(args, f"Done. {len(channels)} channels scanned, {total_written} messages collected.")
-    if total_ocr:
-        _print_progress(args, f"{total_ocr} media messages OCR'd.")
-    if failures:
-        _print_progress(args, f"{failures} channels failed. See: {errors_path}", error=True)
-    if incomplete:
-        _print_progress(args, f"{incomplete} channels may be incomplete. See: {errors_path}", error=True)
-    _print_progress(args, f"Output: {output_path}")
-    _print_progress(args, f"Metadata: {meta_path}")
-    _print_progress(args, "")
-    _print_progress(args, "Next: Summarize with your preferred AI:")
-    _print_progress(
-        args,
-        f"  python scripts/summarize.py "
-        f"--input {output_path} --profile profiles/YOUR_PROFILE.md",
-    )
-
-    if failures:
-        if json_mode:
-            agent_cli.print_json(
-                agent_cli.envelope_error(
-                    code="scan_failed",
-                    message=f"{failures} sources failed.",
-                    retryable=True,
-                    next_step=f"Inspect {errors_path} and source_health.",
-                    details={
-                        "output_path": str(output_path),
-                        "meta_path": str(meta_path),
-                        "errors_path": str(errors_path),
-                        "failed_channels": failed_channels,
-                        "source_health": source_health,
-                    },
-                )
-            )
-        return agent_cli.EXIT_RUNTIME
-    if incomplete and not args.allow_incomplete:
-        if json_mode:
-            agent_cli.print_json(
-                agent_cli.envelope_error(
-                    code="scan_incomplete",
-                    message=f"{incomplete} sources may be incomplete.",
-                    retryable=True,
-                    next_step="Raise --max-limit, narrow --hours, or pass --allow-incomplete.",
-                    details={
-                        "output_path": str(output_path),
-                        "meta_path": str(meta_path),
-                        "errors_path": str(errors_path),
-                        "incomplete_channels": incomplete_channels,
-                        "source_health": source_health,
-                    },
-                )
-            )
-        return agent_cli.EXIT_INCOMPLETE
-    if json_mode:
-        agent_cli.print_json(
-            agent_cli.envelope_success(
-                {
-                    "output_path": str(output_path),
-                    "meta_path": str(meta_path),
-                    "errors_path": str(errors_path),
-                    "message_count": total_written,
-                    "channel_count": len(channels),
-                    "source_health": source_health,
-                }
-            )
-        )
-    return agent_cli.EXIT_SUCCESS
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -1298,12 +308,12 @@ def main(argv: list[str] | None = None) -> int:
     except ScanError as exc:
         agent_cli.emit_error(
             args,
-            code="telegram_login_failed" if args.login_only else "scan_failed",
+            code="scan_failed",
             message=str(exc),
-            retryable=False,
-            next_step="Run tgcs login again in an interactive terminal.",
+            retryable=True,
+            next_step="Fix scan configuration or Telegram login state, then rerun.",
         )
-        return agent_cli.EXIT_AUTH if args.login_only else agent_cli.EXIT_RUNTIME
+        return agent_cli.EXIT_AUTH
 
 
 if __name__ == "__main__":
