@@ -2139,6 +2139,9 @@ Verification:
   Vitest passed `27` tests; dashboard build passed.
 - Staged snapshot gate passed with the same Bot Gateway command set, proving the
   checkpoint commit independently of unrelated worktree WIP.
+- Post-commit clean `HEAD` detached worktree gate passed on `644b5c4`: `ruff`,
+  full `pytest` (`464 passed, 2 skipped, 186 subtests passed`), dashboard full
+  Vitest (`19` files, `132` tests), and dashboard build.
 - `git diff --cached --check` passed.
 
 Residual Risk:
