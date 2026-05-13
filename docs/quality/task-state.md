@@ -1,15 +1,15 @@
-state: active_quality_iteration_tgcs_cli_test_split_checkpoint
+state: active_quality_iteration_monitor_delivery_split_checkpoint
 mode: Standard
 run_shape: continuous_until_deadline
-slice_goal: "Continue the technical-debt SPEC with high-value dashboard/backend slices, including Inbox/Runs concentration cleanup, sanitizer test ownership cleanup, dashboard profile-creation facade cleanup, monitor test concentration cleanup, and tgcs CLI test concentration cleanup, while preserving public props, review/run action names, sanitizer behavior, route contracts, monitor/tgcs CLI behavior, and local-first privacy boundaries."
+slice_goal: "Continue the technical-debt SPEC with high-value dashboard/backend slices, including Inbox/Runs concentration cleanup, sanitizer test ownership cleanup, dashboard profile-creation facade cleanup, monitor/tgcs CLI test concentration cleanup, and monitor delivery runtime cleanup, while preserving public props, review/run action names, sanitizer behavior, route contracts, monitor/tgcs CLI behavior, and local-first privacy boundaries."
 stop_condition: "Do not enter final closeout before 2026-05-14 14:00 Asia/Shanghai unless the user explicitly stops; if SPEC work is exhausted, research competitors/user pain points and expand ROADMAP/SPEC before continuing."
 handoff_policy: after_deadline_closeout
 continuation_policy: "Use docs/technical-debt-cleanup-spec.md as the debt authority; continue with one remaining boundary at a time and keep old facade exports until downstream callers move."
 intake_status: explicit_user_request
-gate_status: tgcs_cli_test_split_gates_passed_review_clean
+gate_status: monitor_delivery_split_gates_passed_reviewer_timeout
 blockers: []
 needs_human: []
-residual_risk: "This checkpoint is a backend test-ownership split for tgcs facade coverage. It does not change tgcs implementation and does not exercise live Telegram, live LLM/provider behavior, Scheduler/Credential Manager, Docker packaging install/build commands, frontend browser smoke, or human product acceptance."
+residual_risk: "This checkpoint is a backend runtime boundary split for monitor delivery helpers. It does not exercise live Telegram, live LLM/provider behavior, Scheduler/Credential Manager, Docker packaging install/build commands, frontend browser smoke, or human product acceptance."
 completed_slices:
   - "dashboard_server artifact helpers moved to scripts/desk_artifacts.py with dashboard_server re-export compatibility."
   - "dashboard_server git helpers moved to scripts/desk_git.py with dashboard_server wrapper compatibility."
@@ -34,6 +34,7 @@ completed_slices:
   - "Dashboard profile creation split: scripts/desk_profiles.py now owns brief/file parsing, profile Markdown generation, TOML append, unique id selection, and DB upsert; scripts/dashboard_server.py preserves /api/profiles/create and monkeypatch-compatible facade re-exports."
   - "Monitor test split: removed tests/test_monitor.py and moved its 22 tests into tests/monitor/test_config_helpers.py, test_runtime_overrides.py, test_feedback_export.py, and test_prefilter_and_manifest.py."
   - "Tgcs CLI test split: removed tests/test_tgcs_cli.py and moved its 32 tests into tests/tgcs_cli/test_run_demo_init.py, test_delegates.py, and test_schedule_print.py; shared load_tgcs_module now lives in tests/tgcs_cli/__init__.py."
+  - "Monitor delivery split: scripts/monitor_delivery.py now owns delivery target selection, Signal Desk delivery runtime overrides, and alert delivery dispatch; scripts/monitor.py preserves public facade exports."
 verification:
   - "python -m pytest tests/dashboard -q -> 149 passed, 71 subtests passed"
   - "python -m pytest tests/monitor_state -q -> 81 passed, 24 subtests passed"
@@ -83,6 +84,11 @@ verification:
   - "python -m pytest -q -> 495 passed, 2 skipped, 195 subtests passed"
   - "Post-helper-update packaging smoke: python -m pytest tests/test_packaging_metadata.py tests/tgcs_cli -q -> 37 passed"
   - "git diff --check -> passed for the tgcs CLI test split working tree"
+  - "python -m pytest tests/monitor -q -> 23 passed"
+  - "python -m ruff check scripts/monitor.py scripts/monitor_runner.py scripts/monitor_delivery.py tests/monitor -> passed"
+  - "python -m py_compile scripts/monitor.py scripts/monitor_runner.py scripts/monitor_delivery.py -> passed"
+  - "python -m ruff check . -> passed"
+  - "python -m pytest -q -> 496 passed, 2 skipped, 195 subtests passed"
 reviewer_status:
   - "Explorer review of the proposed split recommended a搬运式拆分: keep InboxView as facade, move filters/backlog, review-card/actions/source refs, and setup checklist into focused submodules."
   - "Post-diff reviewer found no blocking issues. Remaining risks were untracked new files, SSR-only test coverage, and preserving existing link sanitizer boundaries; untracked files are included in the checkpoint plan and the browser smoke covers the main interaction path."
@@ -92,6 +98,7 @@ reviewer_status:
   - "Profile creation split reviewer found no route-contract or product-behavior blocker. P2 feedback about private helper/constant monkeypatch compatibility was addressed with facade-aware helper/constant resolution in scripts/desk_profiles.py and regression tests for patched helper, patched delivery target id, and patched max text length."
   - "Monitor test split reviewer found full migration integrity: 22 old tests mapped to 22 new tests, AST method bodies matched, ruff passed, and pytest default discovery includes tests/monitor. P1/P2 feedback was addressed by staging the untracked tests/monitor directory and updating docs/testing.md away from the deleted tests/test_monitor.py path."
   - "Tgcs CLI test split reviewer found 32 old tests mapped to 32 new tests and natural grouping. Blocking feedback about tests/test_bot_gateway.py importing the deleted tests.test_tgcs_cli helper was addressed by moving load_tgcs_module to tests/tgcs_cli/__init__.py and updating bot gateway imports; docs/testing.md was updated to use tests/tgcs_cli."
+  - "Monitor delivery split reviewer was requested but did not return before checkpoint staging; focused/full gates and facade compatibility tests found no blocker. If a later reviewer result reports a substantive issue, handle it as the next checkpoint."
 operator_checks:
   - "Docker Desktop 4.65.0 / engine 29.2.1 reachable after startup; docker build -t tgcs-local-smoke:<temp> . -> exit 0"
   - "Docker demo container -> exit 0, generated one demo report in a temporary mounted output directory; temporary directory and image removed."
@@ -101,9 +108,10 @@ operator_checks:
   - "Live Windows Task Scheduler dry-run task with random name -> install exit 0, status installed, remove exit 0, final status not_installed."
   - "Live Windows Credential Manager smoke -> random secret write/read/delete passed; post-delete read returned empty."
   - "Live LLM structured call -> provider=deepseek, model=deepseek-v4-flash, JSON response status=TGCS_LIVE_LLM_OK, total_tokens=58."
-next_action: "Stage tests/tgcs_cli directory plus tests/test_tgcs_cli.py deletion, bot gateway helper imports, and docs; commit the CLI test-ownership checkpoint, then continue with the next high-value SPEC slice instead of closing out."
+next_action: "Stage scripts/monitor_delivery.py, monitor facade/runner changes, monitor tests, and docs; commit the runtime boundary checkpoint, then continue."
 candidate_slices:
-  - "Inspect scripts/monitor_runner.py and scripts/dashboard_projection.py for a behavior-preserving helper split only if a clear ownership boundary exists."
+  - "Inspect scripts/dashboard_projection.py for a behavior-preserving projection helper split only if a clear ownership boundary exists."
+  - "Inspect scripts/monitor_runner.py run_profile body for a larger orchestration split only if behavior locks are strong enough."
   - "Consider profile runtime/review-patch server helpers only when those route areas change next."
-last_update: "2026-05-14T06:56:13+08:00"
+last_update: "2026-05-14T07:02:13+08:00"
 checkpoint_ready: true

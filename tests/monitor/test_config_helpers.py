@@ -5,10 +5,15 @@ from argparse import Namespace
 from pathlib import Path
 from unittest.mock import patch
 
-from scripts import monitor
+from scripts import monitor, monitor_delivery
 
 
 class MonitorConfigHelperTests(unittest.TestCase):
+    def test_delivery_helpers_stay_available_from_monitor_facade(self):
+        self.assertIs(monitor.delivery_targets_for_profile, monitor_delivery.delivery_targets_for_profile)
+        self.assertIs(monitor.apply_delivery_runtime_overrides, monitor_delivery.apply_delivery_runtime_overrides)
+        self.assertIs(monitor.run_delivery, monitor_delivery.run_delivery)
+
     def test_default_config_includes_fast_jobs_monitor(self):
         config = monitor.default_config(Path(".tgcs/profiles.toml"))
 

@@ -244,6 +244,22 @@ The large top-level `tgcs` facade test file was split by command behavior:
   `python -m ruff check tests/tgcs_cli`, migration count check, packaging
   metadata smoke with `tests/tgcs_cli`, and full `python -m pytest -q`.
 
+## Progress Update: 2026-05-14 Monitor Delivery Split
+
+The monitor runner shed the delivery runtime boundary without changing monitor
+run behavior:
+
+- `scripts/monitor_delivery.py` now owns profile delivery target selection,
+  Signal Desk delivery target runtime overrides, and alert delivery dispatch.
+- `scripts/monitor_runner.py` still orchestrates profile runs and imports the
+  delivery helpers for the existing call sites.
+- `scripts/monitor.py` continues to expose `delivery_targets_for_profile`,
+  `apply_delivery_runtime_overrides`, and `run_delivery` as public facade
+  functions, now backed by `monitor_delivery`.
+- Focused and full gates passed: `python -m pytest tests/monitor -q`,
+  targeted `ruff`/`py_compile`, `python -m ruff check .`, and full
+  `python -m pytest -q`.
+
 ## Current Debt Snapshot: 2026-05-14
 
 The debt register below remains the long-form reasoning. This table is the
@@ -268,7 +284,7 @@ Large current files are still the main maintainability signal:
 | --- | ---: | ---: | --- |
 | Python server | `scripts/dashboard_server.py` | 1195 | HTTP routing, state payload assembly, route-level validation, and compatibility re-exports remain in the facade after profile creation moved out. |
 | Dashboard projection | `scripts/dashboard_projection.py` | 910 | Focused projection module for dashboard snapshots, run/report artifacts, setup status, and opportunity summaries. |
-| Python monitor runner | `scripts/monitor_runner.py` | 939 | Repeated-run orchestration and manifest behavior are now a focused but still sizeable boundary. |
+| Python monitor runner | `scripts/monitor_runner.py` | 852 | Repeated-run orchestration and manifest behavior are now a focused but still sizeable boundary after delivery target/runtime override helpers moved out. |
 | Monitor prefilter/manifest tests | `tests/monitor/test_prefilter_and_manifest.py` | 718 | Largest monitor test file after the split; scoped to expensive run/manifest paths rather than all monitor behavior. |
 | Tgcs CLI init tests | `tests/tgcs_cli/test_run_demo_init.py` | 282 | Largest CLI test file after the split; scoped to run/demo/init/quickstart/login/doctor behavior. |
 | Report rendering | `scripts/report_html.py` | 610 | HTML rendering is separated from extraction but remains large enough to merit focused tests before visual/report changes. |

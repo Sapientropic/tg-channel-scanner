@@ -17,6 +17,7 @@ try:
     from scripts import agent_cli
     from scripts import monitor_artifacts as _monitor_artifacts
     from scripts import monitor_config as _monitor_config
+    from scripts import monitor_delivery as _monitor_delivery
     from scripts import monitor_prefilter as _monitor_prefilter
     from scripts import monitor_runner as _monitor_runner
 except ModuleNotFoundError:
@@ -26,6 +27,7 @@ except ModuleNotFoundError:
     from scripts import agent_cli
     from scripts import monitor_artifacts as _monitor_artifacts
     from scripts import monitor_config as _monitor_config
+    from scripts import monitor_delivery as _monitor_delivery
     from scripts import monitor_prefilter as _monitor_prefilter
     from scripts import monitor_runner as _monitor_runner
 
@@ -95,9 +97,9 @@ diagnostics_from_agent_error = _monitor_runner.diagnostics_from_agent_error
 llm_from_agent_error = _monitor_runner.llm_from_agent_error
 monitor_failure_next_step = _monitor_runner.monitor_failure_next_step
 source_registry_from_args = _monitor_runner.source_registry_from_args
-delivery_targets_for_profile = _monitor_runner.delivery_targets_for_profile
-apply_delivery_runtime_overrides = _monitor_runner.apply_delivery_runtime_overrides
-run_delivery = _monitor_runner.run_delivery
+delivery_targets_for_profile = _monitor_delivery.delivery_targets_for_profile
+apply_delivery_runtime_overrides = _monitor_delivery.apply_delivery_runtime_overrides
+run_delivery = _monitor_delivery.run_delivery
 write_latest_pointer = _monitor_runner.write_latest_pointer
 
 
