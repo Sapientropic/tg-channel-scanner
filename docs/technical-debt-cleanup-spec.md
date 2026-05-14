@@ -37,6 +37,33 @@ Observed from the 2026-05-14 local workspace:
 - CI still covers Python 3.12/3.13 on Linux, Windows, macOS; ruff; pytest;
   dashboard tests/build; shell syntax; POSIX launcher LF line endings.
 
+## Product Guardrails From 2026-05-14 Research Refresh
+
+`ROADMAP.md` owns the market snapshot and source list. The technical debt
+consequence is narrower: future cleanup must not regress the v0.5 activation
+and decision-loop behaviors that distinguish T-Sense from generic Telegram
+summaries, digest bots, and RSS/intelligence-feed tools.
+
+Guardrails for future splits and refactors:
+
+- Preserve the first-use next-action path. `Start` should surface one current
+  executable step before optional or already-complete setup work, because the
+  local-first setup path is harder than a hosted bot or saved feed.
+- Preserve private Bot Gateway ordering. Background/bot automation controls
+  must remain blocked until token and authorized chat are both ready; do not
+  broaden bot behavior before the narrow dry-run/status/dashboard handoff is
+  reliable.
+- Preserve Settings notification repair. A zero-target state must still let the
+  user create or repair the default private Telegram notification target from
+  the dashboard instead of falling back to hidden CLI setup.
+- Preserve review follow-through. When the latest-action queue is empty but
+  open historical review work exists, Inbox should prefer the highest-value
+  open backlog bucket before handled items.
+- Treat "first useful decision" as the product benchmark for quality slices:
+  time to first explainable keep/skip/follow-up action, plus evidence that
+  feedback changes a later scan, matters more than the polish of the generated
+  digest.
+
 ## Progress Update: 2026-05-13 Hardening Iteration
 
 The 2026-05-13 hardening branch established a clean-HEAD baseline independent

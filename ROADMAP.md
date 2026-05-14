@@ -87,6 +87,13 @@ Recent source checks sharpen the v0.5 direction:
 - Native Telegram AI summaries now cover long channel posts and Instant View
   pages, so T-Sense should not compete as "a summarizer." It should compete as
   a profile-driven action inbox with explainable decisions and feedback.
+- Telegram's May 2026 bot/AI feature wave raises the baseline for Telegram-
+  native control surfaces: users will increasingly expect bot responses,
+  streaming feedback, and chat-level automation to feel first-class. For v0.5,
+  this argues for a narrow but product-grade private Bot Gateway rather than a
+  broad bot platform: authorized chat setup, command/status clarity, dry-run
+  scans, and local dashboard handoff must feel reliable before adding wider bot
+  behaviors.
 - Junction Bot, Aggregaat, Telebrief, and QuickRecapBot validate demand for
   scheduled digests, templates, Telegram delivery, team/admin use, and low-cost
   or self-hosted AI. T-Sense should borrow only the workflow lessons, not reduce
@@ -94,6 +101,11 @@ Recent source checks sharpen the v0.5 direction:
 - Feedly and Inoreader validate broader AI intelligence workflows: AI feeds,
   monitoring feeds, rules, summaries, tags, and generated reports. The local
   Telegram wedge remains subscribed/private-channel access plus raw evidence.
+- Feedly's current AI Feed docs emphasize durable intelligence requirements,
+  saved continuously-updating feeds, source-scope refinement, and result
+  feedback. That makes "profile as monitoring policy" the relevant benchmark:
+  T-Sense should measure first useful decision, false-positive reduction, and
+  source-scope calibration, not only first generated summary.
 - Telegram Bot privacy mode and content-licensing rules remain release-time
   constraints. Bot control should stay authorized-chat and command oriented;
   raw subscribed-source scanning should remain local, user-initiated, and
@@ -138,6 +150,13 @@ Recent source checks sharpen the v0.5 direction:
    Native Telegram summaries and digest bots reduce reading time, but they do
    not show which profile rule matched, whether the item is new or changed,
    what the user already handled, or how feedback changed the next scan.
+
+8. Activation failure is a product failure, not just setup friction.
+   The competitive set can be started from a bot, web account, or saved feed.
+   T-Sense has a harder local-first setup path, so the first screen must always
+   expose one current executable step, create the default private notification
+   target from an empty state, and explain why background/bot automation is
+   blocked until chat authorization is ready.
 
 ## Positioning
 
@@ -419,12 +438,15 @@ Exit criteria:
 2. Compare first useful report time against native Telegram AI summaries,
    Junction Bot, Aggregaat, Telebrief, QuickRecapBot, Feedly/Inoreader, and a
    Zapier/Make workflow.
-3. Validate whether users prefer daily reports, real-time alerts, or a hybrid.
-4. Measure local LLM quality and cost tradeoffs against OpenAI/Anthropic/Gemini
+3. Add a "first useful decision" benchmark to the same comparison: time from
+   source/profile setup to the first explainable keep/skip/follow-up action,
+   including whether feedback changes a later scan.
+4. Validate whether users prefer daily reports, real-time alerts, or a hybrid.
+5. Measure local LLM quality and cost tradeoffs against OpenAI/Anthropic/Gemini
    for the built-in profiles.
-5. Re-check Telegram API terms, Bot API limitations, MTProto behavior, and AI
+6. Re-check Telegram API terms, Bot API limitations, MTProto behavior, and AI
    scraping/content licensing rules before any public release.
-6. Test whether source health and pruning hints are more valuable than a full
+7. Test whether source health and pruning hints are more valuable than a full
    dashboard for early users.
 
 ## Success Metrics
@@ -450,6 +472,10 @@ Exit criteria:
 - [Telegram AI Summaries](https://telegram.org/blog/new-design-ai-summaries/tr?setln=en)
   made long channel post and Instant View summaries a native Telegram feature in
   January 2026.
+- [Telegram's May 2026 bot update](https://telegram.org/blog/ai-bot-revolution-11-new-features?setln=en)
+  added guest AI bots, bot-to-bot communication, streaming bot output, and
+  profile-level chat automation, raising expectations for bot-native control
+  loops.
 - [RSS.app Telegram RSS guide](https://help.rss.app/en/articles/11060974-how-to-create-rss-feeds-from-telegram)
   documents Telegram-to-RSS generation, automation uses, and the public-channel
   limitation.
@@ -467,6 +493,16 @@ Exit criteria:
   open-source references for Telethon-based AI digest workflows.
 - [QuickRecapBot](https://www.quickrecapbot.com/) validates group/channel
   scheduled summaries, action-item language, and simple paid tiers for teams.
+- [Feedly AI Feed docs](https://docs.feedly.com/article/764-what-is-an-ai-feed-feedly),
+  [saving](https://docs.feedly.com/article/769-saving-ai-feeds-feedly), and
+  [refinement](https://docs.feedly.com/article/767-refining-ai-feeds-feedly)
+  reinforce the recurring intelligence-feed pattern: define requirements,
+  save a feed, refine sources, and use feedback to reduce noise.
+- [Cronica](https://thecronica.app/) and
+  [Metricgram summaries](https://metricgram.com/features/summaries) are
+  additional 2026 signals that Telegram digest/unified-feed features are a busy
+  category; this strengthens the need to differentiate on decisions and local
+  evidence rather than summary generation alone.
 - [Televizor discussion](https://www.reddit.com/r/microsaas/comments/1sy0nl9/i_built_televizor_opensource_telegram_channel/)
   is useful community evidence for the "too many channels, one usable feed"
   pain.
