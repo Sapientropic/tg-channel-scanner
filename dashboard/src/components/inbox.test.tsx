@@ -196,6 +196,28 @@ describe("InboxView", () => {
     expect(html).toContain("Compensation");
   });
 
+  it("surfaces card-level undo for saved review decisions", () => {
+    const html = renderToStaticMarkup(
+      <InboxView
+        cards={[
+          card({
+            status: "false_positive",
+            item: { why: "Looks related, but the role is not a fit." },
+          }),
+        ]}
+        latestRunId="run-1"
+        profileReportNames={{ "jobs-fast": "Jobs Report" }}
+        act={vi.fn()}
+        busy={false}
+      />,
+    );
+
+    expect(html).toContain("Wrong match");
+    expect(html).toContain('data-review-action="undo_decision"');
+    expect(html).toContain("Undo decision");
+    expect(html).toContain('aria-label="Undo Wrong match review decision"');
+  });
+
   it("renders source references as safe links with a capped overflow count", () => {
     const html = renderToStaticMarkup(
       <InboxView

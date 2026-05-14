@@ -7,7 +7,7 @@ import {
   Settings,
   UserRoundCog,
 } from "lucide-react";
-import { errorMessage, postReviewCardAction } from "./api/client";
+import { errorMessage, postReviewCardAction, undoReviewCardAction } from "./api/client";
 import { ActionsView } from "./components/actions";
 import { CommandStrip, OpportunitySummaryPanel, ValidationSummaryPanel } from "./components/board-status";
 import { InboxView } from "./components/inbox";
@@ -183,9 +183,19 @@ function App() {
     setBusy(true);
     setNotice(null);
     try {
-      await postReviewCardAction(cardId, action, note);
+      if (action === "undo_decision") {
+        await undoReviewCardAction(cardId);
+      } else {
+        await postReviewCardAction(cardId, action, note);
+      }
       await refresh();
-      setNotice({ tone: "success", text: action === "follow_up" ? "Profile diff drafted" : "Inbox updated" });
+      const text =
+        action === "follow_up"
+          ? "Profile diff drafted"
+          : action === "undo_decision"
+            ? "Review decision undone"
+            : "Inbox updated";
+      setNotice({ tone: "success", text });
     } catch (error) {
       setNotice({ tone: "error", text: errorMessage(error) });
     } finally {

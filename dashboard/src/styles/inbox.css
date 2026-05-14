@@ -530,12 +530,14 @@ a.source-chip:focus-visible {
 
 .tune-profile-entry {
   display: grid;
+  gap: 6px;
   min-width: 0;
   padding-left: 10px;
   border-left: 1px solid color-mix(in oklch, var(--paper-3) 42%, transparent);
 }
 
-.tune-profile-trigger {
+.tune-profile-trigger,
+.decision-undo-trigger {
   position: relative;
   isolation: isolate;
   display: grid;
@@ -562,6 +564,14 @@ a.source-chip:focus-visible {
   text-transform: uppercase;
 }
 
+.decision-undo-trigger {
+  border-color: color-mix(in oklch, var(--signal-medium) 58%, var(--ink-warm));
+  background:
+    linear-gradient(90deg, color-mix(in oklch, var(--signal-medium) 10%, transparent), transparent 46%),
+    color-mix(in oklch, var(--surface-warm) 78%, var(--paper-2));
+  color: var(--ink-warm);
+}
+
 .tune-profile-trigger::after {
   content: "";
   position: absolute;
@@ -576,14 +586,16 @@ a.source-chip:focus-visible {
   grid-row: 1 / span 2;
 }
 
-.tune-profile-trigger span {
+.tune-profile-trigger span,
+.decision-undo-trigger span {
   min-width: 0;
   font-size: 12px;
   font-weight: var(--badge-weight);
   line-height: 1.05;
 }
 
-.tune-profile-trigger small {
+.tune-profile-trigger small,
+.decision-undo-trigger small {
   min-width: 0;
   color: color-mix(in oklch, var(--ink-link) 76%, var(--ink-warm));
   font-size: 9px;
@@ -592,7 +604,9 @@ a.source-chip:focus-visible {
 }
 
 .tune-profile-trigger:hover:not(:disabled),
-.tune-profile-trigger:focus-visible {
+.tune-profile-trigger:focus-visible,
+.decision-undo-trigger:hover:not(:disabled),
+.decision-undo-trigger:focus-visible {
   border-color: color-mix(in oklch, var(--teal) 78%, var(--ink));
   background:
     linear-gradient(90deg, color-mix(in oklch, var(--teal) 20%, transparent), transparent 54%),
@@ -600,7 +614,8 @@ a.source-chip:focus-visible {
   color: var(--ink);
 }
 
-.tune-profile-trigger:disabled {
+.tune-profile-trigger:disabled,
+.decision-undo-trigger:disabled {
   cursor: wait;
   opacity: 0.62;
 }

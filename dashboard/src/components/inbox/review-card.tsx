@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from "react";
-import { Archive, Ban, Bookmark, Check, ExternalLink, FileDiff, Play, Send, X } from "lucide-react";
+import { Archive, Ban, Bookmark, Check, ExternalLink, FileDiff, Play, RotateCcw, Send, X } from "lucide-react";
 
 import { artifactFormatFromPath, artifactHref, reportProfileName, toneClass } from "../../domain/display";
 import { decisionStatusLabel, formatDate, profileDisplayName, sourceRefLabel, titleCaseLabel } from "../../domain/format";
@@ -252,6 +252,10 @@ function isOpenOpportunity(card: ReviewCard) {
   return String(card.opportunity_status || "open").toLowerCase() === "open";
 }
 
+function hasReviewDecision(card: ReviewCard) {
+  return String(card.status || "pending").toLowerCase() !== "pending";
+}
+
 function MobileActionStrip({
   card,
   act,
@@ -314,6 +318,20 @@ function MobileActionStrip({
         >
           <Play size={16} />
           <span>Reopen</span>
+        </button>
+      )}
+      {hasReviewDecision(card) && (
+        <button
+          aria-label={`Undo ${reviewStatusLabel(card.status)} review decision`}
+          className="secondary-action"
+          title={`Undo ${reviewStatusLabel(card.status)} review decision`}
+          type="button"
+          data-review-action="undo_decision"
+          onClick={() => act(card.card_id, "undo_decision")}
+          disabled={busy}
+        >
+          <RotateCcw size={16} />
+          <span>Undo</span>
         </button>
       )}
       <button
@@ -447,6 +465,20 @@ function CardActions({
       </div>
       {!showFollowUp && (
         <div className="tune-profile-entry" aria-label="Profile tuning entry">
+          {hasReviewDecision(card) && (
+            <button
+              className="decision-undo-trigger"
+              data-review-action="undo_decision"
+              title={`Undo ${reviewStatusLabel(card.status)} review decision`}
+              type="button"
+              onClick={() => act(card.card_id, "undo_decision")}
+              disabled={busy}
+            >
+              <RotateCcw size={16} />
+              <span>Undo decision</span>
+              <small>{reviewStatusLabel(card.status)}</small>
+            </button>
+          )}
           <button
             className="tune-profile-trigger"
             data-review-action="tune"
