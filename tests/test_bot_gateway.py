@@ -541,6 +541,26 @@ class BotGatewayTests(unittest.TestCase):
 
         self.assertNotIn("123456789", text)
         self.assertIn("T-Sense status", text)
+        self.assertIn("Bot delivery: private Telegram bot ready", text)
+
+    def test_status_summary_surfaces_delivery_and_proof_loop_next_step(self):
+        snapshot = {
+            "setup_status": {"stage": "ready", "next_step": "Review cards"},
+            "inbox": [],
+            "runs": [{"status": "complete", "profile_id": "jobs-fast"}],
+            "delivery_targets": [],
+            "validation_summary": {
+                "schema_version": "dashboard_validation_summary_v1",
+                "runs_count": 1,
+                "first_decision_minutes": 7,
+                "first_decision_action": "keep",
+            },
+        }
+
+        text = bot_gateway.status_summary(snapshot)
+
+        self.assertIn("Bot delivery: needs chat in Settings > Alerts", text)
+        self.assertIn("Proof loop: first decision 7 min (keep)", text)
 
     def test_allowed_chats_only_use_enabled_telegram_bot_targets(self):
         with tempfile.TemporaryDirectory() as tmp:

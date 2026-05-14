@@ -115,11 +115,35 @@ def status_summary(snapshot: dict[str, Any]) -> str:
             f"Stage: {setup.get('stage') or 'unknown'}",
             f"Next: {setup.get('next_step') or 'Open Signal Desk'}",
             f"Pending review cards: {len(inbox)}",
+            f"Bot delivery: {bot_delivery_status_line(snapshot)}",
+            f"Proof loop: {proof_loop_status_line(snapshot)}",
             f"Latest run: {latest_run.get('status') or 'none'} {latest_run.get('profile_id') or ''}".strip(),
             f"Opportunity summary: {opportunity.get('title') or opportunity.get('status') or 'not ready'}",
         ]
     )
 
+
+def bot_delivery_status_line(snapshot: dict[str, Any]) -> str:
+    targets = [item for item in snapshot.get("delivery_targets") or [] if isinstance(item, dict)]
+    telegram_targets = [item for item in targets if str(item.get("type") or item.get("target_type") or "") == "telegram_bot"]
+    enabled_count = sum(1 for item in telegram_targets if bool(item.get("enabled")))
+    if enabled_count:
+        return "private Telegram bot ready"
+    if telegram_targets:
+        return "saved but muted"
+    return "needs chat in Settings > Alerts"
+
+
+def proof_loop_status_line(snapshot: dict[str, Any]) -> str:
+    summary = snapshot.get("validation_summary") if isinstance(snapshot.get("validation_summary"), dict) else {}
+    minutes = summary.get("first_decision_minutes")
+    action = str(summary.get("first_decision_action") or "").strip().replace("_", " ")
+    if isinstance(minutes, (int, float)):
+        timing = "<1 min" if minutes < 1 else f"{round(minutes)} min"
+        return f"first decision {timing}" + (f" ({action})" if action else "")
+    if safe_int(summary.get("runs_count")) > 0:
+        return "waiting for first review decision"
+    return "run a dry scan to start"
 
 
 def latest_summary(snapshot: dict[str, Any]) -> str:
