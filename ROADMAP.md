@@ -1,6 +1,6 @@
 # T-Sense Roadmap
 
-Last researched: 2026-05-09
+Last researched: 2026-05-14
 
 This roadmap is market-informed, but it is still a product plan, not a
 commitment log. Review note: product pages, Telegram platform rules, and
@@ -66,14 +66,38 @@ Examples: [Junction Bot AI Digests](https://www.junctionbot.io/ai-digests),
 [Aggregaat](https://aggregaat.bot/), [Telebrief](https://telebrief.ti1orn.com/),
 [tg-channel-digest](https://github.com/andrew-ld/tg-channel-digest), and
 [Televizor](https://www.reddit.com/r/microsaas/comments/1sy0nl9/i_built_televizor_opensource_telegram_channel/).
+Telegram itself also added native
+[AI summaries](https://telegram.org/blog/new-design-ai-summaries/tr?setln=en)
+for long channel posts and Instant View pages in January 2026.
 
 Strength: these tools validate the core pain. Users follow too many
 channels/chats, need digests, and often want private-channel support. Some tools
-offer bot delivery, local Ollama, Docker, templates, or a unified feed.
+offer bot delivery, local Ollama, Docker, templates, or a unified feed. Native
+Telegram summaries make generic summarization a baseline expectation, not a
+durable wedge.
 
 Open gap: differentiate through profile-driven evaluation, ranked HTML/Markdown
-artifacts, explicit source refs, local-first defaults, and safe media/AI upload
-gates.
+artifacts, explicit source refs, decision-state review, local-first defaults,
+and safe media/AI upload gates.
+
+### 2026-05-14 Research Refresh
+
+Recent source checks sharpen the v0.5 direction:
+
+- Native Telegram AI summaries now cover long channel posts and Instant View
+  pages, so T-Sense should not compete as "a summarizer." It should compete as
+  a profile-driven action inbox with explainable decisions and feedback.
+- Junction Bot, Aggregaat, Telebrief, and QuickRecapBot validate demand for
+  scheduled digests, templates, Telegram delivery, team/admin use, and low-cost
+  or self-hosted AI. T-Sense should borrow only the workflow lessons, not reduce
+  itself to a polished daily digest.
+- Feedly and Inoreader validate broader AI intelligence workflows: AI feeds,
+  monitoring feeds, rules, summaries, tags, and generated reports. The local
+  Telegram wedge remains subscribed/private-channel access plus raw evidence.
+- Telegram Bot privacy mode and content-licensing rules remain release-time
+  constraints. Bot control should stay authorized-chat and command oriented;
+  raw subscribed-source scanning should remain local, user-initiated, and
+  evidence-preserving rather than a hosted scraping/indexing product.
 
 ## User Pain Points
 
@@ -109,6 +133,11 @@ gates.
 6. Automation tools leave too much glue work.
    Zapier and Make make routing easy, but they do not define the domain-specific
    scoring, profile schema, source health, dedupe, or daily review artifact.
+
+7. Generic summaries do not close the decision loop.
+   Native Telegram summaries and digest bots reduce reading time, but they do
+   not show which profile rule matched, whether the item is new or changed,
+   what the user already handled, or how feedback changed the next scan.
 
 ## Positioning
 
@@ -320,12 +349,18 @@ Remaining work before calling v0.5 done:
 
 - Treat each profile as a durable monitoring task with its own schedule,
   working hours, source filters, alert rules, and delivery targets.
+- Make every delivered alert and high-priority review card explainable at the
+  point of action: matched profile intent, source reference, novelty/change
+  state, delivery/run health, and the current review decision.
 - Harden the local Telegram Bot Gateway as the no-dashboard control surface:
   command menu, dry-run scans, latest results, source assistant, and authorized
   chat handling should survive ordinary desktop use.
 - Continue hardening follow-up-to-profile UX around already-collected local
   notes: make it obvious which accepted diff affected the next run and keep
   rollback/reapply boundaries visible.
+- Add a small calibration view for the feedback loop: accepted/reverted profile
+  diffs, false-positive/high-value counts, and the next-run evidence that proves
+  the profile actually changed behavior.
 - Make setup and packaging less brittle on Windows: one obvious install/check
   path, clearer Telegram source import guidance, and fewer manual rerun steps.
 - Add optional email or Telegram Saved Messages adapters only after the private
@@ -349,6 +384,8 @@ Exit criteria:
 - Users can trace a delivered alert back to the full report and raw message.
 - Follow-up feedback can become a confirmable profile diff that affects the next
   scan.
+- Users can see whether accepted/reverted feedback reduced false positives or
+  improved high-value yield in the next runs.
 - The CLI remains usable without the dashboard.
 
 ### v0.6 - Packaging And Team Use
@@ -379,8 +416,9 @@ Exit criteria:
 
 1. Interview 5-10 target users across job search, crypto/market monitoring,
    research/OSINT, community management, and personal news.
-2. Compare first useful report time against Junction Bot, Aggregaat, Telebrief,
-   Feedly/Inoreader, and a Zapier/Make workflow.
+2. Compare first useful report time against native Telegram AI summaries,
+   Junction Bot, Aggregaat, Telebrief, QuickRecapBot, Feedly/Inoreader, and a
+   Zapier/Make workflow.
 3. Validate whether users prefer daily reports, real-time alerts, or a hybrid.
 4. Measure local LLM quality and cost tradeoffs against OpenAI/Anthropic/Gemini
    for the built-in profiles.
@@ -404,10 +442,14 @@ Exit criteria:
 ## Source Notes
 
 - [Feedly](https://feedly.com/) positions itself across news reading, market
-  intelligence, and threat intelligence.
-- [Inoreader features](https://www.inoreader.com/features) cover RSS, monitoring
-  feeds, social listening, newsletters, global search, and website change
-  tracking.
+  intelligence, and threat intelligence; its AI Feeds material emphasizes
+  real-time AI-assisted competitor and market monitoring.
+- [Inoreader pricing/features](https://www.inoreader.com/pricing/feature/filters)
+  cover public Telegram feeds, monitoring feeds, rules, filters, AI summaries,
+  suggested tags, and generated reports.
+- [Telegram AI Summaries](https://telegram.org/blog/new-design-ai-summaries/tr?setln=en)
+  made long channel post and Instant View summaries a native Telegram feature in
+  January 2026.
 - [RSS.app Telegram RSS guide](https://help.rss.app/en/articles/11060974-how-to-create-rss-feeds-from-telegram)
   documents Telegram-to-RSS generation, automation uses, and the public-channel
   limitation.
@@ -417,14 +459,20 @@ Exit criteria:
 - [TGStat alerts](https://by.tgstat.com/en/alerts), [TGStat](https://tgstat.org/),
   and [Telemetrio](https://telemetr.io/en) represent public Telegram monitoring,
   search, advertising, and analytics tools.
-- [Junction Bot AI Digests](https://www.junctionbot.io/ai-digests) and
-  [Aggregaat](https://aggregaat.bot/) validate demand for Telegram digests,
-  unified feeds, forwarding, and team-oriented monitoring.
+- [Junction Bot Digests](https://www.junctionbot.io/documentation/digests) and
+  [Aggregaat](https://aggregaat.bot/) validate demand for scheduled Telegram
+  digests, unified feeds, forwarding, templates, and team-oriented monitoring.
 - [Telebrief](https://telebrief.ti1orn.com/) and
   [tg-channel-digest](https://github.com/andrew-ld/tg-channel-digest) are close
   open-source references for Telethon-based AI digest workflows.
+- [QuickRecapBot](https://www.quickrecapbot.com/) validates group/channel
+  scheduled summaries, action-item language, and simple paid tiers for teams.
 - [Televizor discussion](https://www.reddit.com/r/microsaas/comments/1sy0nl9/i_built_televizor_opensource_telegram_channel/)
   is useful community evidence for the "too many channels, one usable feed"
   pain.
-- [Telegram API Terms](https://core.telegram.org/api/terms) remain a release-time
-  checkpoint for content licensing and AI-scraping constraints.
+- [Telegram Bot Features](https://core.telegram.org/bots/features) document
+  privacy-mode limits that keep bot control surfaces different from local
+  MTProto user-session scanning.
+- [Telegram Content Licensing Terms](https://telegram.org/tos/content-licensing)
+  remain a release-time checkpoint for content licensing and AI-scraping
+  constraints.
