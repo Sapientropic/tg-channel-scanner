@@ -193,6 +193,7 @@ export function buildStartSummary(
       ? "Needs login"
       : "Needs app details";
   const activeStep = steps.find((step) => step.state === "active");
+  const activeButton = activeStep?.key === "telegram" ? undefined : primaryButtonForStep(activeStep);
   const nextValue = activeStep?.title
     ?? (reviewCount > 0 ? `Review ${reviewCount} card${reviewCount === 1 ? "" : "s"}` : !setupStatus?.has_runs ? "Run first scan" : "Run another scan");
   const automationValue = scheduler?.installed ? "On" : scheduler?.available === false ? "Manual" : "Off";
@@ -208,8 +209,12 @@ export function buildStartSummary(
     { label: "Telegram", value: telegramValue },
     { label: "Notifications", value: notifications.value, ...notificationAction },
     { label: "Automation", value: automationValue },
-    { label: "Next", value: nextValue },
+    { label: "Next", value: nextValue, ...(activeButton ? { actionId: activeButton.actionId, actionLabel: activeButton.label } : {}) },
   ];
+}
+
+function primaryButtonForStep(step: JourneyStep | undefined) {
+  return step?.buttons.find((button) => button.variant === "primary") ?? step?.buttons[0];
 }
 
 export function notificationReadiness(targets: DeliveryTarget[]): NotificationReadiness {

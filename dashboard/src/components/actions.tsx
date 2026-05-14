@@ -82,6 +82,8 @@ export function ActionsView({
     ? secondaryReadyStepOrder.map((key) => steps.find((step) => step.key === key)).filter(Boolean) as JourneyStep[]
     : [];
   const parkedSteps = compactReadyMode ? steps.filter((step) => !secondaryReadyStepKeys.has(step.key)) : [];
+  const visibleJourneySteps = prioritizeCurrentStep(visibleSteps, activeStep?.key);
+  const stepIndexes = new Map(steps.map((step, index) => [step.key, index + 1]));
   const primaryReadyAction = compactReadyMode
     ? buildPrimaryReadyAction(firstRunStep, reviewCount, Boolean(onOpenReview))
     : null;
@@ -181,10 +183,10 @@ export function ActionsView({
 
       {!compactReadyMode && (
         <div className="journey-list">
-          {visibleSteps.map((step, index) => (
+          {visibleJourneySteps.map((step, index) => (
             <JourneyStepCard
               {...journeyCardProps}
-              index={index + 1}
+              index={stepIndexes.get(step.key) ?? index + 1}
               key={step.key}
               step={step}
             />
@@ -268,4 +270,15 @@ export function ActionsView({
       )}
     </section>
   );
+}
+
+function prioritizeCurrentStep(steps: JourneyStep[], activeKey?: string) {
+  if (!activeKey) {
+    return steps;
+  }
+  const current = steps.find((step) => step.key === activeKey);
+  if (!current) {
+    return steps;
+  }
+  return [current, ...steps.filter((step) => step.key !== activeKey)];
 }

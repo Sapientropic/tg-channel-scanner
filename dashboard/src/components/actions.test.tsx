@@ -382,6 +382,46 @@ describe("Signal Desk journey", () => {
     });
   });
 
+  it("turns the active setup step into a direct Next summary action", () => {
+    const firstRunSetup = { stage: "needs_first_run", has_profiles: true, has_runs: false };
+    const firstRunSteps = buildJourneySteps(actions, {}, firstRunSetup, telegramReady);
+    const firstRunSummary = buildStartSummary(firstRunSteps, firstRunSetup, telegramReady);
+    const sourceSetup = {
+      stage: "needs_source_access",
+      has_profiles: true,
+      has_runs: true,
+    };
+    const sourceSteps = buildJourneySteps(actions, {}, sourceSetup, telegramReady);
+    const sourceSummary = buildStartSummary(sourceSteps, sourceSetup, telegramReady);
+
+    expect(firstRunSummary.find((item) => item.label === "Next")).toMatchObject({
+      value: "Run the first scan",
+      actionId: "monitor_jobs_dry_run",
+      actionLabel: "Run first scan",
+    });
+    expect(sourceSummary.find((item) => item.label === "Next")).toMatchObject({
+      value: "Fix saved channels",
+      actionId: "sources_import_jobs",
+      actionLabel: "Fix channels",
+    });
+  });
+
+  it("keeps Telegram login as an embedded form instead of a summary command", () => {
+    const setup = { stage: "needs_first_run", has_profiles: true, has_runs: false };
+    const disconnected = {
+      ...telegramReady,
+      session_ready: false,
+      login_state: "ready_for_code",
+    };
+    const steps = buildJourneySteps(actions, {}, setup, disconnected);
+    const summary = buildStartSummary(steps, setup, disconnected);
+
+    expect(summary.find((item) => item.label === "Next")).toMatchObject({
+      value: "Connect Telegram",
+    });
+    expect(summary.find((item) => item.label === "Next")?.actionId).toBeUndefined();
+  });
+
   it("does not let optional Telegram setup seize the ready-state path", () => {
     const readyButDisconnected = { ...telegramReady, session_ready: false, credentials_ready: false };
     const baseSetup = { stage: "ready", has_profiles: true, has_runs: true };
