@@ -192,17 +192,22 @@ def _telegram_current_user_chat_id_from_credentials(
     config_path: Path | None = None,
     session_path: Path | None = None,
 ) -> str | None:
+    kwargs = {}
+    if config_path is not None:
+        kwargs["config_path"] = config_path
+    if session_path is not None:
+        kwargs["session_path"] = session_path
     try:
         from scripts import desk_credentials
 
-        kwargs = {}
-        if config_path is not None:
-            kwargs["config_path"] = config_path
-        if session_path is not None:
-            kwargs["session_path"] = session_path
         return desk_credentials._telegram_current_user_chat_id(**kwargs)
     except Exception:
-        return None
+        try:
+            from scripts import desk_telegram_login
+
+            return desk_telegram_login._telegram_current_user_chat_id(**kwargs)
+        except Exception:
+            return None
 
 
 _telegram_current_user_chat_id = _telegram_current_user_chat_id_from_credentials

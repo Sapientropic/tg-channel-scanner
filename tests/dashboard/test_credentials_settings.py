@@ -4,9 +4,16 @@ import json
 from datetime import UTC, datetime, timedelta
 from http import HTTPStatus
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
-from scripts import dashboard_server, desk_credentials, desk_delivery_settings, desk_secret_settings, monitor_state
+from scripts import (
+    dashboard_server,
+    desk_credentials,
+    desk_delivery_settings,
+    desk_secret_settings,
+    desk_telegram_login,
+    monitor_state,
+)
 
 
 class DashboardCredentialsSettingsTests(unittest.TestCase):
@@ -17,6 +24,8 @@ class DashboardCredentialsSettingsTests(unittest.TestCase):
         self.assertIs(dashboard_server.desk_notification_token_status, desk_credentials.desk_notification_token_status)
         self.assertIs(dashboard_server.desk_ai_settings_status, desk_credentials.desk_ai_settings_status)
         self.assertIs(dashboard_server.desk_action_env, desk_credentials.desk_action_env)
+        self.assertEqual(desk_credentials.TELEGRAM_CONFIG_PATH, desk_telegram_login.TELEGRAM_CONFIG_PATH)
+        self.assertEqual(desk_credentials.TELEGRAM_LOGIN_CODE_TTL_SECONDS, desk_telegram_login.TELEGRAM_LOGIN_CODE_TTL_SECONDS)
         self.assertEqual(desk_credentials.DESK_DELIVERY_TARGET_ID, desk_delivery_settings.DESK_DELIVERY_TARGET_ID)
         self.assertEqual(desk_credentials.DESK_AI_PROVIDER_CONFIGS, desk_secret_settings.DESK_AI_PROVIDER_CONFIGS)
 
@@ -86,6 +95,40 @@ class DashboardCredentialsSettingsTests(unittest.TestCase):
         self.assertEqual(result["chat_id"], "24680")
         self.assertEqual(result["source"], "telegram_session")
         session_mock.assert_called_once_with()
+
+
+    def test_telegram_login_split_preserves_desk_credentials_async_hook_patches(self):
+        status = {
+            "schema_version": "desk_telegram_status_v1",
+            "credentials_ready": True,
+            "session_ready": False,
+            "login_state": "code_sent",
+            "detail": "Telegram sent a verification code.",
+            "next_step": "Enter the code in Signal Desk.",
+            "config_path": "~/.config/tgcli/config.toml",
+            "session_path": "~/.config/tgcli/session",
+        }
+        send_mock = AsyncMock(return_value=status)
+        verify_mock = AsyncMock(return_value={**status, "login_state": "authorized", "session_ready": True})
+
+        with patch.object(desk_credentials, "_telegram_send_code_async", send_mock):
+            sent = desk_credentials.telegram_send_code("+15551234567")
+        with patch.object(desk_credentials, "_telegram_verify_code_async", verify_mock):
+            verified = desk_credentials.telegram_verify_code("12345", "secret")
+
+        self.assertEqual(sent["login_state"], "code_sent")
+        self.assertEqual(verified["login_state"], "authorized")
+        send_mock.assert_awaited_once_with(
+            "+15551234567",
+            config_path=desk_credentials.TELEGRAM_CONFIG_PATH,
+            session_path=desk_credentials.TELEGRAM_SESSION_PATH,
+        )
+        verify_mock.assert_awaited_once_with(
+            "12345",
+            "secret",
+            config_path=desk_credentials.TELEGRAM_CONFIG_PATH,
+            session_path=desk_credentials.TELEGRAM_SESSION_PATH,
+        )
 
 
     def test_telegram_credentials_are_saved_without_echoing_secret(self):
