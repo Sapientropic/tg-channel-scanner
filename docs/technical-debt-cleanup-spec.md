@@ -916,6 +916,36 @@ state mutation behavior:
   staging/CI risk for the new module/test is handled by explicit staging before
   commit.
 
+### 2026-05-14 Monitor CLI Auxiliary Command Split
+
+The monitor runner shed the auxiliary CLI commands that are not part of the
+profile run pipeline:
+
+- `scripts/monitor_cli_commands.py` now owns `init-config`, `feedback-export`,
+  and `delivery-test telegram-bot` behavior: starter profile TOML writing,
+  reusable feedback JSONL export/recording, and Telegram bot delivery-test
+  output/envelope handling.
+- `scripts/monitor_runner.py` stays focused on profile run orchestration while
+  keeping the old `test_telegram_bot`, `write_default_config`, and
+  `export_feedback` function names as compatibility wrappers.
+- The wrappers deliberately sync the old `monitor_runner` patch surface into
+  the new owner before delegating: `agent_cli`, `delivery`, `monitor_state`,
+  `PROFILE_RUN_CONFIG_SCHEMA_VERSION`, `root_path`, and `relative_to_root`.
+  This preserves source-checkout tests and local debugging patterns that patch
+  `monitor_runner` globals directly.
+- Regression tests now cover the monitor facade project-root path for
+  `init-config`, missing-chat-id JSON error behavior before delivery, and the
+  legacy `monitor_runner.delivery`, schema constant, `root_path`, and
+  `relative_to_root` patch surfaces.
+- The CI explicit `py_compile` list now includes
+  `scripts/monitor_cli_commands.py`.
+- Gates passed: targeted `ruff`, targeted `py_compile`, focused
+  monitor/tgcs CLI tests, monitor/tgcs/contract mixed tests, full Python tests,
+  full ruff, CI-list `py_compile`, and `git diff --check`.
+- Post-diff review found no P0/P1 behavior, facade project-root, feedback
+  export, delivery-test, or default-TOML blocker. Its P2 compatibility feedback
+  about old `monitor_runner` module globals was addressed before final gates.
+
 ## Current Debt Snapshot: 2026-05-14
 
 The debt register below remains the long-form reasoning. This table is the
@@ -930,7 +960,7 @@ current triage view for what is still real after the later splits:
 | D5. `report.py` coupling | Mostly reduced. `report.py` is now `503` lines; report behavior moved into `report_*` modules, and report HTML link/source rendering now lives in a focused helper module. | Treat `report_extraction.py`, `report_html.py`, and `report_sources.py` as review units; next report work should be behavior or visual-output driven, not line-count driven. |
 | D6. Dashboard root/settings state | Actions, Profiles, Inbox, Runs, the Settings source library, and the profile runtime settings editor are now composition entrypoints. `inbox.tsx` is down to `137` lines, `runs.tsx` to `76` lines, `source-library-panel.tsx` to `204` lines, and `runtime-settings-control.tsx` to `200` lines, each backed by focused submodules. | The next UI slice should be driven by a real UX/test gap rather than more line-count cleanup. |
 | D7. Runtime sanitizers | Dashboard sanitizer is now a `14` line facade. Dashboard state sanitizers are split by product area and Desk-owned helpers re-export `sanitize/desk.ts`. The former `1368` line legacy `sanitize.test.ts` is split into focused dashboard-state, Desk action/feedback, Desk bot/settings, Desk source/delivery, and entrypoint-compat files. | Keep these tests close to existing sanitizer modules; avoid adding a second sanitizer implementation. |
-| D8. Test concentration | Improved. Report, dashboard server, monitor-state, monitor CLI/runtime, tgcs CLI, and dashboard sanitizer tests now live in focused files/directories. | Keep focused directories; use focused Desk helper tests when shrinking large backend modules, and consider splitting the remaining large focused files only when their behavior boundaries are clear. |
+| D8. Test concentration | Improved. Report, dashboard server, monitor-state, monitor CLI/runtime, tgcs CLI, and dashboard sanitizer tests now live in focused files/directories. Monitor auxiliary CLI command tests now live separately from the profile-run pipeline tests. | Keep focused directories; use focused helper tests when shrinking large backend modules, and consider splitting the remaining large focused files only when their behavior boundaries are clear. |
 | D9. Packaging metadata | Mostly complete for local Python packaging. Build, staged wheel install, `pipx`, `uvx`, and Docker build/demo/doctor smokes passed. | Keep `signal-desk` as a source-checkout launcher until resources are package-safe; re-run Docker when Dockerfile/package-data/dependency metadata changes. |
 | D10. Documentation ownership | Current docs are aligned: this file is the debt authority, `docs/testing.md` is command authority, and quality logs are historical evidence. | Update this table and `docs/quality/task-state.md` whenever a new cleanup slice changes current status. |
 
@@ -962,7 +992,8 @@ Large current files are still the main maintainability signal:
 | Dashboard profile projection | `scripts/dashboard_profiles.py` | 212 | Focused profile projection module for profile labels, matching summaries, report titles, and display paths. |
 | Dashboard opportunity projection | `scripts/dashboard_opportunities.py` | 210 | Focused opportunity summary module for action-signal ranking, decision counts, replay totals, and next actions. |
 | Dashboard setup projection | `scripts/dashboard_setup.py` | 199 | Focused setup-readiness module for first-run, source-access, profile, and delivery guidance. |
-| Python monitor runner | `scripts/monitor_runner.py` | 679 | Repeated-run orchestration is now focused on validation, DB writeback, review cards, delivery, and CLI routing after delivery, command execution, and manifest construction moved out. |
+| Python monitor runner | `scripts/monitor_runner.py` | 480 | Repeated-run orchestration is now focused on validation, DB writeback, review cards, delivery, and CLI routing after delivery, command execution, manifest construction, and auxiliary CLI commands moved out. |
+| Monitor auxiliary CLI commands | `scripts/monitor_cli_commands.py` | 166 | Focused owner for monitor `init-config`, `feedback-export`, and `delivery-test telegram-bot`, with compatibility wrappers in `monitor_runner.py`. |
 | Monitor command execution | `scripts/monitor_execution.py` | 412 | Focused command-execution module for scan/report command construction, prefilter branching, and latest-manifest pointer writes. |
 | Monitor manifest projection | `scripts/monitor_manifest.py` | 186 | Focused run-manifest/result projection module for stable `run_manifest_v1` and `monitor_run_result_v1` payloads. |
 | Monitor prefilter/manifest tests | `tests/monitor/test_prefilter_and_manifest.py` | 758 | Largest monitor test file after the split; scoped to expensive run/manifest paths rather than all monitor behavior. |
