@@ -1,10 +1,25 @@
-import { useEffect, useRef, useState } from "react";
-import { CirclePause, CirclePlay, Database, Save, Trash2 } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Database } from "lucide-react";
 
 import { InlineEmpty } from "../common";
-import type { DeskSource, DeskSourcesResult, SourceStat } from "../../domain/types";
+import type { DeskSourcesResult, SourceStat } from "../../domain/types";
+import {
+  SOURCE_LIBRARY_PAGE_SIZE,
+  filterDeskSourcesByQuery,
+  paginatedDeskSources,
+  sourceLibraryActivityLabel,
+  sourceLibraryCountLabel,
+} from "./source-library-model";
+import { SourceLibraryRow } from "./source-library-row";
 
-export const SOURCE_LIBRARY_PAGE_SIZE = 8;
+export {
+  SOURCE_LIBRARY_PAGE_SIZE,
+  filterDeskSourcesByQuery,
+  paginatedDeskSources,
+  sourceLibraryActivityLabel,
+  sourceLibraryCountLabel,
+  sourceTopicsEditState,
+} from "./source-library-model";
 
 export function SourceLibraryPanel({
   library,
@@ -186,236 +201,4 @@ export function SourceLibraryPanel({
       </details>
     </div>
   );
-}
-
-export function filterDeskSourcesByQuery(sources: DeskSource[], query: string, selectedTopic = "") {
-  const normalizedQuery = query.trim().toLowerCase();
-  const normalizedTopic = selectedTopic.trim().toLowerCase();
-  if (!normalizedQuery && !normalizedTopic) {
-    return sources;
-  }
-  return sources.filter((source) => {
-    const matchesTopic = normalizedTopic
-      ? source.topics.some((topic) => topic.trim().toLowerCase() === normalizedTopic)
-      : true;
-    if (!matchesTopic) {
-      return false;
-    }
-    if (!normalizedQuery) {
-      return true;
-    }
-    return [source.label, source.channel, source.priority, ...source.topics]
-      .join(" ")
-      .toLowerCase()
-      .includes(normalizedQuery);
-  });
-}
-
-export function paginatedDeskSources(sources: DeskSource[], visibleCount = SOURCE_LIBRARY_PAGE_SIZE) {
-  return sources.slice(0, Math.max(0, visibleCount));
-}
-
-export function sourceLibraryCountLabel(visibleCount: number, filteredCount: number, hasFilters: boolean) {
-  const visible = Math.max(0, visibleCount);
-  const filtered = Math.max(0, filteredCount);
-  if (hasFilters) {
-    if (!filtered) {
-      return "No matching sources";
-    }
-    return visible >= filtered ? `${filtered} matching shown` : `${visible} of ${filtered} matching shown`;
-  }
-  if (!filtered) {
-    return "No saved sources";
-  }
-  return visible >= filtered ? `Showing all ${filtered}` : `Showing first ${visible} of ${filtered}`;
-}
-
-export function sourceLibraryActivityLabel(sources: SourceStat[]) {
-  if (!sources.length) {
-    return "";
-  }
-  const latestCards = sources.reduce((sum, source) => sum + Math.max(0, source.latest_card_count ?? 0), 0);
-  const alerts = sources.reduce((sum, source) => sum + Math.max(0, source.alert_count ?? 0), 0);
-  const risk = sources.filter((source) => source.scan_failure || source.scan_incomplete).length;
-  const parts = [
-    latestCards ? `${latestCards} latest card${latestCards === 1 ? "" : "s"}` : "No latest cards",
-    alerts ? `${alerts} alert${alerts === 1 ? "" : "s"}` : "",
-    `${sources.length} tracked`,
-    risk ? `${risk} risk` : "",
-  ].filter(Boolean);
-  return parts.join(" · ");
-}
-
-function SourceLibraryRow({
-  source,
-  busy,
-  removeSource,
-  setSourceEnabled,
-  setSourceTopics,
-}: {
-  source: DeskSource;
-  busy: boolean;
-  removeSource: (sourceId: string) => Promise<void>;
-  setSourceEnabled: (sourceId: string, enabled: boolean) => Promise<void>;
-  setSourceTopics: (sourceId: string, topics: string[]) => Promise<void>;
-}) {
-  const [editingTopics, setEditingTopics] = useState(false);
-  const [topicText, setTopicText] = useState(source.topics.join(", "));
-  const [saveError, setSaveError] = useState("");
-  const topicInputRef = useRef<HTMLInputElement | null>(null);
-  const editorId = `source-topic-editor-${source.source_id.replace(/[^a-z0-9_-]/gi, "-")}`;
-  const topicState = sourceTopicsEditState(source.topics, topicText);
-
-  useEffect(() => {
-    setTopicText(source.topics.join(", "));
-    setEditingTopics(false);
-    setSaveError("");
-  }, [source.source_id, source.topics]);
-
-  useEffect(() => {
-    if (editingTopics) {
-      topicInputRef.current?.focus();
-    }
-  }, [editingTopics]);
-
-  return (
-    <article className={`source-library-row ${source.enabled ? "enabled" : "paused"}`}>
-      <div className="source-library-main">
-        <strong title={source.label}>{source.label}</strong>
-        <small title={`@${source.channel}`}>@{source.channel}</small>
-      </div>
-      <div className="source-library-tags" aria-label={`${source.label} topics`}>
-        {source.topics.map((topic) => (
-          <span key={topic} title={`Topic: ${topic}`}>
-            {topic}
-          </span>
-        ))}
-        <span title="Recent messages scanned for this source">{source.scan_window_hours}h window</span>
-        <span title="Source priority">{source.priority}</span>
-      </div>
-      <div className="source-library-side">
-        <span className={source.enabled ? "status enabled" : "status disabled"}>
-          {source.enabled ? "Active" : "Paused"}
-        </span>
-        <button
-          aria-label={`${source.label}: ${source.enabled ? "Pause" : "Use"}`}
-          className={`text-button ${source.enabled ? "secondary" : ""}`}
-          disabled={busy}
-          onClick={() => void setSourceEnabled(source.source_id, !source.enabled)}
-          type="button"
-        >
-          {source.enabled ? <CirclePause size={15} /> : <CirclePlay size={15} />}
-          <span>{source.enabled ? "Pause" : "Use"}</span>
-        </button>
-        <button
-          aria-controls={editorId}
-          aria-expanded={editingTopics}
-          aria-label={`${source.label}: ${editingTopics ? "Hide topic editor" : "Edit topics"}`}
-          className="text-button secondary"
-          disabled={busy}
-          onClick={() => {
-            setSaveError("");
-            setEditingTopics((current) => !current);
-          }}
-          type="button"
-        >
-          <span>{editingTopics ? "Hide editor" : "Edit topics"}</span>
-        </button>
-        <button
-          aria-label={`${source.label}: Remove source`}
-          className="text-button secondary danger"
-          disabled={busy}
-          onClick={() => void removeSource(source.source_id).catch(() => undefined)}
-          type="button"
-        >
-          <Trash2 size={15} />
-          <span>Remove</span>
-        </button>
-      </div>
-      {editingTopics && (
-        <form
-          id={editorId}
-          className="source-topic-editor"
-          onKeyDown={(event) => {
-            if (event.key === "Escape") {
-              event.preventDefault();
-              setTopicText(source.topics.join(", "));
-              setSaveError("");
-              setEditingTopics(false);
-            }
-          }}
-          onSubmit={(event) => {
-            event.preventDefault();
-            if (!topicState.canSave) {
-              return;
-            }
-            setSaveError("");
-            void setSourceTopics(source.source_id, topicState.topics)
-              .then(() => setEditingTopics(false))
-              .catch((error: unknown) => {
-                setSaveError(error instanceof Error ? error.message : "Could not save topics.");
-              });
-          }}
-        >
-          <label>
-            <span>Topics</span>
-            <input
-              maxLength={200}
-              onChange={(event) => {
-                setTopicText(event.target.value);
-                setSaveError("");
-              }}
-              placeholder="jobs, remote-work"
-              ref={topicInputRef}
-              type="text"
-              value={topicText}
-            />
-          </label>
-          <small aria-live="polite">{saveError || topicState.message}</small>
-          <div className="source-topic-actions">
-            <button className="text-button" disabled={busy || !topicState.canSave} type="submit">
-              <Save size={15} />
-              <span>Save topics</span>
-            </button>
-            <button
-              className="text-button secondary"
-              disabled={busy}
-              onClick={() => {
-                setTopicText(source.topics.join(", "));
-                setSaveError("");
-                setEditingTopics(false);
-              }}
-              type="button"
-            >
-              Cancel
-            </button>
-          </div>
-        </form>
-      )}
-    </article>
-  );
-}
-
-export function sourceTopicsEditState(currentTopics: string[], text: string) {
-  const rawTopics = text
-    .split(/[,\n]/)
-    .map((topic) => topic.trim().toLowerCase())
-    .filter(Boolean);
-  const topics = Array.from(new Set(rawTopics));
-  const invalid = topics.find((topic) => !/^[a-z0-9][a-z0-9_-]{1,40}$/.test(topic));
-  const normalizedCurrent = currentTopics.map((topic) => topic.trim().toLowerCase()).filter(Boolean);
-  const unchanged = topics.join("\0") === normalizedCurrent.join("\0");
-  if (invalid) {
-    return { canSave: false, topics, message: "Use short tags like jobs or remote-work." };
-  }
-  if (!topics.length) {
-    return { canSave: false, topics, message: "Add at least one topic tag." };
-  }
-  if (topics.length > 8) {
-    return { canSave: false, topics, message: "Use fewer topic tags." };
-  }
-  if (unchanged) {
-    return { canSave: false, topics, message: "Topics are unchanged." };
-  }
-  return { canSave: true, topics, message: "Comma-separated tags. These tags only organize your sources." };
 }

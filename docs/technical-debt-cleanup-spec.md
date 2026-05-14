@@ -550,6 +550,29 @@ semantics:
   -q`, `python -m pytest tests/dashboard -q`, CI-list `py_compile`,
   `python -m ruff check .`, `python -m pytest -q`, and `git diff --check`.
 
+## Progress Update: 2026-05-14 Source Library UI Split
+
+The Dashboard Settings saved-source library shed its row and pure model
+boundaries without changing API payload shape or source-management behavior:
+
+- `dashboard/src/components/settings/source-library-model.ts` now owns saved
+  source filtering, pagination labels, source-yield activity labels, and topic
+  edit validation.
+- `dashboard/src/components/settings/source-library-row.tsx` now owns per-source
+  rendering, pause/use, remove, and topic editor focus/reset/save/cancel
+  behavior.
+- `dashboard/src/components/settings/source-library-panel.tsx` remains the
+  composition entrypoint for summary, topic chips, search, collapsed list gate,
+  pagination, and row orchestration. It re-exports the old model helper names
+  so `settings.tsx` and existing tests keep the same public import path.
+- Focused and full dashboard gates passed: `cd dashboard; npm test -- --run
+  settings`, `cd dashboard; npm test -- --run`, `cd dashboard; npm run build`,
+  and `git diff --check`.
+- Browser smoke was not run for this slice because no CSS/layout or rendered
+  text changed and Playwright is not installed in the dashboard workspace. The
+  remaining risk is limited to structural module import/re-export behavior,
+  covered by Vitest and TypeScript build.
+
 ## Current Debt Snapshot: 2026-05-14
 
 The debt register below remains the long-form reasoning. This table is the
@@ -562,7 +585,7 @@ current triage view for what is still real after the later splits:
 | D3. `dashboard_server.py` boundaries | Artifact, git, scheduler, credentials, sources, source access, source assistant, action execution, profile creation, server selection, HTTP security, and profile route mutation helpers are split behind the old facade. The facade is currently `1276` lines and mainly owns route dispatch, state payload assembly, pre-state-access guards, and compatibility re-exports. | Keep remaining route dispatch in the facade until a group has focused tests; next backend leverage is test concentration or state payload routing, not low-value line shaving. |
 | D4. `monitor_state.py` boundaries | Mostly reduced to a `411` line facade. DB/schema, common privacy guards, review cards, alerts, feedback, profile patches, and dashboard projection are split. | Profile runtime/settings helpers are the only meaningful remaining state responsibility; split only with focused tests if that area changes. |
 | D5. `report.py` coupling | Mostly reduced. `report.py` is now `503` lines; report behavior moved into `report_*` modules, and report HTML link/source rendering now lives in a focused helper module. | Treat `report_extraction.py`, `report_html.py`, and `report_sources.py` as review units; next report work should be behavior or visual-output driven, not line-count driven. |
-| D6. Dashboard root/settings state | Actions, Profiles, Inbox, and Runs are now composition entrypoints. `inbox.tsx` is down to `137` lines and `runs.tsx` is down to `76` lines, each backed by focused submodules. Runtime settings remain the next UI concentration point. | Touch runtime settings only when that area changes; otherwise shift to backend facade growth or large backend test concentration. |
+| D6. Dashboard root/settings state | Actions, Profiles, Inbox, Runs, and the Settings source library are now composition entrypoints. `inbox.tsx` is down to `137` lines, `runs.tsx` to `76` lines, and `source-library-panel.tsx` to `204` lines, each backed by focused submodules. Runtime settings remain the next UI concentration point. | Touch runtime settings only when that area changes; otherwise shift to backend facade growth or large backend test concentration. |
 | D7. Runtime sanitizers | Dashboard sanitizer is now a `14` line facade. Dashboard state sanitizers are split by product area and Desk-owned helpers re-export `sanitize/desk.ts`. The former `1368` line legacy `sanitize.test.ts` is split into focused dashboard-state, Desk action/feedback, Desk bot/settings, Desk source/delivery, and entrypoint-compat files. | Keep these tests close to existing sanitizer modules; avoid adding a second sanitizer implementation. |
 | D8. Test concentration | Improved. Report, dashboard server, monitor-state, monitor CLI/runtime, tgcs CLI, and dashboard sanitizer tests now live in focused files/directories. | Keep focused directories; use focused Desk helper tests when shrinking large backend modules, and consider splitting the remaining large focused files only when their behavior boundaries are clear. |
 | D9. Packaging metadata | Mostly complete for local Python packaging. Build, staged wheel install, `pipx`, `uvx`, and Docker build/demo/doctor smokes passed. | Keep `signal-desk` as a source-checkout launcher until resources are package-safe; re-run Docker when Dockerfile/package-data/dependency metadata changes. |
@@ -590,6 +613,9 @@ Large current files are still the main maintainability signal:
 | Tgcs CLI init tests | `tests/tgcs_cli/test_run_demo_init.py` | 349 | Largest CLI test file after the split; scoped to run/demo/init/quickstart/login/doctor behavior. |
 | Report rendering | `scripts/report_html.py` | 546 | HTML report card, feedback, diagnostics, and template assembly remain here after safe link/inline-source helpers moved out. |
 | Report HTML links | `scripts/report_html_links.py` | 198 | Focused helper module for safe report links, Telegram handle links, Telegram Markdown snippets, URL labels, and inline source/contact rendering. |
+| Settings source library panel | `dashboard/src/components/settings/source-library-panel.tsx` | 204 | Saved-source library composition now owns summary/search/list orchestration after model helpers and row editor moved out. |
+| Settings source library row | `dashboard/src/components/settings/source-library-row.tsx` | 155 | Focused saved-source row/editor component for pause/use, remove, and topic editing controls. |
+| Settings source library model | `dashboard/src/components/settings/source-library-model.ts` | 85 | Pure saved-source filtering, pagination, activity-label, and topic validation helpers covered by Settings tests. |
 | Dashboard runtime settings | `dashboard/src/components/profiles/runtime-settings-control.tsx` | 394 | Profile runtime controls remain a focused but sizeable UI boundary with tuning semantics. |
 | Dashboard sanitize summary | `dashboard/src/domain/sanitize/dashboard-summary.ts` | 300 | Largest dashboard sanitizer submodule; owns optional summary/setup/source insight projections. |
 | Dashboard sanitizer tests | `dashboard/src/domain/sanitize-dashboard-state.test.ts` | 458 | Largest remaining sanitizer test file; now scoped to dashboard state rather than all sanitizer surfaces. |
