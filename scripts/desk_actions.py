@@ -23,6 +23,9 @@ ENV_SECRET_RE = re.compile(r"(?i)\b[A-Z0-9_]*(?:API[_-]?KEY|TOKEN|SECRET|PASSWOR
 KEY_VALUE_SECRET_RE = re.compile(r"(?i)\b(?:api[_-]?key|token|secret|password)\b\s*[:=]\s*[^\s`'\"]+")
 ARGV_DUMP_RE = re.compile(r"(?i)\bargv\s*[:=]\s*(?:\[[^\]]*\]|[^\r\n]+)")
 CHAT_ID_FIELD_RE = re.compile(r"\bchat[_ -]?id\b\s*[:=]?\s*-?\d{5,20}\b", re.IGNORECASE)
+WINDOWS_PATH_RE = re.compile(r"(?i)\b[A-Z]:\\[^\r\n\"<>|]+")
+UNC_PATH_RE = re.compile(r"\\\\[^\\\s]+\\[^\r\n\"<>|]+")
+POSIX_PRIVATE_PATH_RE = re.compile(r"(?<!\w)/(?:home|Users|users|var|tmp|etc|private/tmp)/[^\s`'\"]+")
 DashboardDeskActionError = desk_scheduler.DashboardDeskActionError
 SourceAccessProbeError = desk_sources.SourceAccessProbeError
 
@@ -395,22 +398,30 @@ def _desk_safe_result_text(*parts: object) -> str:
     sanitized = KEY_VALUE_SECRET_RE.sub(lambda match: re.split(r"[:=]", match.group(0), maxsplit=1)[0].strip() + "=[redacted-secret]", sanitized)
     sanitized = ARGV_DUMP_RE.sub("argv=[redacted-argv]", sanitized)
     sanitized = CHAT_ID_FIELD_RE.sub("chat_id [redacted-chat-id]", sanitized)
-    for root in {PROJECT_ROOT, _project_root().resolve()}:
-        raw = str(root)
-        if not raw:
+    project_roots = {str(PROJECT_ROOT), str(_project_root())}
+    try:
+        project_roots.add(str(_project_root().resolve()))
+    except OSError:
+        pass
+    for raw in project_roots:
+        if not raw or raw == ".":
             continue
         # Windows scheduler errors often include a concrete file below the
         # project root. Replace the whole local project path before the generic
         # drive-letter scrubber, otherwise the user sees a vague "local path"
         # and loses the actionable context that the failing file belongs to
         # this project folder.
-        normalized = re.escape(raw).replace(r"\\", r"[\\/]")
-        sanitized = re.sub(
-            normalized + r"(?:[\\/][^\r\n\"<>|]*)?",
-            "project folder",
-            sanitized,
-            flags=re.IGNORECASE,
-        )
+        for variant in {raw, raw.replace("\\", "/"), raw.replace("/", "\\")}:
+            normalized = re.escape(variant).replace(r"\\", r"[\\/]")
+            sanitized = re.sub(
+                normalized + r"(?:[\\/][^\r\n\"<>|]*)?",
+                "project folder",
+                sanitized,
+                flags=re.IGNORECASE,
+            )
+    sanitized = UNC_PATH_RE.sub("local path", sanitized)
+    sanitized = WINDOWS_PATH_RE.sub("local path", sanitized)
+    sanitized = POSIX_PRIVATE_PATH_RE.sub("local path", sanitized)
     replacements = {
         str(Path.home().resolve()): "~",
         str(Path.home().resolve()).replace("\\", "/"): "~",
@@ -418,7 +429,6 @@ def _desk_safe_result_text(*parts: object) -> str:
     for needle, replacement in replacements.items():
         if needle:
             sanitized = sanitized.replace(needle, replacement)
-    sanitized = re.sub(r"(?i)\b[A-Z]:\\[^\r\n\"<>|]+", "local path", sanitized)
     return sanitized.splitlines()[0][:500]
 
 def _desk_action_result(
