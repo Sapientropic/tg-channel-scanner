@@ -66,7 +66,7 @@ normal user does not have to edit TOML, copy JSON, or remember CLI commands.
 | Tab | Purpose |
 | --- | --- |
 | `Start` | Connect Telegram, repair setup, run demo scans, and manage auto-scan controls. |
-| `Review` | Triage the newest/highest-priority cards first, then teach future matching with Keep / Skip / Wrong match / Tune profile. |
+| `Review` | Triage the newest/highest-priority cards first, mark opportunity state with Applied / Saved / Contacted / Duplicate / Dismissed, then tune future matching with Prefer similar / Deprioritize / Wrong match. |
 | `Profiles` | Create profiles from plain language or files, edit matching rules, tune scan window and post limits. |
 | `Runs` | See whether recent scans are healthy and open generated report artifacts. |
 | `Settings` | Add or prune sources with starter sets or Source assistant, set AI/OCR keys, configure notifications, manage learning data, and check repository state. |

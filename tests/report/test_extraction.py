@@ -121,6 +121,22 @@ system_prompt: |
         self.assertEqual(model, "deepseek-v4-flash")
 
 
+    def test_env_minimax_platform_key_beats_unrelated_local_deepseek_key(self):
+        report = load_report_module(self)
+
+        def fake_read_secret(target_name):
+            if target_name == report.LOCAL_AI_SECRET_TARGETS["DEEPSEEK_API_KEY"]:
+                return SimpleNamespace(secret="sk-local-deepseek")
+            return None
+
+        with patch.dict("os.environ", {"MINIMAX_API_KEY": "sk-minimax-env"}, clear=True):
+            with patch.object(report.ai_secret.__globals__["local_credentials"], "read_secret", side_effect=fake_read_secret):
+                base_url, model = report.resolve_llm_settings(None, report.DEFAULT_MODEL)
+
+        self.assertEqual(base_url, report.DEFAULT_MINIMAX_BASE_URL)
+        self.assertEqual(model, report.DEFAULT_MINIMAX_MODEL)
+
+
     def test_extraction_prompt_keeps_profile_in_cacheable_prefix(self):
         report = load_report_module(self)
 

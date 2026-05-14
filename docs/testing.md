@@ -14,11 +14,15 @@ committing or asking for review.
 - Credential-free and dry-run paths are the default. Live Telegram, LLM, and
   notification delivery checks require explicit operator intent.
 - Contract changes must update fixture coverage before being called stable.
+- Use the active virtual-environment Python. On Windows that is usually
+  `.venv\Scripts\python.exe`; on macOS/Linux it is usually `.venv/bin/python`.
+  Substitute that interpreter in the commands below if `python` is not on PATH.
 
 ## Fast Contract And Privacy Gate
 
 Use this for schema, sanitizer, privacy, report-contract, and dashboard-boundary
-changes:
+changes. Report and semantic extraction tests patch local AI keyring reads by
+default so saved operator credentials cannot change env-only or no-key cases:
 
 ```powershell
 python -m pytest tests/test_contract_fixtures.py tests/test_report_contracts.py tests/test_contract_privacy_fixtures.py tests/test_dashboard_state_contracts.py tests/test_desk_contract_fixtures.py tests/test_desk_source_access_contracts.py tests/test_desk_settings_contracts.py tests/test_bot_gateway_contracts.py tests/test_agent_semantic_fallback.py tests/report -q

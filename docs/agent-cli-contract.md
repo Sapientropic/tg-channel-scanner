@@ -170,8 +170,9 @@ Signal Desk `Start` is the primary human surface. It exposes a small dashboard
 action API for human-friendly wrappers around fixed local commands:
 
 - `GET /api/desk/health` returns `desk_health_v1` with app id, version, URL,
-  and capability names. Launchers use it only to identify compatible local
-  instances; it is not an agent execution contract.
+  and capability names, including `desk_bot_gateway_status_v1` when this Desk
+  can report local Bot Gateway readiness. Launchers use it only to identify
+  compatible local instances; it is not an agent execution contract.
 - `GET /api/desk/actions` returns `desk_actions_v1`.
 - `POST /api/desk/actions/<action_id>/run` returns `desk_action_result_v1`.
 - Action IDs are server-side allowlist entries; request bodies are not command

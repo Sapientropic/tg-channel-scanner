@@ -231,6 +231,10 @@ def ai_secret(env_name: str) -> str | None:
     return stored.secret.strip() if stored and stored.secret.strip() else None
 
 
+def env_ai_secret(env_name: str) -> str | None:
+    return os.environ.get(env_name, "").strip() or None
+
+
 def llm_provider(base_url: str | None, model: str) -> str:
     marker = f"{base_url or ''} {model}".casefold()
     if "deepseek" in marker:
@@ -814,6 +818,9 @@ def extract_jobs(
 def resolve_llm_settings(base_url: str | None, model: str) -> tuple[str | None, str]:
     resolved_base_url = base_url or os.environ.get("OPENAI_BASE_URL")
     model_marker = model.casefold()
+    has_openai_env_key = bool(env_ai_secret("OPENAI_API_KEY"))
+    has_deepseek_env_key = bool(env_ai_secret("DEEPSEEK_API_KEY"))
+    has_minimax_env_key = bool(env_ai_secret("MINIMAX_API_KEY") or env_ai_secret("MINIMAX_TOKEN_PLAN_KEY"))
     has_openai_key = bool(ai_secret("OPENAI_API_KEY"))
     has_deepseek_key = bool(ai_secret("DEEPSEEK_API_KEY"))
     has_minimax_key = bool(os.environ.get("MINIMAX_API_KEY") or ai_secret("MINIMAX_TOKEN_PLAN_KEY"))
@@ -824,17 +831,28 @@ def resolve_llm_settings(base_url: str | None, model: str) -> tuple[str | None, 
     if resolved_base_url and "minimax" in resolved_base_url.casefold() and model == DEFAULT_MODEL:
         model = DEFAULT_MINIMAX_MODEL
 
-    # If OpenAI is not configured, never pair the default OpenAI model name with
-    # a DeepSeek or MiniMax key. DeepSeek Flash is the fast-lane default because
-    # local evals showed better latency and JSON reliability for the current
-    # monitor workload; MiniMax remains explicit or the fallback when it is the
-    # only non-OpenAI key.
-    if model == DEFAULT_MODEL and not resolved_base_url and not has_openai_key and has_deepseek_key:
-        resolved_base_url = os.environ.get("DEEPSEEK_BASE_URL") or DEFAULT_DEEPSEEK_BASE_URL
-        model = DEFAULT_DEEPSEEK_MODEL
-    if model == DEFAULT_MODEL and not resolved_base_url and not has_openai_key and has_minimax_key:
-        resolved_base_url = os.environ.get("MINIMAX_BASE_URL") or default_minimax_base_url()
-        model = DEFAULT_MINIMAX_MODEL
+    # Explicit environment keys are treated as the current process intent before
+    # falling back to local secure storage. This keeps unit tests and operator
+    # shells from being silently rerouted by an unrelated key saved in keyring.
+    if model == DEFAULT_MODEL and not resolved_base_url:
+        if has_openai_env_key:
+            return resolved_base_url, model
+        if has_deepseek_env_key:
+            resolved_base_url = os.environ.get("DEEPSEEK_BASE_URL") or DEFAULT_DEEPSEEK_BASE_URL
+            model = DEFAULT_DEEPSEEK_MODEL
+        elif has_minimax_env_key:
+            resolved_base_url = os.environ.get("MINIMAX_BASE_URL") or default_minimax_base_url()
+            model = DEFAULT_MINIMAX_MODEL
+        elif has_openai_key:
+            return resolved_base_url, model
+        elif has_deepseek_key:
+            # DeepSeek Flash is the fast-lane default because local evals showed
+            # better latency and JSON reliability for the current monitor workload.
+            resolved_base_url = os.environ.get("DEEPSEEK_BASE_URL") or DEFAULT_DEEPSEEK_BASE_URL
+            model = DEFAULT_DEEPSEEK_MODEL
+        elif has_minimax_key:
+            resolved_base_url = os.environ.get("MINIMAX_BASE_URL") or default_minimax_base_url()
+            model = DEFAULT_MINIMAX_MODEL
     return resolved_base_url, model
 
 

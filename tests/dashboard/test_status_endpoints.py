@@ -56,6 +56,7 @@ class DashboardStatusEndpointTests(unittest.TestCase):
         self.assertEqual(handler.payload["schema_version"], "desk_health_v1")
         self.assertEqual(handler.payload["app"], "tgcs-signal-desk")
         self.assertIn("desk_notification_token_v1", handler.payload["capabilities"])
+        self.assertIn("desk_bot_gateway_status_v1", handler.payload["capabilities"])
 
 
     def test_notification_token_status_endpoint_requires_loopback_and_returns_status(self):

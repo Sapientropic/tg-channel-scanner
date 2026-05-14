@@ -80,7 +80,7 @@ function ActionProofStrip({
     },
     {
       label: "Decision",
-      value: decisionStatusLabel(card.decision_status),
+      value: decisionProofValue(card.decision_status, decisionState),
       title: decisionProofTitle(decisionState),
     },
     {
@@ -140,6 +140,15 @@ function decisionProofTitle(decisionState: NonNullable<ReviewCard["item"]["decis
     decisionState.last_seen_at ? `Last seen ${formatDate(decisionState.last_seen_at)}` : "",
   ].filter(Boolean);
   return parts.join(" · ") || "Novelty state from local decision memory";
+}
+
+function decisionProofValue(status: string, decisionState: NonNullable<ReviewCard["item"]["decision_state"]>) {
+  const label = decisionStatusLabel(status);
+  const seenCount = Number(decisionState.seen_count || 0);
+  if (seenCount > 1) {
+    return `${label} ${seenCount}x`;
+  }
+  return label;
 }
 
 function reviewStatusLabel(status?: string) {

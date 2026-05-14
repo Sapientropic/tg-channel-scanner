@@ -2,6 +2,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
 import { InboxView, nextNonEmptyReviewFilter } from "./inbox";
+import { ReviewCardArticle } from "./inbox/review-card";
 import { inboxFilterOptions } from "../domain/inbox";
 import type { DashboardState, ReviewCard } from "../domain/types";
 
@@ -224,6 +225,31 @@ describe("InboxView", () => {
     expect(html).toContain("Sent");
     expect(html).toContain("Salary Range");
     expect(html).toContain("Compensation");
+  });
+
+  it("shows repeat counts directly in the decision proof chip", () => {
+    const html = renderToStaticMarkup(
+      <ReviewCardArticle
+        card={card({
+          decision_status: "seen",
+          item: {
+            why: "Same role was posted again.",
+            decision_state: {
+              status: "seen",
+              seen_count: 3,
+              first_seen_at: "2026-05-10T09:00:00Z",
+              last_seen_at: "2026-05-12T09:00:00Z",
+            },
+          },
+        })}
+        latestRunId="run-1"
+        profileReportNames={{ "jobs-fast": "Jobs Report" }}
+        act={vi.fn()}
+        busy={false}
+      />,
+    );
+
+    expect(html).toContain("Seen 3x");
   });
 
   it("surfaces card-level undo for saved review decisions", () => {
