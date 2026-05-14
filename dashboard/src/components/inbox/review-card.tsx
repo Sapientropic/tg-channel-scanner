@@ -2,19 +2,17 @@ import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from 
 import { Archive, Ban, Bookmark, Check, ExternalLink, FileDiff, Play, RotateCcw, Send, X } from "lucide-react";
 
 import { artifactFormatFromPath, artifactHref, reportProfileName, toneClass } from "../../domain/display";
-import { decisionStatusLabel, formatDate, profileDisplayName, sourceRefLabel, titleCaseLabel } from "../../domain/format";
+import { formatDate, profileDisplayName, sourceRefLabel, titleCaseLabel } from "../../domain/format";
 import { sourceRefUrl, telegramMessageUrl } from "../../domain/inbox";
 import type { ReviewCard, SourceRef } from "../../domain/types";
 
 export function ReviewCardArticle({
   card,
-  latestRunId,
   profileReportNames,
   act,
   busy,
 }: {
   card: ReviewCard;
-  latestRunId?: string;
   profileReportNames: Record<string, string>;
   act: (cardId: string, action: string, note?: string) => void;
   busy: boolean;
@@ -38,205 +36,114 @@ export function ReviewCardArticle({
           showFollowUp={showFollowUp}
         />
         <p className="reason">{card.item.why || "Decision reason unavailable."}</p>
-        <ActionProofStrip card={card} latestRunId={latestRunId} profileReportNames={profileReportNames} />
+        <CardContextStrip card={card} />
         <div className="meta-row">
           <span>{reportProfileName(card.profile_id, profileReportNames)}</span>
-          <span>{decisionStatusLabel(card.decision_status)}</span>
           <span className={`opportunity-badge status-${opportunityStatusTone(card.opportunity_status)}`}>
             {opportunityStatusLabel(card.opportunity_status)}
           </span>
           <span>{formatDate(card.updated_at)}</span>
         </div>
-        <SourceRefs refs={card.source_refs} />
-        {card.report_path && (
-          <ReportArtifactChip
-            path={card.report_path}
-            profileId={card.profile_id}
-            profileReportNames={profileReportNames}
-            updatedAt={card.updated_at}
-          />
-        )}
+        <CardSourceRow card={card} profileReportNames={profileReportNames} />
       </div>
       <CardActions card={card} act={act} busy={busy} setShowFollowUp={setShowFollowUp} showFollowUp={showFollowUp} />
     </article>
   );
 }
 
-function ActionProofStrip({
-  card,
-  latestRunId,
-  profileReportNames,
-}: {
-  card: ReviewCard;
-  latestRunId?: string;
-  profileReportNames: Record<string, string>;
-}) {
+function CardContextStrip({ card }: { card: ReviewCard }) {
+  const items = cardContextItems(card);
+  if (!items.length) {
+    return null;
+  }
+  return (
+    <div className="card-context-strip" aria-label="Card context">
+      {items.map((item) => (
+        <span className="card-context-chip" key={item.key} title={item.title}>
+          <strong>{item.label}</strong>
+          <span>{item.value}</span>
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function cardContextItems(card: ReviewCard): ContextItem[] {
+  return [noveltyContextItem(card), changeContextItem(card), alertContextItem(card)].filter(Boolean).slice(0, 3) as ContextItem[];
+}
+
+function noveltyContextItem(card: ReviewCard): ContextItem | null {
   const decisionState = card.item.decision_state ?? {};
-  const decisionItem = {
-    label: "Decision",
-    value: decisionProofValue(card.decision_status, decisionState),
-    title: decisionProofTitle(decisionState),
-    key: "decision",
+  const status = String(decisionState.status || card.decision_status || "").toLowerCase();
+  const seenCount = Number(decisionState.seen_count || 0);
+  if (status === "new") {
+    return {
+      label: "New",
+      value: "First time",
+      title: "First time this card appeared in the local review history",
+      key: "novelty-new",
+    };
+  }
+  if (status === "changed") {
+    return {
+      label: "Updated",
+      value: "Since last scan",
+      title: "This card changed since an earlier review",
+      key: "novelty-changed",
+    };
+  }
+  if (seenCount > 1) {
+    return {
+      label: "Seen before",
+      value: `${seenCount} times`,
+      title: "Repeated card from the local review history",
+      key: "novelty-seen-count",
+    };
+  }
+  if (status === "seen" || status === "recurring") {
+    return {
+      label: "Seen before",
+      value: "Repeated",
+      title: "Repeated card from the local review history",
+      key: "novelty-seen",
+    };
+  }
+  return null;
+}
+
+function changeContextItem(card: ReviewCard): ContextItem | null {
+  const decisionState = card.item.decision_state ?? {};
+  const fields = (decisionState.material_change_fields ?? []).slice(0, 2);
+  if (!fields.length) {
+    return null;
+  }
+  const [first = "", ...rest] = fields;
+  return {
+    label: "Changed",
+    value: rest.length ? `${titleCaseLabel(first)} +${rest.length}` : titleCaseLabel(first),
+    title: "Important fields that changed since this card was last seen",
+    key: "changed-fields",
   };
-  const evidenceItem = {
-    label: "Evidence",
-    value: sourceRefCountLabel(card.source_refs.length),
-    title: sourceRefProofTitle(card.source_refs),
-    key: "evidence",
-  };
-  const runItem = {
-    label: "Run",
-    value: runProofLabel(card, latestRunId),
-    title: runProofTitle(card, latestRunId),
-    key: "run",
-  };
-  const alertItem = {
+}
+
+function alertContextItem(card: ReviewCard): ContextItem | null {
+  if (!card.alert_summary?.alert_count) {
+    return null;
+  }
+  return {
     label: "Alert",
     value: alertProofLabel(card),
     title: alertProofTitle(card),
     key: "alert",
   };
-  const proofItems = [
-    {
-      label: "Profile",
-      value: reportProfileName(card.profile_id, profileReportNames),
-      title: "Profile that evaluated this card",
-      key: "profile",
-    },
-    decisionItem,
-    {
-      label: "Review",
-      value: reviewStatusLabel(card.status),
-      title: "Current local review decision",
-      key: "review",
-    },
-    evidenceItem,
-    runItem,
-    alertItem,
-  ];
-  const signals = (decisionState.signals ?? []).slice(0, 2);
-  signals.forEach((signal) => {
-    proofItems.push({
-      label: "Signal",
-      value: titleCaseLabel(signal),
-      title: "Decision signal carried by this review card",
-      key: `signal-${signal}`,
-    });
-  });
-  const materialChangeFields = (decisionState.material_change_fields ?? []).slice(0, 2);
-  materialChangeFields.forEach((field) => {
-    proofItems.push({
-      label: "Changed",
-      value: titleCaseLabel(field),
-      title: "Material field that changed since earlier review memory",
-      key: `changed-${field}`,
-    });
-  });
-  const compactItems = compactProofItems({
-    decisionItem,
-    evidenceItem,
-    runItem,
-    alertItem,
-    materialChangeFields,
-    decisionState,
-  });
-  const compactKeys = new Set(compactItems.map((item) => item.key));
-  const extraItems = proofItems.filter((item) => !compactKeys.has(item.key));
-
-  return (
-    <div className="action-proof-strip" aria-label="Action proof">
-      {compactItems.map((item) => (
-        <span className="action-proof-chip" key={item.key} title={item.title}>
-          <strong>{item.label}</strong>
-          <span>{item.value}</span>
-        </span>
-      ))}
-      {extraItems.length > 0 && (
-        <details className="action-proof-more">
-          <summary>More proof</summary>
-          <div>
-            {extraItems.map((item) => (
-              <span className="action-proof-chip is-secondary" key={item.key} title={item.title}>
-                <strong>{item.label}</strong>
-                <span>{item.value}</span>
-              </span>
-            ))}
-          </div>
-        </details>
-      )}
-    </div>
-  );
 }
 
-function compactProofItems({
-  decisionItem,
-  evidenceItem,
-  runItem,
-  alertItem,
-  materialChangeFields,
-  decisionState,
-}: {
-  decisionItem: ProofItem;
-  evidenceItem: ProofItem;
-  runItem: ProofItem;
-  alertItem: ProofItem;
-  materialChangeFields: string[];
-  decisionState: NonNullable<ReviewCard["item"]["decision_state"]>;
-}) {
-  const changedItem = compactChangeItem(materialChangeFields, decisionState);
-  const deliveryItem = alertItem.value === "Not sent" ? runItem : alertItem;
-  return [decisionItem, changedItem, evidenceItem, deliveryItem].filter(Boolean).slice(0, 4) as ProofItem[];
-}
-
-function compactChangeItem(
-  fields: string[],
-  decisionState: NonNullable<ReviewCard["item"]["decision_state"]>,
-): ProofItem | null {
-  if (fields.length > 0) {
-    const [first = "", ...rest] = fields;
-    return {
-      label: "Change",
-      value: rest.length ? `${titleCaseLabel(first)} +${rest.length}` : titleCaseLabel(first),
-      title: "Material fields that changed since earlier review memory",
-      key: "change-summary",
-    };
-  }
-  const signal = decisionState.signals?.[0];
-  if (!signal) {
-    return null;
-  }
-  return {
-    label: "Signal",
-    value: titleCaseLabel(signal),
-    title: "Top decision signal carried by this review card",
-    key: "signal-summary",
-  };
-}
-
-type ProofItem = {
+type ContextItem = {
   label: string;
   value: string;
   title: string;
   key: string;
 };
-
-function decisionProofTitle(decisionState: NonNullable<ReviewCard["item"]["decision_state"]>) {
-  const parts = [
-    decisionState.seen_count ? `Seen ${decisionState.seen_count} time${decisionState.seen_count === 1 ? "" : "s"}` : "",
-    decisionState.first_seen_at ? `First seen ${formatDate(decisionState.first_seen_at)}` : "",
-    decisionState.last_seen_at ? `Last seen ${formatDate(decisionState.last_seen_at)}` : "",
-  ].filter(Boolean);
-  return parts.join(" · ") || "Novelty state from local decision memory";
-}
-
-function decisionProofValue(status: string, decisionState: NonNullable<ReviewCard["item"]["decision_state"]>) {
-  const label = decisionStatusLabel(status);
-  const seenCount = Number(decisionState.seen_count || 0);
-  if (seenCount > 1) {
-    return `${label} ${seenCount}x`;
-  }
-  return label;
-}
 
 function reviewStatusLabel(status?: string) {
   const normalized = String(status || "pending").toLowerCase();
@@ -248,41 +155,6 @@ function reviewStatusLabel(status?: string) {
     skipped: "Deprioritized",
   };
   return labels[normalized] || titleCaseLabel(normalized);
-}
-
-function sourceRefCountLabel(count: number) {
-  if (count <= 0) {
-    return "No source ref";
-  }
-  return `${count} source ref${count === 1 ? "" : "s"}`;
-}
-
-function sourceRefProofTitle(refs: SourceRef[]) {
-  if (!refs.length) {
-    return "No Telegram source reference was saved for this card";
-  }
-  return refs
-    .slice(0, 3)
-    .map((ref) => `@${String(ref.channel || "").replace(/^@+/, "")} #${String(ref.id || "")}`)
-    .join(" · ");
-}
-
-function runProofLabel(card: ReviewCard, latestRunId?: string) {
-  if (!card.last_run_id) {
-    return "Run unknown";
-  }
-  if (latestRunId && card.last_run_id === latestRunId) {
-    return card.report_path ? "Latest + report" : "Latest run";
-  }
-  return card.report_path ? "Prior + report" : "Prior run";
-}
-
-function runProofTitle(card: ReviewCard, latestRunId?: string) {
-  if (!card.last_run_id) {
-    return "No run id is attached to this card";
-  }
-  const relation = latestRunId && card.last_run_id === latestRunId ? "latest dashboard run" : "earlier run";
-  return `From ${relation}: ${card.last_run_id}${card.report_path ? " with report artifact" : ""}`;
 }
 
 function alertProofLabel(card: ReviewCard) {
@@ -460,9 +332,9 @@ function ReportArtifactChip({
   const label = profileReportNames[profileId] || `${profileDisplayName(profileId)} Report`;
   const format = artifactFormatFromPath(path);
   return (
-    <a className="report-chip" href={artifactHref(path)} aria-label={`Open ${label}`} rel="noreferrer" target="_blank" title={label}>
+    <a className="report-chip" href={artifactHref(path)} aria-label={`Open run details: ${label}`} rel="noreferrer" target="_blank" title={label}>
       <ExternalLink size={13} />
-      <span>Open report</span>
+      <span>Run details</span>
       <small>
         {format} · {formatDate(updatedAt)}
       </small>
@@ -669,42 +541,63 @@ function CardActions({
   );
 }
 
-function SourceRefs({ refs }: { refs: SourceRef[] }) {
+function CardSourceRow({
+  card,
+  profileReportNames,
+}: {
+  card: ReviewCard;
+  profileReportNames: Record<string, string>;
+}) {
+  return (
+    <div className="source-row" aria-label="Original sources and run details">
+      <SourceLinks refs={card.source_refs} />
+      {card.report_path && (
+        <ReportArtifactChip
+          path={card.report_path}
+          profileId={card.profile_id}
+          profileReportNames={profileReportNames}
+          updatedAt={card.updated_at}
+        />
+      )}
+    </div>
+  );
+}
+
+function SourceLinks({ refs }: { refs: SourceRef[] }) {
   if (!refs.length) {
-    return (
-      <div className="source-row">
-        <span className="source-chip muted">source refs unavailable</span>
-      </div>
-    );
+    return <span className="source-chip muted">Original unavailable</span>;
   }
   return (
-    <div className="source-row" aria-label="Source references">
-      {refs.slice(0, 4).map((ref) => {
+    <>
+      {refs.slice(0, 4).map((ref, index) => {
         const href = sourceRefUrl(ref);
         const label = sourceRefLabel(ref);
         const sourceTitle = `@${String(ref.channel || "").replace(/^@+/, "")} #${String(ref.id || "")}`;
+        const actionLabel = index === 0 ? "Open original" : `Original ${index + 1}`;
         if (!href) {
           return (
-            <span className="source-chip" key={`${ref.channel}-${ref.id}`} title={sourceTitle}>
-              {label}
+            <span className={index === 0 ? "source-chip source-primary" : "source-chip"} key={`${ref.channel}-${ref.id}`} title={sourceTitle}>
+              <span>{index === 0 ? "Original unavailable" : actionLabel}</span>
+              <small>{label}</small>
             </span>
           );
         }
         return (
           <a
-            className="source-chip source-link"
+            className={index === 0 ? "source-chip source-link source-primary" : "source-chip source-link"}
             href={href}
             key={`${ref.channel}-${ref.id}`}
             target="_blank"
             rel="noreferrer"
             title={telegramMessageUrl(ref) || ref.url ? `Open Telegram source: ${sourceTitle}` : `Open Telegram channel: ${label}`}
           >
-            <span>{label}</span>
+            <span>{actionLabel}</span>
+            <small>{label}</small>
             <ExternalLink size={12} aria-hidden="true" />
           </a>
         );
       })}
-      {refs.length > 4 && <span className="source-chip muted">+{refs.length - 4}</span>}
-    </div>
+      {refs.length > 4 && <span className="source-chip muted">+{refs.length - 4} originals</span>}
+    </>
   );
 }

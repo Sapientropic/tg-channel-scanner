@@ -74,8 +74,8 @@ export function ProfilePatchCard({
               <p>No readable rule changes were found. Use expert details before applying.</p>
             )}
             <details className="expert-diff-details">
-              <summary>Expert raw diff</summary>
-              <pre>{patch.diff_text || "No diff body recorded."}</pre>
+              <summary>Expert raw change</summary>
+              <pre>{patch.diff_text || "No raw change recorded."}</pre>
             </details>
           </div>
         </details>
@@ -110,7 +110,7 @@ export function ProfilePatchCard({
               type="button"
               onClick={() => replayPatch(patch.patch_id)}
               disabled={busy}
-              title="Create a fresh pending diff from this reverted profile change if the file still matches the saved snapshot"
+              title="Create a fresh pending profile change if the file still matches the saved snapshot"
             >
               <RefreshCw size={15} />
               <span>Replay</span>

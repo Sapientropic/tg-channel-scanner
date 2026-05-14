@@ -305,8 +305,7 @@
       "reason"
       "proof"
       "meta"
-      "sources"
-      "report";
+      "sources";
     grid-template-columns: 1fr;
     gap: 8px;
     padding: 12px;
@@ -337,25 +336,19 @@
   }
 
   .review-card .meta-row span,
-  .review-card .action-proof-chip,
+  .review-card .card-context-chip,
   .review-card .source-chip.muted {
     border: 1px solid var(--wash-paper-14);
     background: var(--wash-paper-7);
     color: var(--muted);
   }
 
-  .review-card .action-proof-chip strong {
+  .review-card .card-context-chip strong {
     color: color-mix(in oklch, var(--paper) 66%, var(--muted));
   }
 
-  .review-card .action-proof-chip span {
+  .review-card .card-context-chip span {
     color: color-mix(in oklch, var(--paper) 82%, var(--muted));
-  }
-
-  .review-card .action-proof-more summary {
-    border-color: var(--wash-paper-14);
-    background: var(--wash-paper-7);
-    color: color-mix(in oklch, var(--paper) 76%, var(--muted));
   }
 
   .review-card .source-chip,
@@ -764,7 +757,7 @@
   }
 
   .review-card .meta-row,
-  .review-card .action-proof-strip,
+  .review-card .card-context-strip,
   .review-card .source-row {
     gap: 5px;
   }

@@ -1,4 +1,5 @@
 import { channelDisplayName, diagnosticLabel, formatDate, formatPercent } from "./format";
+import { reviewQueueCount } from "./inbox";
 import type { DashboardState, Metric, OpportunitySummary, Run, RunDayBucket, SourceStat, Tab } from "./types";
 
 export function buildMetrics(state: DashboardState): Metric[] {
@@ -21,7 +22,7 @@ export function buildMetrics(state: DashboardState): Metric[] {
     {
       label: "Profiles",
       value: String(activeProfiles),
-      detail: `${pendingPatches} diff${pendingPatches === 1 ? "" : "s"}`,
+      detail: `${pendingPatches} profile change${pendingPatches === 1 ? "" : "s"}`,
       tone: "blue",
       meter: state.profiles.length ? activeProfiles / state.profiles.length : 0,
     },
@@ -33,7 +34,7 @@ export function buildTabCounts(state: DashboardState, actionCount = 0): Record<T
   const feedbackCount = (state.feedback_summary?.exportable_count ?? 0) + (state.feedback_summary?.pending_profile_diff_count ?? 0);
   const deliveryBlockers = state.delivery_targets.filter((target) => !target.enabled).length;
   return {
-    inbox: state.inbox.length,
+    inbox: reviewQueueCount(state.inbox),
     actions: actionCount,
     profiles: state.profiles.length,
     runs: state.runs.length,
@@ -42,16 +43,22 @@ export function buildTabCounts(state: DashboardState, actionCount = 0): Record<T
 }
 
 export function buildBoardMeta(activeTab: Tab, state: DashboardState, actionCount = 0) {
+  const reviewCount = reviewQueueCount(state.inbox);
+  const handledCount = state.inbox.length - reviewCount;
   const metas: Record<Tab, { title: string; detail: string; value: string; tone: "amber" | "teal" | "rust" | "blue" }> = {
     inbox: {
       title: "Review",
-      detail: state.inbox.length ? "Pending cards sorted by latest signal." : "Queue clear.",
-      value: `${state.inbox.length}`,
+      detail: reviewCount
+        ? "Cards still need a decision."
+        : handledCount
+          ? `All caught up. ${handledCount} handled card${handledCount === 1 ? "" : "s"} saved as history.`
+          : "Queue clear.",
+      value: `${reviewCount}`,
       tone: "amber",
     },
     actions: {
       title: "Start",
-      detail: "Guided setup and run controls for people who do not want a CLI.",
+      detail: "Guided setup and run controls without command-line steps.",
       value: `${actionCount}`,
       tone: "teal",
     },
@@ -59,7 +66,7 @@ export function buildBoardMeta(activeTab: Tab, state: DashboardState, actionCoun
       title: "Profiles",
       detail: `${state.profiles.filter((profile) => profile.enabled).length} enabled profiles, ${
         state.profile_patch_suggestions.filter((patch) => patch.status === "pending").length
-      } pending diffs.`,
+      } draft profile changes.`,
       value: `${state.profiles.length}`,
       tone: "blue",
     },
@@ -138,9 +145,9 @@ export function formatRunQuality(quality?: Run["quality"]) {
     return "Quality not recorded";
   }
   if (!quality.llm_provider) {
-    return quality.semantic_stage ? diagnosticLabel(quality.semantic_stage) : "Semantic stage not recorded";
+    return quality.semantic_stage ? diagnosticLabel(quality.semantic_stage) : "Run quality not recorded";
   }
-  const provider = quality.llm_provider || (quality.semantic_stage ? diagnosticLabel(quality.semantic_stage) : "Semantic stage not recorded");
+  const provider = quality.llm_provider || (quality.semantic_stage ? diagnosticLabel(quality.semantic_stage) : "Run quality not recorded");
   const cache =
     typeof quality.cache_hit_rate === "number" ? `${Math.round(quality.cache_hit_rate * 100)}% cache` : "";
   const latency = typeof quality.latency_ms === "number" ? `${quality.latency_ms}ms` : "";
@@ -162,10 +169,10 @@ export function formatRunDiagnosticAction(quality?: Run["quality"]) {
     return "Next: widen scan window or check sources";
   }
   if (code === "llm_unavailable") {
-    return "Next: check LLM key";
+    return "Next: check AI key";
   }
   if (code === "llm_output_truncated" || code === "semantic_json_invalid") {
-    return "Next: raise semantic limits or narrow scope";
+    return "Next: reduce scan size or raise AI output limit";
   }
   if (code === "all_filtered_out") {
     return "Next: loosen profile or prefilter";
@@ -174,9 +181,9 @@ export function formatRunDiagnosticAction(quality?: Run["quality"]) {
     return "Optional: enable OCR if media matters";
   }
   if (code === "missing_scan_metadata") {
-    return "Next: keep scan metadata sidecar";
+    return "Next: rerun from Desk so scan details are saved";
   }
-  return "Next: open report diagnostics";
+  return "Next: open run details";
 }
 
 export function formatRunDiagnostics(quality?: Run["quality"]) {

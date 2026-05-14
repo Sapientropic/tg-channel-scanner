@@ -65,10 +65,10 @@ describe("dashboard projections", () => {
     expect(formatRunQuality()).toBe("Quality not recorded");
     expect(formatRunQuality({ llm_provider: "deepseek", cache_hit_rate: 0.42, latency_ms: 1200 })).toBe("deepseek / 42% cache / 1200ms");
     expect(formatRunDiagnostics({ diagnostic_count: 1, top_diagnostic_code: "channel_failures" })).toBe("Source access failed");
-    expect(formatRunDiagnosticAction({ diagnostic_count: 1, top_diagnostic_code: "llm_unavailable" })).toBe("Next: check LLM key");
-    expect(formatRunDiagnosticAction({ diagnostic_count: 1, top_diagnostic_code: "llm_output_truncated" })).toBe("Next: raise semantic limits or narrow scope");
+    expect(formatRunDiagnosticAction({ diagnostic_count: 1, top_diagnostic_code: "llm_unavailable" })).toBe("Next: check AI key");
+    expect(formatRunDiagnosticAction({ diagnostic_count: 1, top_diagnostic_code: "llm_output_truncated" })).toBe("Next: reduce scan size or raise AI output limit");
     expect(formatRunDiagnosticAction({ diagnostic_count: 1, top_diagnostic_code: "source_access_failed" })).toBe("Next: fix source access");
-    expect(runHealthDetail({ diagnostic_count: 1, top_diagnostic_code: "scan_incomplete" })).toBe("Semantic stage not recorded · Next: inspect incomplete sources");
+    expect(runHealthDetail({ diagnostic_count: 1, top_diagnostic_code: "scan_incomplete" })).toBe("Run quality not recorded · Next: inspect incomplete sources");
   });
 
   it("keeps blocking latest-run summaries visible even when the inbox has action cards", () => {

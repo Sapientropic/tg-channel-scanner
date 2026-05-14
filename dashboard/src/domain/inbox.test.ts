@@ -6,6 +6,9 @@ import {
   inboxFilterOptions,
   isActionableInboxCard,
   isMalformedInboxCard,
+  isReviewQueueCard,
+  handledInboxCount,
+  reviewQueueCount,
   setupCheckLabel,
   setupCheckTone,
   setupNeedsAttention,
@@ -33,6 +36,21 @@ describe("inbox domain helpers", () => {
     expect(isActionableInboxCard(cards[2], "run-2")).toBe(false);
   });
 
+  it("excludes already handled cards from the review queue", () => {
+    const handledCards = [
+      { rating: "high", decision_status: "new", status: "pending", opportunity_status: "open", last_run_id: "run-2" },
+      { rating: "high", decision_status: "new", status: "pending", opportunity_status: "dismissed", last_run_id: "run-2" },
+      { rating: "high", decision_status: "new", status: "false_positive", opportunity_status: "open", last_run_id: "run-2" },
+    ];
+
+    expect(isReviewQueueCard(handledCards[0])).toBe(true);
+    expect(isActionableInboxCard(handledCards[1], "run-2")).toBe(false);
+    expect(isActionableInboxCard(handledCards[2], "run-2")).toBe(false);
+    expect(reviewQueueCount(handledCards)).toBe(1);
+    expect(handledInboxCount(handledCards)).toBe(2);
+    expect(filterInboxCards(handledCards, "handled")).toEqual([handledCards[1], handledCards[2]]);
+  });
+
   it("keeps dirty API values from crashing filters", () => {
     expect(() => filterInboxCards(cards, "actionable", "run-2")).not.toThrow();
     expect(filterInboxCards(cards, "actionable", "run-2")).toEqual([cards[0]]);
@@ -58,13 +76,13 @@ describe("inbox domain helpers", () => {
 
   it("builds stable filter options for empty latest-action states", () => {
     expect(inboxFilterOptions(cards, "run-2")).toEqual([
-      { id: "actionable", label: "Latest action", count: 1 },
-      { id: "all", label: "All", count: 7 },
+      { id: "actionable", label: "Priority now", count: 1 },
+      { id: "all", label: "All cards", count: 7 },
       { id: "high", label: "High", count: 2 },
-      { id: "new_changed", label: "New/Changed", count: 2 },
-      { id: "low_medium", label: "Low/Medium", count: 2 },
+      { id: "new_changed", label: "New/Updated", count: 2 },
+      { id: "low_medium", label: "Lower priority", count: 2 },
     ]);
-    expect(inboxFilterOptions([], "run-2")[0]).toEqual({ id: "actionable", label: "Latest action", count: 0 });
+    expect(inboxFilterOptions([], "run-2")[0]).toEqual({ id: "actionable", label: "Priority now", count: 0 });
   });
 
   it("maps setup checklist states for inbox empty states", () => {

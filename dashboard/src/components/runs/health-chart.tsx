@@ -140,12 +140,12 @@ function runHealthDecisionVisibleDetail(decision: RunHealthDecision) {
     return "Open Review before live alerts.";
   }
   if (decision.headline.startsWith("Review ")) {
-    return "Open Review to triage signals.";
+    return "Open Review to handle cards.";
   }
   if (decision.headline === "Fix failed scans") {
     return "Fix channels, check setup, then scan again.";
   }
-  if (decision.headline === "Fix semantic extraction") {
+  if (decision.headline === "Fix AI matching") {
     return "Tune profile, check setup, then scan again.";
   }
   return decision.detail;

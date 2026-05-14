@@ -258,7 +258,7 @@ def feedback_next_action(exportable_count: int, follow_up_count: int, patch_coun
     if exportable_count:
         return {
             "label": "Generate profile suggestions",
-            "detail": "Turn confirmed review decisions into local profile drafts. JSON export is only for CLI fallback.",
+            "detail": "Turn confirmed review decisions into local profile drafts. The raw export stays in Advanced export.",
             "target_tab": "settings",
             "action_id": "feedback_profile_suggestions",
         }
@@ -579,7 +579,7 @@ def validation_summary(
     elif action_count == 0:
         next_action = {
             "label": "Review cards",
-            "detail": "Mark keep, skip, false positive, or follow-up so the validation window has behavior evidence.",
+            "detail": "Mark what happened so future matches improve.",
             "command": "",
         }
     elif by_action.get("follow_up", 0) > 0:

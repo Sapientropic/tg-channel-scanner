@@ -60,21 +60,21 @@ export function buildRunEvidenceGroups(runs: Run[]): RunEvidenceGroup[] {
       key: "attention",
       tone: latestFailed ? "danger" : "quiet",
       title: latestFailed ? "Failed scans to fix" : "Earlier failed scans",
-      detail: latestFailed ? "Use the repair buttons above first" : "History only after latest OK",
+      detail: latestFailed ? "Use the repair buttons above first" : "Latest scan recovered",
       repairKind: latestRepairKind,
       runs: visibleRuns.filter((run) => evidenceBucket(run) === "attention"),
     },
     {
       key: "review",
       tone: "info",
-      title: "Review work",
+      title: "Cards to review",
       detail: "Cards and alert candidates",
       runs: visibleRuns.filter((run) => evidenceBucket(run) === "review"),
     },
     {
       key: "clean",
       tone: "quiet",
-      title: "Clean background scans",
+      title: "Clean scans",
       detail: "No user action needed",
       runs: visibleRuns.filter((run) => evidenceBucket(run) === "clean"),
     },
@@ -124,7 +124,7 @@ export function buildRunOutcome(run: Run): RunOutcome {
     const repairKind = runFailureRepairKind(run.quality?.top_diagnostic_code);
     return {
       tone: "danger",
-      title: repairKind === "profile_scope" ? "Semantic extraction failed" : "Failed scan",
+      title: repairKind === "profile_scope" ? "AI matching needs attention" : "Failed scan",
       detail: failedRunRepairDetail(repairKind, run.quality?.top_diagnostic_code),
     };
   }
@@ -132,7 +132,7 @@ export function buildRunOutcome(run: Run): RunOutcome {
     return {
       tone: optionalOcr ? "info" : diagnosticFailures > 0 ? "danger" : diagnosticWarnings > 0 ? "warn" : "info",
       title: formatRunDiagnostics(run.quality),
-      detail: formatRunDiagnosticAction(run.quality) || "Open report diagnostics.",
+      detail: formatRunDiagnosticAction(run.quality) || "Open run details.",
     };
   }
   if (alerts > 0) {
@@ -159,7 +159,7 @@ export function buildRunOutcome(run: Run): RunOutcome {
   return {
     tone: "ok",
     title: "Clean scan",
-    detail: "No cards, alerts, or diagnostics.",
+    detail: "No cards or alerts.",
   };
 }
 
@@ -221,7 +221,7 @@ export function buildRunHealthDecision(runs: Run[]): RunHealthDecision {
     const repairKind = runFailureRepairKind(latestIssueCode);
     return {
       tone: "danger",
-      headline: repairKind === "profile_scope" ? "Fix semantic extraction" : "Fix failed scans",
+      headline: repairKind === "profile_scope" ? "Fix AI matching" : "Fix failed scans",
       detail: failedRunRepairDetail(repairKind, latestIssueCode),
       repairKind,
     };
@@ -229,10 +229,10 @@ export function buildRunHealthDecision(runs: Run[]): RunHealthDecision {
   if (latestDiagnosticFailures > 0 || latestDiagnosticWarnings > 0) {
     return {
       tone: latestDiagnosticFailures > 0 ? "danger" : "warn",
-      headline: "Diagnostics need attention",
+      headline: "Scan needs attention",
       detail: latestIssueCode
         ? formatRunDiagnosticAction({ diagnostic_count: 1, top_diagnostic_code: latestIssueCode })
-        : "Open the latest report diagnostics before tuning profiles.",
+        : "Open the latest run details before tuning profiles.",
     };
   }
   if (alerts > 0) {
@@ -259,7 +259,7 @@ export function buildRunHealthDecision(runs: Run[]): RunHealthDecision {
   return {
     tone: totalRuns ? "ok" : "info",
     headline: totalRuns ? "No urgent run issue" : "Run history is empty",
-    detail: totalRuns ? "Recent scans completed without cards, alerts, or diagnostics." : "Run a local scan before judging source quality.",
+    detail: totalRuns ? "Recent scans completed without cards or alerts." : "Run a local scan before judging source quality.",
   };
 }
 
@@ -278,7 +278,7 @@ function failedRunRepairDetail(kind: NonNullable<RunHealthDecision["repairKind"]
     if (code === "all_filtered_out") {
       return "Open Profiles to loosen matching rules or prefilter keywords, then run a fresh practice scan.";
     }
-    return "Open Profiles to raise semantic limits, narrow source scope, or reduce messages per run, then scan again.";
+    return "Open Profiles to reduce scan size or raise the AI output limit, then scan again.";
   }
   if (kind === "source_access") {
     return "Use Fix channels to restore saved channels, Check setup to verify login/API/profile, then Run fresh scan. No live alert is sent.";

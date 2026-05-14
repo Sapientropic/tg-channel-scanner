@@ -9,7 +9,7 @@ from typing import Any, Iterable
 
 from scripts import source_insights as _source_insights
 from scripts.dashboard_profiles import profile_display_label
-from scripts.monitor_common import PENDING_STATUS, PROJECT_ROOT, parse_iso_datetime
+from scripts.monitor_common import OPEN_OPPORTUNITY_STATUS, PENDING_STATUS, PROJECT_ROOT, parse_iso_datetime
 from scripts.review_cards import _card_from_row
 
 
@@ -70,6 +70,7 @@ def opportunity_summary(
         for card in cards
         if str(card.get("rating") or "").lower() == "high"
         and str(card.get("status") or "").lower() == PENDING_STATUS
+        and str(card.get("opportunity_status") or OPEN_OPPORTUNITY_STATUS).lower() == OPEN_OPPORTUNITY_STATUS
         and str(card.get("decision_status") or "").lower() in {"new", "changed"}
     ]
     top_items = [
@@ -141,10 +142,10 @@ def opportunity_next_action(
     top_code = str(diagnostics.get("top_code") or "")
     doctor_profile = "jobs" if profile_id == "jobs-fast" else profile_id or "market-news"
     if int(diagnostics.get("failure_count") or 0) > 0 or status == "failed":
-        detail = f"Top diagnostic: {top_code}" if top_code else "Open Runs for diagnostics before rerunning."
+        detail = f"Run issue: {top_code}" if top_code else "Open Runs before rerunning."
         if top_code in {"llm_output_truncated", "semantic_json_invalid"}:
             return {
-                "label": "Fix semantic extraction",
+                "label": "Fix AI matching",
                 "detail": detail,
                 "command": "",
             }
@@ -162,8 +163,8 @@ def opportunity_next_action(
     if high_actionable_count > 0:
         noun = "card" if high_actionable_count == 1 else "cards"
         return {
-            "label": "Review action signals",
-            "detail": f"Review {high_actionable_count} high-priority new/changed {noun} in Inbox.",
+            "label": "Review priority cards",
+            "detail": f"Review {high_actionable_count} high-priority new or updated {noun}.",
             "command": "",
         }
     if all_clear:

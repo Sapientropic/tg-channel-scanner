@@ -204,13 +204,13 @@ DESK_ACTIONS: tuple[dict, ...] = (
     {
         "action_id": "feedback_export",
         "group": "Feedback",
-        "title": "Export feedback JSONL",
-        "detail": "Troubleshooting fallback for agents or CLI imports; Desk can generate profile drafts directly.",
+        "title": "Save learning file",
+        "detail": "Advanced export for review decisions; Desk can generate profile drafts directly.",
         "run_mode": "execute",
         "display_command": "tgcs feedback export",
         "argv": ["feedback", "export", "--format", "json"],
         "artifact_keys": ["output_path"],
-        "next_action": "Use Desk Learning to generate profile drafts, or import JSONL through the CLI.",
+        "next_action": "Use Desk Learning to generate profile drafts, or keep the learning file for advanced workflows.",
     },
     {
         "action_id": "schedule_preview",

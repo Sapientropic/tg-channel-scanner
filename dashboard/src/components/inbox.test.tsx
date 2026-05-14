@@ -39,8 +39,8 @@ describe("InboxView", () => {
       />,
     );
 
-    expect(html).toContain('aria-label="Review filter: Latest action (1)"');
-    expect(html).toContain("Latest");
+    expect(html).toContain('aria-label="Review filter: Priority now (1)"');
+    expect(html).toContain("Priority");
     expect(html).toContain("Frontend Developer");
     expect(html).toContain("Applied");
     expect(html).toContain("Tune profile");
@@ -76,11 +76,11 @@ describe("InboxView", () => {
 
     expect(filters.find((item) => item.id === "actionable")?.count).toBe(0);
     expect(filters.find((item) => item.id === "handled")?.count).toBe(1);
-    expect(html).toContain("Applied");
+    expect(html).toContain("All caught up");
     expect(html).toContain("Show Handled 1");
   });
 
-  it("moves from an empty latest-action filter to a visible backlog bucket", () => {
+  it("moves from an empty priority filter to a visible review bucket", () => {
     const filters = inboxFilterOptions(
       [
         card({
@@ -105,7 +105,7 @@ describe("InboxView", () => {
     expect(nextNonEmptyReviewFilter(filters, "actionable")).toBe("high");
   });
 
-  it("keeps open backlog ahead of handled cards after latest action clears", () => {
+  it("keeps open review cards ahead of handled history after priority clears", () => {
     const filters = inboxFilterOptions(
       [
         card({
@@ -135,7 +135,7 @@ describe("InboxView", () => {
     expect(nextNonEmptyReviewFilter(filters, "actionable")).toBe("high");
   });
 
-  it("turns an empty latest-action view into a visible backlog jump", () => {
+  it("turns an empty priority view into a visible bucket jump", () => {
     const html = renderToStaticMarkup(
       <InboxView
         cards={[
@@ -154,7 +154,7 @@ describe("InboxView", () => {
       />,
     );
 
-    expect(html).toContain("No latest action cards");
+    expect(html).toContain("No priority cards");
     expect(html).toContain("Show High 1");
   });
 
@@ -179,56 +179,50 @@ describe("InboxView", () => {
     expect(html).not.toContain('data-review-action="follow_up"');
   });
 
-  it("renders an action proof strip from existing review-card evidence", () => {
+  it("renders only user-actionable card context from existing review-card evidence", () => {
     const html = renderToStaticMarkup(
-      <InboxView
-        cards={[
-          card({
-            status: "false_positive",
-            alert_summary: {
-              schema_version: "review_card_alert_summary_v1",
-              alert_count: 1,
-              latest_delivery_mode: "live",
-              latest_delivery_ok: true,
-              latest_delivery_status: "sent",
-              latest_target_type: "telegram_bot",
+      <ReviewCardArticle
+        card={card({
+          status: "false_positive",
+          alert_summary: {
+            schema_version: "review_card_alert_summary_v1",
+            alert_count: 1,
+            latest_delivery_mode: "live",
+            latest_delivery_ok: true,
+            latest_delivery_status: "sent",
+            latest_target_type: "telegram_bot",
+          },
+          item: {
+            why: "Matches the target profile.",
+            decision_state: {
+              status: "changed",
+              signals: ["salary_range"],
+              material_change_fields: ["compensation"],
             },
-            item: {
-              why: "Matches the target profile.",
-              decision_state: {
-                status: "changed",
-                signals: ["salary_range"],
-                material_change_fields: ["compensation"],
-              },
-            },
-          }),
-        ]}
-        latestRunId="run-1"
+          },
+        })}
         profileReportNames={{ "jobs-fast": "Jobs Report" }}
         act={vi.fn()}
         busy={false}
       />,
     );
 
-    expect(html).toContain('aria-label="Action proof"');
-    expect(html).toContain("More proof");
-    expect(html).toContain("Profile");
-    expect(html).toContain("Jobs Report");
-    expect(html).toContain("Decision");
+    expect(html).toContain('aria-label="Card context"');
+    expect(html).not.toContain("More proof");
+    expect(html).not.toContain("Evidence");
+    expect(html).not.toContain("Run</strong>");
+    expect(html).toContain("Updated");
+    expect(html).toContain("Since last scan");
     expect(html).toContain("Changed");
-    expect(html).toContain("Review");
     expect(html).toContain("Wrong match");
-    expect(html).toContain("Evidence");
-    expect(html).toContain("1 source ref");
-    expect(html).toContain("Run");
-    expect(html).toContain("Latest + report");
     expect(html).toContain("Alert");
     expect(html).toContain("Sent");
-    expect(html).toContain("Salary Range");
     expect(html).toContain("Compensation");
+    expect(html).toContain("Open original");
+    expect(html).toContain("Run details");
   });
 
-  it("shows repeat counts directly in the decision proof chip", () => {
+  it("shows repeat counts directly in the card context strip", () => {
     const html = renderToStaticMarkup(
       <ReviewCardArticle
         card={card({
@@ -243,26 +237,23 @@ describe("InboxView", () => {
             },
           },
         })}
-        latestRunId="run-1"
         profileReportNames={{ "jobs-fast": "Jobs Report" }}
         act={vi.fn()}
         busy={false}
       />,
     );
 
-    expect(html).toContain("Seen 3x");
+    expect(html).toContain("Seen before");
+    expect(html).toContain("3 times");
   });
 
   it("surfaces card-level undo for saved review decisions", () => {
     const html = renderToStaticMarkup(
-      <InboxView
-        cards={[
-          card({
-            status: "false_positive",
-            item: { why: "Looks related, but the role is not a fit." },
-          }),
-        ]}
-        latestRunId="run-1"
+      <ReviewCardArticle
+        card={card({
+          status: "false_positive",
+          item: { why: "Looks related, but the role is not a fit." },
+        })}
         profileReportNames={{ "jobs-fast": "Jobs Report" }}
         act={vi.fn()}
         busy={false}
@@ -275,7 +266,7 @@ describe("InboxView", () => {
     expect(html).toContain('aria-label="Undo Wrong match review decision"');
   });
 
-  it("renders source references as safe links with a capped overflow count", () => {
+  it("renders original source links as the primary detail path with a capped overflow count", () => {
     const html = renderToStaticMarkup(
       <InboxView
         cards={[
@@ -297,11 +288,12 @@ describe("InboxView", () => {
     );
 
     expect(html).toContain('href="https://t.me/javascript_jobs/42"');
+    expect(html).toContain("Open original");
     expect(html).toContain("JavaScript Jobs");
     expect(html).toContain("Python Jobs");
     expect(html).toContain("Rust Jobs");
     expect(html).toContain("TS Jobs");
-    expect(html).toContain("+1");
+    expect(html).toContain("+1 originals");
     expect(html).not.toContain("Overflow Jobs");
   });
 
@@ -337,6 +329,6 @@ describe("InboxView", () => {
     expect(html).toContain("Source access");
     expect(html).toContain("Next");
     expect(html).toContain("Check recent messages before pruning.");
-    expect(html).toContain("Troubleshooting command");
+    expect(html).toContain("Advanced command");
   });
 });

@@ -46,7 +46,7 @@ describe("run health decision", () => {
 
     expect(buildRunHealthDecision([failedRun])).toMatchObject({
       tone: "danger",
-      headline: "Fix semantic extraction",
+      headline: "Fix AI matching",
       repairKind: "profile_scope",
     });
 
@@ -58,7 +58,7 @@ describe("run health decision", () => {
       />,
     );
     expect(html).toContain("Tune profile");
-    expect(html).toContain("Semantic extraction failed");
+    expect(html).toContain("AI matching needs attention");
     expect(html).toContain("Fix order: Tune profile, Check setup, then Run fresh scan.");
     expect(html).toContain("Run fresh scan");
     expect(html).not.toContain("Fix channels");
@@ -85,8 +85,8 @@ describe("run health decision", () => {
       }),
     ])).toMatchObject({
       tone: "warn",
-      headline: "Diagnostics need attention",
-      detail: "Next: check LLM key",
+      headline: "Scan needs attention",
+      detail: "Next: check AI key",
     });
   });
 
@@ -132,6 +132,7 @@ describe("run health decision", () => {
     expect(groups.map((group) => group.key)).toEqual(["attention", "review", "clean"]);
     expect(groups[0].title).toBe("Earlier failed scans");
     expect(groups[0].tone).toBe("quiet");
+    expect(groups[1].title).toBe("Cards to review");
     expect(groups[1].detail).toBe("2 cards / 0 alerts");
   });
 

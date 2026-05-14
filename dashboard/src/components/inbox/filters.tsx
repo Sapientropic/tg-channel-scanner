@@ -6,9 +6,12 @@ import { decisionStatusLabel } from "../../domain/format";
 import {
   countInboxCardsByRating,
   filterInboxCards,
+  handledInboxCount,
   inboxFilterOptions,
   isActionableInboxCard,
   isMalformedInboxCard,
+  isReviewQueueCard,
+  reviewQueueCount,
   type InboxFilter,
 } from "../../domain/inbox";
 import type { ReviewCard } from "../../domain/types";
@@ -24,10 +27,14 @@ export function ReviewFilterEmptyState({
 }) {
   const nextFilter = nextNonEmptyReviewFilter(filters, activeFilter);
   const next = nextFilter ? filters.find((item) => item.id === nextFilter) : null;
+  const reviewQueueTotal = filters
+    .filter((item) => ["high", "new_changed", "low_medium"].includes(item.id))
+    .reduce((sum, item) => sum + item.count, 0);
+  const allCaughtUp = activeFilter === "actionable" && reviewQueueTotal === 0;
   return (
     <InlineEmpty
-      title={activeFilter === "actionable" ? "No latest action cards" : "No cards in this view"}
-      detail={next ? reviewFilterEmptyDetail(next.label) : "This filter is clear."}
+      title={allCaughtUp ? "All caught up" : activeFilter === "actionable" ? "No priority cards" : "No cards in this view"}
+      detail={next ? reviewFilterEmptyDetail(next.label) : "This view is clear."}
       action={
         next ? (
           <button type="button" onClick={() => onSelectFilter(next.id)}>
@@ -41,21 +48,22 @@ export function ReviewFilterEmptyState({
 
 function reviewFilterEmptyDetail(nextLabel: string) {
   if (nextLabel === "Handled") {
-    return "Applied, Contacted, and Dismissed cards are in Handled.";
+    return "Handled cards are saved as history.";
   }
   if (nextLabel === "Saved") {
-    return "Saved cards are parked outside Latest action.";
+    return "Saved cards are parked outside the review queue.";
   }
   if (nextLabel === "Duplicate") {
     return "Duplicate cards are kept out of the main queue.";
   }
-  return `There is still work in ${nextLabel}.`;
+  return `There are still cards in ${nextLabel}.`;
 }
 
 export function compactFilterLabel(label: string) {
-  if (label === "Latest action") return "Latest";
-  if (label === "New/Changed") return "New";
-  if (label === "Low/Medium") return "Low/Med";
+  if (label === "Priority now") return "Priority";
+  if (label === "New/Updated") return "New";
+  if (label === "Lower priority") return "Lower";
+  if (label === "All cards") return "All";
   if (label === "Duplicate") return "Dupes";
   return label;
 }
@@ -86,11 +94,11 @@ export function ReviewBacklogPanel({
   const previewCards = cards.filter((card) => !activeCardIds.has(card.card_id)).slice(0, 3);
   const waitingCount = Math.max(0, cards.length - visibleCount);
   return (
-    <section className="review-backlog-panel" aria-label="Review backlog map">
+    <section className="review-backlog-panel" aria-label="Other review buckets">
       <div className="review-backlog-copy">
-        <span className="panel-kicker">Backlog map</span>
-        <strong>{waitingCount} waiting outside this view</strong>
-        <small>Use a bucket when the latest action is handled.</small>
+        <span className="panel-kicker">Other cards</span>
+        <strong>{waitingCount} outside this view</strong>
+        <small>Switch buckets only when you need older or handled cards.</small>
       </div>
       <div className="review-backlog-buckets">
         {options.map((item) => (
@@ -101,7 +109,7 @@ export function ReviewBacklogPanel({
         ))}
       </div>
       {previewCards.length > 0 && (
-        <div className="review-backlog-preview" aria-label="Next backlog cards">
+        <div className="review-backlog-preview" aria-label="Other cards">
           {previewCards.map((card) => (
             <button
               className="review-backlog-row"
@@ -150,16 +158,19 @@ function backlogFilterForCard(card: ReviewCard, latestRunId?: string): InboxFilt
 }
 
 export function InboxTriageVisual({ cards, latestRunId }: { cards: ReviewCard[]; latestRunId?: string }) {
+  const reviewCards = cards.filter((card) => isReviewQueueCard(card));
   const counts = {
-    high: countInboxCardsByRating(cards, "high"),
-    medium: countInboxCardsByRating(cards, "medium"),
-    low: countInboxCardsByRating(cards, "low"),
+    high: countInboxCardsByRating(reviewCards, "high"),
+    medium: countInboxCardsByRating(reviewCards, "medium"),
+    low: countInboxCardsByRating(reviewCards, "low"),
     action: filterInboxCards(cards, "actionable", latestRunId).length,
     malformed: cards.filter((card) => isMalformedInboxCard(card)).length,
+    review: reviewQueueCount(cards),
+    handled: handledInboxCount(cards),
   };
-  const total = Math.max(1, cards.length);
+  const total = Math.max(1, counts.review);
   return (
-    <div className="triage-visual" aria-label={`${counts.action} latest action cards, ${cards.length} total cards`}>
+    <div className="triage-visual" aria-label={`${counts.review} cards to review, ${counts.handled} handled cards`}>
       <div className="triage-stack" aria-hidden="true">
         <span className="high" style={{ width: percentWidth(counts.high / total) }} />
         <span className="medium" style={{ width: percentWidth(counts.medium / total) }} />
@@ -167,14 +178,17 @@ export function InboxTriageVisual({ cards, latestRunId }: { cards: ReviewCard[];
       </div>
       <div className="triage-legend">
         <span>
-          <strong>{counts.action}</strong> action
+          <strong>{counts.action}</strong> priority
         </span>
         <span>
-          <strong>{cards.length}</strong> backlog
+          <strong>{counts.review}</strong> to review
+        </span>
+        <span>
+          <strong>{counts.handled}</strong> handled
         </span>
         {counts.malformed > 0 && (
           <span className="schema-warning">
-            <strong>{counts.malformed}</strong> schema
+            <strong>{counts.malformed}</strong> data
           </span>
         )}
       </div>

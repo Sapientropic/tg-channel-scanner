@@ -671,7 +671,7 @@ class BotGatewayTests(unittest.TestCase):
                         "why": "raw Telegram body must not be needed here",
                     }
                 ],
-                "next_action": {"label": "Review action signals", "detail": "1 card ready", "command": ""},
+                "next_action": {"label": "Review priority cards", "detail": "1 card ready", "command": ""},
             },
             "inbox": [
                 {
@@ -694,7 +694,7 @@ class BotGatewayTests(unittest.TestCase):
         self.assertIn("Developer Opportunity latest", message)
         self.assertIn("Scanned: 120 | Matched: 9 | Cards: 3 | High: 1 | Alerts: 1", message)
         self.assertIn("- Frontend role (high/new)", message)
-        self.assertIn("Next: Review action signals", message)
+        self.assertIn("Next: Review priority cards", message)
         self.assertIn("card:applied:card_abc123", encoded)
         self.assertIn("card:saved:card_abc123", encoded)
         self.assertNotIn("12345", encoded)

@@ -58,7 +58,7 @@ export function RunsView({
         onRunDeskAction={onRunDeskAction}
       />
       <div className="run-list-head">
-        <strong>Recent Evidence</strong>
+        <strong>Recent scans</strong>
         <span>
           {visibleRunCount} recent · {runs.length} total
         </span>
@@ -70,7 +70,7 @@ export function RunsView({
       </div>
       {archivedRuns.length > 0 && (
         <details className="run-archive">
-          <summary>Scan history for troubleshooting ({archivedRuns.length})</summary>
+          <summary>Older scan history ({archivedRuns.length})</summary>
           <div className="table-list">
             {archivedClusters.map((cluster) => (
               <RunClusterRow key={cluster.key} cluster={cluster} scaleMax={archivedScaleMax} />

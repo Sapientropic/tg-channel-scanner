@@ -16,7 +16,7 @@ import { RunsView } from "./components/runs";
 import { SettingsView, type SettingsTask } from "./components/settings";
 import { ConsoleHeader, NavigationRail, WorkbenchHeader } from "./components/shell";
 import { buildProfileReportNames } from "./domain/display";
-import { isActionableInboxCard } from "./domain/inbox";
+import { isActionableInboxCard, reviewQueueCount } from "./domain/inbox";
 import {
   buildBoardMeta,
   buildMetrics,
@@ -151,7 +151,9 @@ function App() {
   const tabCounts = useMemo(() => buildTabCounts(state, startStepCount), [state]);
   const boardMeta = useMemo(() => buildBoardMeta(activeTab, state, startStepCount), [activeTab, state]);
   const latestRunId = state.runs[0]?.run_id;
-  const hasLatestActionCards = state.inbox.some((card) => isActionableInboxCard(card, latestRunId));
+  const pendingReviewCount = useMemo(() => reviewQueueCount(state.inbox), [state.inbox]);
+  const latestActionCount = state.inbox.filter((card) => isActionableInboxCard(card, latestRunId)).length;
+  const hasLatestActionCards = latestActionCount > 0;
   const hasBlockingSummary = hasBlockingOpportunitySummary(state.opportunity_summary);
   const showCommandStrip = activeTab === "inbox" && !hasLatestActionCards;
   const showOpportunitySummary = activeTab === "inbox" && (!hasLatestActionCards || hasBlockingSummary);
@@ -302,7 +304,7 @@ function App() {
           {showBoardStatusStack && (
             <div className="board-status-stack" aria-label="Board status summary">
               {showCommandStrip && <CommandStrip state={state} metrics={metrics} />}
-              {showOpportunitySummary && <OpportunitySummaryPanel summary={state.opportunity_summary} />}
+              {showOpportunitySummary && <OpportunitySummaryPanel summary={state.opportunity_summary} latestPriorityCount={latestActionCount} />}
               <ValidationSummaryPanel summary={showValidationSummary ? state.validation_summary : undefined} />
             </div>
           )}
@@ -328,7 +330,7 @@ function App() {
                 setupStatus={state.setup_status}
                 scheduler={deskSchedulerStatus}
                 targets={state.delivery_targets}
-                reviewCount={state.inbox.length}
+                reviewCount={pendingReviewCount}
                 telegram={{
                   status: deskTelegram.status,
                   busy: deskTelegram.busy,

@@ -58,7 +58,7 @@ export function JourneyStepCard({
         {step.key === "telegram" && <TelegramLoginPanel telegram={telegram} />}
         {showAdvancedReference && (
           <details className="advanced-command">
-            <summary>Advanced / CLI reference</summary>
+            <summary>Advanced command</summary>
             <div>
               {visibleAdvanced.map((action) => (
                 <CopyableCommand command={action.display_command} label={action.title} key={action.action_id} compact />

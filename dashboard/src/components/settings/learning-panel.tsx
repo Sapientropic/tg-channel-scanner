@@ -24,7 +24,7 @@ export function feedbackExportStatusLine(result: FeedbackExportResult | null) {
     return "";
   }
   const decisionLabel = result.feedback_count === 1 ? "decision" : "decisions";
-  return `${result.feedback_count} ${decisionLabel} exported for CLI fallback · ${result.output_path}`;
+  return `${result.feedback_count} ${decisionLabel} saved for learning · ${result.output_path}`;
 }
 
 export function feedbackSuggestionStatusLine(result: FeedbackProfileSuggestionsResult | null) {
@@ -124,14 +124,14 @@ export function LearningPanel({
       <details className="settings-evidence feedback-troubleshooting">
         <summary>
           <Download size={16} />
-          <span>JSONL fallback</span>
+          <span>Advanced export</span>
         </summary>
         <div className="feedback-export-result">
-          <span className="panel-kicker">Export JSONL</span>
+          <span className="panel-kicker">Learning file</span>
           <small>{exportResult?.output_path || summary?.last_export_path || "output/feedback/review-feedback.jsonl"}</small>
           <button className="text-button secondary" type="button" onClick={exportFeedback} disabled={busy || exportableCount <= 0}>
             <Download size={15} />
-            <span>Export JSONL</span>
+            <span>Save learning file</span>
           </button>
         </div>
       </details>
@@ -174,10 +174,10 @@ function FeedbackBreakdown({
     { label: "Deprioritized", value: summary?.by_action?.skip ?? 0 },
     { label: "Wrong match", value: summary?.by_action?.false_positive ?? 0 },
     { label: "Draft notes", value: summary?.non_exportable_follow_up_count ?? 0 },
-    { label: "High signal", value: summary?.by_rating?.high ?? 0 },
+    { label: "High priority", value: summary?.by_rating?.high ?? 0 },
     { label: "Changed", value: summary?.by_decision_status?.changed ?? 0 },
-    { label: "Applied diffs", value: summary?.applied_profile_diff_count ?? 0 },
-    { label: "Reverted diffs", value: summary?.reverted_profile_diff_count ?? 0 },
+    { label: "Applied changes", value: summary?.applied_profile_diff_count ?? 0 },
+    { label: "Reverted changes", value: summary?.reverted_profile_diff_count ?? 0 },
   ].filter((item) => item.value > 0);
   if (!items.length) {
     return <InlineEmpty title={exportableCount > 0 ? "Feedback rows need action labels" : "No learning decisions yet"} />;

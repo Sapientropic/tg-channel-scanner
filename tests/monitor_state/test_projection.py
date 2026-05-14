@@ -587,7 +587,7 @@ class MonitorStateProjectionTests(unittest.TestCase):
         self.assertEqual(len(summary["top_items"]), 2)
         self.assertEqual(summary["top_items"][0]["title"], "TypeScript mini app contract")
         self.assertEqual(summary["top_items"][0]["decision_status"], "new")
-        self.assertEqual(summary["next_action"]["label"], "Review action signals")
+        self.assertEqual(summary["next_action"]["label"], "Review priority cards")
         self.assertIn("2 high-priority", summary["next_action"]["detail"])
         self.assertEqual(summary["decision_counts"]["new"], 1)
         self.assertEqual(summary["decision_counts"]["changed"], 1)
@@ -595,6 +595,44 @@ class MonitorStateProjectionTests(unittest.TestCase):
         self.assertNotIn("Low priority digest", json.dumps(summary, ensure_ascii=False))
         self.assertNotIn("raw telegram text", json.dumps(summary, ensure_ascii=False))
 
+    def test_dashboard_snapshot_excludes_handled_cards_from_opportunity_actions(self):
+        conn = sqlite3.connect(":memory:")
+        conn.row_factory = sqlite3.Row
+        monitor_state.init_db(conn)
+        monitor_state.record_run(
+            conn,
+            {
+                "schema_version": "run_manifest_v1",
+                "run_id": "run-handled",
+                "profile_id": "jobs-fast",
+                "status": "complete",
+                "started_at": "2026-05-09T03:00:00Z",
+                "completed_at": "2026-05-09T03:01:00Z",
+                "prefilter": {"raw_message_count": 10, "matched_count": 1, "semantic_stage": "report_ran"},
+                "review_card_count": 1,
+            },
+        )
+        cards = monitor_state.upsert_review_cards(
+            conn,
+            profile_id="jobs-fast",
+            run_id="run-handled",
+            items=[
+                {
+                    "topic": "Already dismissed role",
+                    "rating": "high",
+                    "why": "Initially looked relevant.",
+                    "decision_state": {"status": "new"},
+                    "source_message_refs": [{"channel": "jobs", "id": 10}],
+                },
+            ],
+        )
+        monitor_state.set_card_action(conn, card_id=cards[0]["card_id"], action="dismissed")
+
+        summary = monitor_state.dashboard_snapshot(conn)["opportunity_summary"]
+
+        self.assertEqual(summary["high_actionable_count"], 0)
+        self.assertEqual(summary["top_items"], [])
+        self.assertNotEqual(summary["next_action"]["label"], "Review priority cards")
 
     def test_dashboard_snapshot_marks_opportunity_summary_all_clear(self):
         conn = sqlite3.connect(":memory:")
@@ -797,7 +835,7 @@ class MonitorStateProjectionTests(unittest.TestCase):
         snapshot = monitor_state.dashboard_snapshot(conn)
         summary = snapshot["opportunity_summary"]
 
-        self.assertEqual(summary["next_action"]["label"], "Fix semantic extraction")
+        self.assertEqual(summary["next_action"]["label"], "Fix AI matching")
         self.assertIn("llm_output_truncated", summary["next_action"]["detail"])
         self.assertEqual(summary["next_action"]["command"], "")
         self.assertNotEqual(snapshot["setup_status"]["stage"], "needs_source_access")

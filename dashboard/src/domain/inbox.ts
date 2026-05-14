@@ -4,6 +4,7 @@ export type InboxCardLike = {
   rating?: unknown;
   decision_status?: unknown;
   opportunity_status?: unknown;
+  status?: unknown;
   last_run_id?: string | null;
 };
 
@@ -27,35 +28,53 @@ export function isMalformedInboxCard(card: InboxCardLike) {
   );
 }
 
+export function isReviewQueueCard(card: InboxCardLike) {
+  const opportunityStatus = normalizeInboxToken(card.opportunity_status || "open");
+  const reviewStatus = normalizeInboxToken(card.status || "pending");
+  return opportunityStatus === "open" && reviewStatus === "pending";
+}
+
+export function reviewQueueCount<T extends InboxCardLike>(cards: T[]) {
+  return cards.filter((card) => isReviewQueueCard(card)).length;
+}
+
+export function handledInboxCount<T extends InboxCardLike>(cards: T[]) {
+  return cards.length - reviewQueueCount(cards);
+}
+
 export function isActionableInboxCard(card: InboxCardLike, latestRunId?: string) {
   const isLatest = latestRunId ? card.last_run_id === latestRunId : true;
   return (
+    isReviewQueueCard(card) &&
     isLatest &&
-    normalizeInboxToken(card.opportunity_status || "open") === "open" &&
     normalizeInboxToken(card.rating) === "high" &&
     ["new", "changed"].includes(normalizeInboxToken(card.decision_status))
   );
 }
 
 export function filterInboxCards<T extends InboxCardLike>(cards: T[], filter: InboxFilter, latestRunId?: string) {
-  const openCards = cards.filter((card) => normalizeInboxToken(card.opportunity_status || "open") === "open");
+  const reviewQueueCards = cards.filter((card) => isReviewQueueCard(card));
   if (filter === "actionable") {
     return cards.filter((card) => isActionableInboxCard(card, latestRunId));
   }
   if (filter === "high") {
-    return openCards.filter((card) => normalizeInboxToken(card.rating) === "high");
+    return reviewQueueCards.filter((card) => normalizeInboxToken(card.rating) === "high");
   }
   if (filter === "new_changed") {
-    return openCards.filter((card) => ["new", "changed"].includes(normalizeInboxToken(card.decision_status)));
+    return reviewQueueCards.filter((card) => ["new", "changed"].includes(normalizeInboxToken(card.decision_status)));
   }
   if (filter === "low_medium") {
-    return openCards.filter((card) => ["low", "medium"].includes(normalizeInboxToken(card.rating)));
+    return reviewQueueCards.filter((card) => ["low", "medium"].includes(normalizeInboxToken(card.rating)));
   }
   if (filter === "saved") {
     return cards.filter((card) => normalizeInboxToken(card.opportunity_status) === "saved");
   }
   if (filter === "handled") {
-    return cards.filter((card) => ["applied", "contacted", "dismissed"].includes(normalizeInboxToken(card.opportunity_status)));
+    return cards.filter((card) => {
+      const opportunityStatus = normalizeInboxToken(card.opportunity_status || "open");
+      const reviewStatus = normalizeInboxToken(card.status || "pending");
+      return ["applied", "contacted", "dismissed"].includes(opportunityStatus) || (opportunityStatus === "open" && reviewStatus !== "pending");
+    });
   }
   if (filter === "duplicate") {
     return cards.filter((card) => normalizeInboxToken(card.opportunity_status) === "duplicate");
@@ -69,11 +88,11 @@ export function countInboxCardsByRating<T extends InboxCardLike>(cards: T[], rat
 
 export function inboxFilterOptions<T extends InboxCardLike>(cards: T[], latestRunId?: string) {
   const baseOptions = [
-    { id: "actionable" as const, label: "Latest action", count: filterInboxCards(cards, "actionable", latestRunId).length },
-    { id: "all" as const, label: "All", count: cards.length },
+    { id: "actionable" as const, label: "Priority now", count: filterInboxCards(cards, "actionable", latestRunId).length },
+    { id: "all" as const, label: "All cards", count: cards.length },
     { id: "high" as const, label: "High", count: filterInboxCards(cards, "high", latestRunId).length },
-    { id: "new_changed" as const, label: "New/Changed", count: filterInboxCards(cards, "new_changed", latestRunId).length },
-    { id: "low_medium" as const, label: "Low/Medium", count: filterInboxCards(cards, "low_medium", latestRunId).length },
+    { id: "new_changed" as const, label: "New/Updated", count: filterInboxCards(cards, "new_changed", latestRunId).length },
+    { id: "low_medium" as const, label: "Lower priority", count: filterInboxCards(cards, "low_medium", latestRunId).length },
   ];
   return [
     ...baseOptions,

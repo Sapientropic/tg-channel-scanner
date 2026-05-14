@@ -101,7 +101,7 @@ function SetupChecklist({ setupStatus, compact = false }: { setupStatus?: Dashbo
             {check.detail && <p>{check.detail}</p>}
             {check.command && (
               <details className="setup-command">
-                <summary>Troubleshooting command</summary>
+                <summary>Advanced command</summary>
                 <CopyableCommand command={check.command} label={check.label} />
               </details>
             )}

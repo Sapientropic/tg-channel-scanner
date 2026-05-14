@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { ListFilter } from "lucide-react";
 
 import {
@@ -39,17 +39,6 @@ export function InboxView({
   const [filter, setFilter] = useState<InboxFilter>("actionable");
   const [filtersOpen, setFiltersOpen] = useState(false);
   const filters = inboxFilterOptions(cards, latestRunId);
-  const activeFilterCount = filters.find((item) => item.id === filter)?.count ?? 0;
-  useEffect(() => {
-    if (!cards.length || activeFilterCount > 0) {
-      return;
-    }
-    const nextFilter = nextNonEmptyReviewFilter(filters, filter);
-    if (nextFilter && nextFilter !== filter) {
-      setFilter(nextFilter);
-      setFiltersOpen(false);
-    }
-  }, [activeFilterCount, cards.length, filter, filters]);
   if (!cards.length) {
     return (
       <InboxEmptyState
@@ -116,7 +105,6 @@ export function InboxView({
               busy={busy}
               card={card}
               key={card.card_id}
-              latestRunId={latestRunId}
               profileReportNames={profileReportNames}
             />
           ))}

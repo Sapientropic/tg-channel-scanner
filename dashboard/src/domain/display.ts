@@ -112,7 +112,7 @@ export function opportunityHeadline(summary: OpportunitySummary) {
   }
   const count = summary.high_actionable_count ?? 0;
   if (count > 0) {
-    return `${count} action signal${count === 1 ? "" : "s"}`;
+    return `${count} priority card${count === 1 ? "" : "s"}`;
   }
   if (summary.all_clear) {
     return "No priority cards";
@@ -126,7 +126,7 @@ export function opportunityDetail(summary: OpportunitySummary) {
   }
   const matched = summary.matched_count ?? 0;
   const scanned = summary.scanned_count ?? 0;
-  return `${matched}/${scanned} matched`;
+  return `${matched} of ${scanned} matched`;
 }
 
 export function alertMode(profile: Profile) {

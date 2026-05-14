@@ -150,7 +150,7 @@
       },
       "next_action": {
         "label": "Generate profile suggestions",
-        "detail": "Turn confirmed review decisions into local profile drafts. JSON export is only for CLI fallback."
+        "detail": "Turn confirmed review decisions into local profile drafts. The raw export stays in Advanced export."
       }
     },
     "setup_status": {
@@ -213,8 +213,8 @@
         "top_code": "scan_incomplete"
       },
       "next_action": {
-        "label": "Review action signals",
-        "detail": "Review 2 high-priority new/changed cards in Inbox."
+        "label": "Review priority cards",
+        "detail": "Review 2 high-priority new or updated cards."
       }
     },
     "source_insights": [

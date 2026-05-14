@@ -33,7 +33,7 @@ export function useProfileActions({ refresh, setActiveTab, setBusy, setNotice }:
     try {
       await applyProfilePatch(patchId);
       await refresh();
-      setNotice({ tone: "success", text: "Profile snapshot saved and diff applied" });
+      setNotice({ tone: "success", text: "Profile change applied" });
     } catch (error) {
       setNotice({ tone: "error", text: errorMessage(error) });
     } finally {
@@ -47,7 +47,7 @@ export function useProfileActions({ refresh, setActiveTab, setBusy, setNotice }:
     try {
       await revertProfilePatch(patchId);
       await refresh();
-      setNotice({ tone: "success", text: "Profile diff reverted from saved snapshot" });
+      setNotice({ tone: "success", text: "Profile change reverted" });
     } catch (error) {
       setNotice({ tone: "error", text: errorMessage(error) });
     } finally {
@@ -61,7 +61,7 @@ export function useProfileActions({ refresh, setActiveTab, setBusy, setNotice }:
     try {
       await replayProfilePatch(patchId);
       await refresh();
-      setNotice({ tone: "success", text: "Profile diff replayed for review" });
+      setNotice({ tone: "success", text: "Profile change drafted again" });
     } catch (error) {
       setNotice({ tone: "error", text: errorMessage(error) });
     } finally {

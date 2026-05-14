@@ -14,7 +14,7 @@ describe("Learning panel copy", () => {
         changed_since_last_export: false,
         exported_at: "2026-05-10T00:00:00Z",
       }),
-    ).toBe("3 decisions exported for CLI fallback · output/feedback/review-feedback.jsonl");
+    ).toBe("3 decisions saved for learning · output/feedback/review-feedback.jsonl");
   });
 
   it("summarizes generated profile drafts without making JSONL the happy path", () => {
@@ -95,9 +95,9 @@ describe("Learning panel copy", () => {
     expect(html).toContain('aria-label="Feedback calibration evidence"');
     expect(html).toContain("Preferred 1");
     expect(html).toContain("Wrong match 1");
-    expect(html).toContain("High signal 2");
-    expect(html).toContain("Applied diffs 2");
-    expect(html).toContain("Reverted diffs 1");
+    expect(html).toContain("High priority 2");
+    expect(html).toContain("Applied changes 2");
+    expect(html).toContain("Reverted changes 1");
     expect(html).toContain("reverted");
     expect(html).toContain('aria-label="Next-run calibration evidence"');
     expect(html).toContain("After latest applied draft");
