@@ -7,6 +7,7 @@ import {
   type InboxFilter,
 } from "../domain/inbox";
 import type { DashboardState, ReviewCard } from "../domain/types";
+import { InlineEmpty } from "./common";
 import {
   compactFilterLabel,
   InboxTriageVisual,
@@ -26,7 +27,10 @@ export function InboxView({
   profileReportNames,
   act,
   busy,
+  feedbackSummary,
+  onGenerateProfileSuggestions,
   onOpenStart,
+  onOpenProfiles,
 }: {
   cards: ReviewCard[];
   latestRunId?: string;
@@ -34,7 +38,10 @@ export function InboxView({
   profileReportNames: Record<string, string>;
   act: (cardId: string, action: string, note?: string) => void;
   busy: boolean;
+  feedbackSummary?: DashboardState["feedback_summary"];
+  onGenerateProfileSuggestions?: () => void;
   onOpenStart?: () => void;
+  onOpenProfiles?: () => void;
 }) {
   const [filter, setFilter] = useState<InboxFilter>("actionable");
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -99,6 +106,17 @@ export function InboxView({
       </div>
       {filteredCards.length ? (
         <>
+          {filter === "handled" && (
+            <InlineEmpty
+              title="Handled history"
+              detail="Handled cards are hidden from the review queue."
+              action={
+                <button type="button" onClick={() => setFilter("actionable")}>
+                  Hide handled
+                </button>
+              }
+            />
+          )}
           {filteredCards.map((card) => (
             <ReviewCardArticle
               act={act}
@@ -119,7 +137,15 @@ export function InboxView({
           )}
         </>
       ) : (
-        <ReviewFilterEmptyState activeFilter={filter} filters={filters} onSelectFilter={setFilter} />
+        <ReviewFilterEmptyState
+          activeFilter={filter}
+          busy={busy}
+          feedbackSummary={feedbackSummary}
+          filters={filters}
+          onGenerateProfileSuggestions={onGenerateProfileSuggestions}
+          onOpenProfiles={onOpenProfiles}
+          onSelectFilter={setFilter}
+        />
       )}
     </section>
   );

@@ -305,7 +305,7 @@ function App() {
             <div className="board-status-stack" aria-label="Board status summary">
               {showCommandStrip && <CommandStrip state={state} metrics={metrics} />}
               {showOpportunitySummary && <OpportunitySummaryPanel summary={state.opportunity_summary} latestPriorityCount={latestActionCount} />}
-              <ValidationSummaryPanel summary={showValidationSummary ? state.validation_summary : undefined} />
+              <ValidationSummaryPanel cards={state.inbox} summary={showValidationSummary ? state.validation_summary : undefined} />
             </div>
           )}
           <div className="board-body">
@@ -317,7 +317,10 @@ function App() {
                 profileReportNames={profileReportNames}
                 act={act}
                 busy={busy}
+                feedbackSummary={state.feedback_summary}
+                onGenerateProfileSuggestions={generateFeedbackProfileSuggestions}
                 onOpenStart={() => setActiveTab("actions")}
+                onOpenProfiles={() => setActiveTab("profiles")}
               />
             )}
             {activeTab === "actions" && (

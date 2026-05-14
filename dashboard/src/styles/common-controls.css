@@ -651,6 +651,13 @@ pre {
   background: color-mix(in oklch, var(--signal-danger) 8%, transparent);
 }
 
+.inline-empty-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+}
+
 .inline-empty-copy {
   display: grid;
   gap: 3px;
@@ -677,6 +684,9 @@ pre {
 
 .inline-empty-action {
   display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 7px;
   min-width: 0;
 }
 

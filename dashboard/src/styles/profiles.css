@@ -802,20 +802,18 @@
 .profile-runtime-settings {
   box-sizing: border-box;
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(280px, 0.34fr) minmax(0, 1fr);
   grid-template-areas:
-    "head head"
-    "scope hours"
-    "alerts hours"
-    "matching matching"
-    "actions actions";
+    "head actions"
+    "scope notify"
+    "rules rules";
   align-items: start;
-  gap: 10px;
+  gap: 12px;
   min-width: 0;
   width: 100%;
   max-width: 100%;
   overflow: hidden;
-  padding: 10px;
+  padding: 12px;
   border: 1px solid color-mix(in oklch, var(--signal-high) 18%, transparent);
   background: color-mix(in oklch, var(--signal-high) 5%, transparent);
 }
@@ -830,6 +828,7 @@
   display: grid;
   grid-area: head;
   gap: 4px;
+  align-self: center;
   min-width: 0;
 }
 
@@ -853,32 +852,304 @@
 
 .profile-runtime-group {
   display: grid;
-  gap: 8px;
+  gap: 9px;
   min-width: 0;
   margin: 0;
   padding: 10px;
   border: 1px solid color-mix(in oklch, var(--signal-high) 18%, transparent);
-  background: color-mix(in oklch, var(--ink) 30%, transparent);
+  background: color-mix(in oklch, var(--ink) 22%, transparent);
 }
 
 .profile-runtime-scope {
   grid-area: scope;
 }
 
-.profile-runtime-work-hours {
-  grid-area: hours;
-}
-
-.profile-runtime-alerts {
-  grid-area: alerts;
+.profile-runtime-notify {
+  grid-area: notify;
 }
 
 .profile-runtime-matching {
-  grid-area: matching;
+  grid-area: rules;
 }
 
-.profile-runtime-actions {
-  grid-area: actions;
+.profile-visual-control {
+  align-content: start;
+}
+
+.profile-visual-control legend {
+  gap: 6px;
+}
+
+.profile-visual-readout {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid color-mix(in oklch, var(--teal) 26%, transparent);
+  background:
+    linear-gradient(90deg, color-mix(in oklch, var(--teal) 8%, transparent) 1px, transparent 1px),
+    color-mix(in oklch, var(--ink) 34%, transparent);
+  background-size: 18px 100%;
+}
+
+.profile-visual-readout span,
+.profile-visual-readout small {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: var(--badge-weight);
+  line-height: 1.15;
+}
+
+.profile-visual-readout strong {
+  color: var(--paper);
+  font-size: 22px;
+  line-height: 1;
+}
+
+.profile-scan-meter {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 4px;
+  height: 8px;
+  margin-top: 4px;
+}
+
+.profile-scan-meter span {
+  border: 1px solid color-mix(in oklch, var(--teal) 30%, transparent);
+  background: color-mix(in oklch, var(--teal) 28%, transparent);
+}
+
+.profile-preset-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 7px;
+  min-width: 0;
+}
+
+.profile-preset-card {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  min-height: 84px;
+  align-content: center;
+  padding: 10px;
+  border: 1px solid color-mix(in oklch, var(--paper) 18%, transparent);
+  background: color-mix(in oklch, var(--paper) 7%, transparent);
+  color: var(--paper);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  box-shadow: none;
+}
+
+.profile-preset-card strong {
+  color: var(--paper);
+  font-size: 14px;
+  line-height: 1.1;
+}
+
+.profile-preset-card span,
+.profile-preset-card small {
+  min-width: 0;
+  color: color-mix(in oklch, var(--paper) 70%, var(--muted));
+  font-size: 11px;
+  font-weight: var(--label-weight);
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.profile-preset-card[data-selected="true"] {
+  border-color: var(--teal);
+  background: color-mix(in oklch, var(--teal) 24%, var(--ink));
+}
+
+.profile-preset-card:hover:not(:disabled),
+.profile-preset-card:focus-visible {
+  border-color: var(--amber);
+  background: color-mix(in oklch, var(--signal-medium) 18%, var(--ink));
+}
+
+.profile-notify-map {
+  display: grid;
+  grid-template-columns: minmax(230px, 0.42fr) minmax(0, 1fr);
+  gap: 8px;
+  min-width: 0;
+}
+
+.profile-time-window-card {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.profile-time-rail {
+  --window-start: 0%;
+  --window-end: 100%;
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  min-height: 46px;
+  align-items: end;
+  padding-top: 20px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: var(--label-weight);
+}
+
+.profile-time-rail::before,
+.profile-time-rail::after {
+  content: "";
+  position: absolute;
+  top: 10px;
+  height: 10px;
+  border: 1px solid color-mix(in oklch, var(--paper) 18%, transparent);
+}
+
+.profile-time-rail::before {
+  right: 0;
+  left: 0;
+  background: color-mix(in oklch, var(--paper) 8%, transparent);
+}
+
+.profile-time-rail::after {
+  left: var(--window-start);
+  width: calc(var(--window-end) - var(--window-start));
+  min-width: 8px;
+  border-color: var(--teal);
+  background: color-mix(in oklch, var(--teal) 42%, transparent);
+}
+
+.profile-time-tick {
+  min-width: 0;
+  text-align: center;
+}
+
+.profile-time-presets .profile-preset-card {
+  min-height: 70px;
+}
+
+.profile-day-board {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+  padding: 9px;
+  border: 1px solid color-mix(in oklch, var(--signal-high) 18%, transparent);
+  background: color-mix(in oklch, var(--ink) 18%, transparent);
+}
+
+.profile-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+
+.profile-chip-button {
+  min-height: 34px;
+  padding: 0 10px;
+  border: 1px solid color-mix(in oklch, var(--paper) 18%, transparent);
+  background: color-mix(in oklch, var(--paper) 7%, transparent);
+  color: var(--paper);
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+  font-weight: var(--badge-weight);
+  text-transform: uppercase;
+}
+
+.profile-chip-button[aria-pressed="true"],
+.profile-weekday-toggle[data-selected="true"] {
+  border-color: var(--teal);
+  background: color-mix(in oklch, var(--teal) 20%, var(--ink));
+  color: var(--paper);
+}
+
+.profile-alert-choice-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+  min-width: 0;
+}
+
+.profile-advanced-panel {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.profile-advanced-panel > summary {
+  display: inline-flex;
+  width: max-content;
+  max-width: 100%;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 0 9px;
+  border: 1px dashed color-mix(in oklch, var(--paper) 24%, transparent);
+  background: color-mix(in oklch, var(--paper) 5%, transparent);
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: var(--badge-weight);
+  list-style: none;
+  text-transform: uppercase;
+}
+
+.profile-advanced-panel > summary::-webkit-details-marker {
+  display: none;
+}
+
+.profile-advanced-panel > summary::after {
+  content: "+";
+  color: var(--amber);
+}
+
+.profile-advanced-panel[open] > summary::after {
+  content: "-";
+}
+
+.profile-advanced-panel > *:not(summary) {
+  margin-top: 8px;
+}
+
+.profile-rules-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.profile-rules-head strong {
+  color: var(--amber);
+  font-size: 12px;
+  line-height: 1.2;
+}
+
+.profile-rule-paper {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+  min-height: 112px;
+  align-content: start;
+  padding: 12px;
+  border: 1px solid color-mix(in oklch, var(--paper-3) 68%, var(--ink-warm));
+  background: var(--field-bg);
+  color: var(--ink);
+}
+
+.profile-rule-paper p,
+.profile-rule-paper small {
+  margin: 0;
+  color: color-mix(in oklch, var(--ink) 78%, var(--paper-3));
+  font-size: 14px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.profile-rule-paper p::before {
+  content: "- ";
+  color: color-mix(in oklch, var(--ink) 55%, var(--paper-3));
 }
 
 .profile-runtime-group legend,
@@ -937,12 +1208,17 @@
 .profile-runtime-settings .profile-weekday-toggle {
   display: flex;
   align-items: center;
-  justify-content: flex-start;
+  justify-content: center;
   gap: 6px;
   min-height: 36px;
   padding: 0 6px;
   border: 1px solid color-mix(in oklch, var(--signal-high) 18%, transparent);
   background: color-mix(in oklch, var(--paper) 5%, transparent);
+  color: var(--muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+  font-weight: var(--badge-weight);
 }
 
 .profile-runtime-settings .profile-weekday-toggle span {
@@ -989,7 +1265,8 @@
 
 .profile-runtime-settings label span,
 .profile-weekday-block > span,
-.profile-runtime-settings small {
+.profile-runtime-settings label small,
+.profile-workdays-default {
   color: var(--muted);
   font-size: 11px;
   font-weight: var(--badge-weight);
@@ -1057,7 +1334,7 @@
   width: 100%;
   min-width: 0;
   max-width: 100%;
-  min-height: 92px;
+  min-height: 132px;
   resize: vertical;
   border: 1px solid color-mix(in oklch, var(--paper-3) 72%, var(--ink-warm));
   background: var(--field-bg);
@@ -1121,7 +1398,7 @@
 
 .profile-save-settings {
   justify-content: center;
-  width: 100%;
+  width: auto;
   min-width: 0;
 }
 
@@ -1144,14 +1421,18 @@
 }
 
 .profile-runtime-actions {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 8px;
+  grid-area: actions;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
   min-width: 0;
 }
 
 .profile-runtime-actions .text-button {
-  min-height: 44px;
+  min-height: 36px;
+  min-width: min(150px, 100%);
+  padding: 0 10px;
 }
 
 .profile-delete-zone {

@@ -1,4 +1,5 @@
 import type { Dispatch, SetStateAction } from "react";
+import { FileDiff, UserRoundCog } from "lucide-react";
 
 import { InlineEmpty } from "../common";
 import { percentWidth, toneClass } from "../../domain/display";
@@ -14,15 +15,23 @@ import {
   reviewQueueCount,
   type InboxFilter,
 } from "../../domain/inbox";
-import type { ReviewCard } from "../../domain/types";
+import type { DashboardState, ReviewCard } from "../../domain/types";
 
 export function ReviewFilterEmptyState({
   activeFilter,
+  busy = false,
+  feedbackSummary,
   filters,
+  onGenerateProfileSuggestions,
+  onOpenProfiles,
   onSelectFilter,
 }: {
   activeFilter: InboxFilter;
+  busy?: boolean;
+  feedbackSummary?: DashboardState["feedback_summary"];
   filters: ReturnType<typeof inboxFilterOptions>;
+  onGenerateProfileSuggestions?: () => void;
+  onOpenProfiles?: () => void;
   onSelectFilter: Dispatch<SetStateAction<InboxFilter>>;
 }) {
   const nextFilter = nextNonEmptyReviewFilter(filters, activeFilter);
@@ -31,19 +40,81 @@ export function ReviewFilterEmptyState({
     .filter((item) => ["high", "new_changed", "low_medium"].includes(item.id))
     .reduce((sum, item) => sum + item.count, 0);
   const allCaughtUp = activeFilter === "actionable" && reviewQueueTotal === 0;
+  const pendingDraftCount = feedbackSummary?.pending_profile_diff_count ?? 0;
+  const exportableCount = feedbackSummary?.exportable_count ?? 0;
+  const canShowLearningAction =
+    allCaughtUp && ((pendingDraftCount > 0 && onOpenProfiles) || (exportableCount > 0 && onGenerateProfileSuggestions));
+  const learningAction = canShowLearningAction ? (
+    <ReviewLearningAction
+      busy={busy}
+      exportableCount={exportableCount}
+      onGenerateProfileSuggestions={onGenerateProfileSuggestions}
+      onOpenProfiles={onOpenProfiles}
+      pendingDraftCount={pendingDraftCount}
+    />
+  ) : null;
+  const nextAction = next ? (
+    <button type="button" onClick={() => onSelectFilter(next.id)}>
+      Show {compactFilterLabel(next.label)} {next.count}
+    </button>
+  ) : undefined;
   return (
     <InlineEmpty
       title={allCaughtUp ? "All caught up" : activeFilter === "actionable" ? "No priority cards" : "No cards in this view"}
-      detail={next ? reviewFilterEmptyDetail(next.label) : "This view is clear."}
+      detail={allCaughtUp ? reviewAllCaughtUpDetail(feedbackSummary, next?.label) : next ? reviewFilterEmptyDetail(next.label) : "This view is clear."}
+      detailPlacement={allCaughtUp ? "icon" : "inline"}
       action={
-        next ? (
-          <button type="button" onClick={() => onSelectFilter(next.id)}>
-            Show {compactFilterLabel(next.label)} {next.count}
-          </button>
+        learningAction || nextAction ? (
+          <>
+            {learningAction}
+            {nextAction}
+          </>
         ) : undefined
       }
     />
   );
+}
+
+function ReviewLearningAction({
+  busy,
+  exportableCount,
+  onGenerateProfileSuggestions,
+  onOpenProfiles,
+  pendingDraftCount,
+}: {
+  busy: boolean;
+  exportableCount: number;
+  onGenerateProfileSuggestions?: () => void;
+  onOpenProfiles?: () => void;
+  pendingDraftCount: number;
+}) {
+  if (pendingDraftCount > 0 && onOpenProfiles) {
+    return (
+      <button type="button" onClick={onOpenProfiles} disabled={busy}>
+        <UserRoundCog size={15} />
+        Review drafts {pendingDraftCount}
+      </button>
+    );
+  }
+  if (exportableCount > 0 && onGenerateProfileSuggestions) {
+    return (
+      <button type="button" onClick={onGenerateProfileSuggestions} disabled={busy}>
+        <FileDiff size={15} />
+        Generate drafts {exportableCount}
+      </button>
+    );
+  }
+  return null;
+}
+
+function reviewAllCaughtUpDetail(summary: DashboardState["feedback_summary"], nextLabel?: string) {
+  if ((summary?.pending_profile_diff_count ?? 0) > 0) {
+    return "Profile drafts are ready to review.";
+  }
+  if ((summary?.exportable_count ?? 0) > 0) {
+    return "Use handled decisions to draft profile changes.";
+  }
+  return nextLabel ? reviewFilterEmptyDetail(nextLabel) : "This view is clear.";
 }
 
 function reviewFilterEmptyDetail(nextLabel: string) {

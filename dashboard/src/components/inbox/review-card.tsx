@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from "react";
-import { Archive, Ban, Bookmark, Check, ExternalLink, FileDiff, Play, RotateCcw, Send, X } from "lucide-react";
+import { Archive, Ban, Bookmark, Check, ExternalLink, Eye, FileDiff, Play, RotateCcw, X } from "lucide-react";
 
 import { artifactFormatFromPath, artifactHref, reportProfileName, toneClass } from "../../domain/display";
 import { formatDate, profileDisplayName, sourceRefLabel, titleCaseLabel } from "../../domain/format";
@@ -18,6 +18,8 @@ export function ReviewCardArticle({
   busy: boolean;
 }) {
   const [showFollowUp, setShowFollowUp] = useState(false);
+  const [sourcePreview, setSourcePreview] = useState<SourcePreviewSelection | null>(null);
+  const sourcePreviewId = `source-preview-${card.card_id.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
   return (
     <article className={`review-card rating-${toneClass(card.rating)}`} data-actions-expanded={showFollowUp ? "true" : "false"}>
       <div className="card-spine" aria-hidden="true">
@@ -44,12 +46,40 @@ export function ReviewCardArticle({
           </span>
           <span>{formatDate(card.updated_at)}</span>
         </div>
-        <CardSourceRow card={card} profileReportNames={profileReportNames} />
+        <CardSourceRow
+          activePreviewKey={sourcePreview?.key ?? ""}
+          card={card}
+          profileReportNames={profileReportNames}
+          previewId={sourcePreviewId}
+          onPreviewSource={(nextPreview) =>
+            setSourcePreview((currentPreview) => (currentPreview?.key === nextPreview.key ? null : nextPreview))
+          }
+        />
+        {sourcePreview && (
+          <SourcePreviewPanel
+            card={card}
+            id={sourcePreviewId}
+            preview={sourcePreview}
+            onClose={() => setSourcePreview(null)}
+          />
+        )}
       </div>
       <CardActions card={card} act={act} busy={busy} setShowFollowUp={setShowFollowUp} showFollowUp={showFollowUp} />
     </article>
   );
 }
+
+type SourcePreviewSelection = {
+  key: string;
+  ref: SourceRef;
+  index: number;
+};
+
+type SourcePreviewContent =
+  | { status: "loading" }
+  | { status: "ready"; html: string }
+  | { status: "missing"; detail: string }
+  | { status: "error"; detail: string };
 
 function CardContextStrip({ card }: { card: ReviewCard }) {
   const items = cardContextItems(card);
@@ -192,8 +222,8 @@ function opportunityStatusLabel(status: string) {
     open: "Open",
     saved: "Saved",
     applied: "Applied",
-    contacted: "Contacted",
-    dismissed: "Dismissed",
+    contacted: "Applied",
+    dismissed: "Not a fit",
     duplicate: "Duplicate",
   };
   return labels[normalized] || "Open";
@@ -263,17 +293,6 @@ function MobileActionStrip({
             <Bookmark size={16} />
             <span>Save</span>
           </button>
-          <button
-            aria-label="Mark opportunity contacted"
-            title="Mark opportunity contacted"
-            type="button"
-            data-review-action="contacted"
-            onClick={() => act(card.card_id, "contacted")}
-            disabled={busy}
-          >
-            <Send size={16} />
-            <span>Contacted</span>
-          </button>
         </>
       ) : (
         <button
@@ -303,16 +322,16 @@ function MobileActionStrip({
         </button>
       )}
       <button
-        aria-label={showFollowUp ? "Hide match tuning tools" : "Tune profile or mark wrong match"}
+        aria-label={showFollowUp ? "Hide feedback tools" : "Explain why this is not a fit or tune the profile"}
         className="secondary-action"
         data-review-action="tune"
-        title={showFollowUp ? "Hide match tuning tools" : "Tune profile or mark wrong match"}
+        title={showFollowUp ? "Hide feedback tools" : "Explain why this is not a fit or tune the profile"}
         type="button"
         onClick={() => setShowFollowUp((value) => !value)}
         disabled={busy}
       >
         <FileDiff size={16} />
-        <span>{showFollowUp ? "Hide tools" : "Tune profile"}</span>
+        <span>{showFollowUp ? "Hide tools" : "Not a fit"}</span>
       </button>
     </div>
   );
@@ -332,9 +351,9 @@ function ReportArtifactChip({
   const label = profileReportNames[profileId] || `${profileDisplayName(profileId)} Report`;
   const format = artifactFormatFromPath(path);
   return (
-    <a className="report-chip" href={artifactHref(path)} aria-label={`Open run details: ${label}`} rel="noreferrer" target="_blank" title={label}>
+    <a className="report-chip" href={artifactHref(path)} aria-label={`Open scan details: ${label}`} rel="noreferrer" target="_blank" title={label}>
       <ExternalLink size={13} />
-      <span>Run details</span>
+      <span>Scan details</span>
       <small>
         {format} · {formatDate(updatedAt)}
       </small>
@@ -397,32 +416,6 @@ function CardActions({
               <Bookmark size={16} />
               <span>Saved</span>
             </button>
-            <button title="Mark opportunity contacted" type="button" data-review-action="contacted" onClick={() => act(card.card_id, "contacted")} disabled={busy}>
-              <Send size={16} />
-              <span>Contacted</span>
-            </button>
-            <button
-              className="secondary-action"
-              title="Dismiss opportunity"
-              type="button"
-              data-review-action="dismissed"
-              onClick={() => act(card.card_id, "dismissed")}
-              disabled={busy}
-            >
-              <X size={16} />
-              <span>Dismiss</span>
-            </button>
-            <button
-              className="secondary-action"
-              title="Mark duplicate opportunity"
-              type="button"
-              data-review-action="duplicate"
-              onClick={() => act(card.card_id, "duplicate")}
-              disabled={busy}
-            >
-              <Archive size={16} />
-              <span>Duplicate</span>
-            </button>
           </>
         ) : (
           <button title="Reopen opportunity" type="button" data-review-action="reopen" onClick={() => act(card.card_id, "reopen")} disabled={busy}>
@@ -450,24 +443,24 @@ function CardActions({
           <button
             className="tune-profile-trigger"
             data-review-action="tune"
-            title="Tune profile from this card"
+            title="Explain why this is not a fit or tune the profile"
             type="button"
             onClick={() => setShowFollowUp(true)}
             disabled={busy}
           >
             <FileDiff size={17} />
-            <span>Tune profile</span>
-            <small>Signals + note</small>
+            <span>Not a fit</span>
+            <small>Reasons + signals</small>
           </button>
         </div>
       )}
       {showFollowUp && (
         <div className="follow-up">
           <div className="follow-up-head">
-            <label htmlFor={noteId}>Profile tuning note</label>
+            <label htmlFor={noteId}>Feedback</label>
             <button
               className="follow-up-close"
-              title="Hide profile tuning note"
+              title="Hide feedback tools"
               type="button"
               onClick={() => setShowFollowUp(false)}
               disabled={busy}
@@ -476,46 +469,76 @@ function CardActions({
               <span>Hide</span>
             </button>
           </div>
-          <div className="follow-up-signal-grid" aria-label="Preference training actions">
-            <button
-              className="follow-up-signal"
-              title="Prefer similar future matches"
-              type="button"
-              data-review-action="keep"
-              onClick={() => act(card.card_id, "keep")}
-              disabled={busy}
-            >
-              <Check size={16} />
-              <span>Prefer similar</span>
-            </button>
-            <button
-              className="follow-up-signal"
-              title="Deprioritize similar future matches"
-              type="button"
-              data-review-action="skip"
-              onClick={() => act(card.card_id, "skip")}
-              disabled={busy}
-            >
-              <X size={16} />
-              <span>Deprioritize</span>
-            </button>
-            <button
-              className="follow-up-signal"
-              data-review-action="avoid"
-              title="Mark as wrong match and avoid similar future matches"
-              type="button"
-              onClick={() => act(card.card_id, "false_positive")}
-              disabled={busy}
-            >
-              <Ban size={16} />
-              <span>Wrong match</span>
-            </button>
+          <div className="follow-up-group">
+            <span className="follow-up-group-label">Close card</span>
+            <div className="follow-up-signal-grid follow-up-reason-grid" aria-label="Close card reasons">
+              <button
+                className="follow-up-signal"
+                title="Close this opportunity because it is not a fit"
+                type="button"
+                data-review-action="dismissed"
+                onClick={() => act(card.card_id, "dismissed")}
+                disabled={busy}
+              >
+                <X size={16} />
+                <span>Not a fit</span>
+              </button>
+              <button
+                className="follow-up-signal"
+                title="Close this opportunity as a duplicate"
+                type="button"
+                data-review-action="duplicate"
+                onClick={() => act(card.card_id, "duplicate")}
+                disabled={busy}
+              >
+                <Archive size={16} />
+                <span>Duplicate</span>
+              </button>
+            </div>
+          </div>
+          <div className="follow-up-group">
+            <span className="follow-up-group-label">Teach matching</span>
+            <div className="follow-up-signal-grid" aria-label="Preference training actions">
+              <button
+                className="follow-up-signal"
+                title="Prefer similar future matches"
+                type="button"
+                data-review-action="keep"
+                onClick={() => act(card.card_id, "keep")}
+                disabled={busy}
+              >
+                <Check size={16} />
+                <span>Prefer similar</span>
+              </button>
+              <button
+                className="follow-up-signal"
+                title="Deprioritize similar future matches"
+                type="button"
+                data-review-action="skip"
+                onClick={() => act(card.card_id, "skip")}
+                disabled={busy}
+              >
+                <X size={16} />
+                <span>Deprioritize</span>
+              </button>
+              <button
+                className="follow-up-signal"
+                data-review-action="avoid"
+                title="Mark as wrong match and avoid similar future matches"
+                type="button"
+                onClick={() => act(card.card_id, "false_positive")}
+                disabled={busy}
+              >
+                <Ban size={16} />
+                <span>Wrong match</span>
+              </button>
+            </div>
           </div>
           <div className="follow-up-control">
             <textarea
               id={noteId}
               ref={textareaRef}
-              aria-label="Profile tuning note"
+              aria-label="Feedback note"
               value={note}
               onChange={(event) => setNote(event.target.value)}
               placeholder="Describe what future matches should change"
@@ -542,15 +565,26 @@ function CardActions({
 }
 
 function CardSourceRow({
+  activePreviewKey,
   card,
+  onPreviewSource,
+  previewId,
   profileReportNames,
 }: {
+  activePreviewKey: string;
   card: ReviewCard;
+  onPreviewSource: (preview: SourcePreviewSelection) => void;
+  previewId: string;
   profileReportNames: Record<string, string>;
 }) {
   return (
-    <div className="source-row" aria-label="Original sources and run details">
-      <SourceLinks refs={card.source_refs} />
+    <div className="source-row" aria-label="Original sources and scan details">
+      <SourceLinks
+        activePreviewKey={activePreviewKey}
+        previewId={previewId}
+        refs={card.source_refs}
+        onPreviewSource={onPreviewSource}
+      />
       {card.report_path && (
         <ReportArtifactChip
           path={card.report_path}
@@ -563,7 +597,17 @@ function CardSourceRow({
   );
 }
 
-function SourceLinks({ refs }: { refs: SourceRef[] }) {
+function SourceLinks({
+  activePreviewKey,
+  onPreviewSource,
+  previewId,
+  refs,
+}: {
+  activePreviewKey: string;
+  onPreviewSource: (preview: SourcePreviewSelection) => void;
+  previewId: string;
+  refs: SourceRef[];
+}) {
   if (!refs.length) {
     return <span className="source-chip muted">Original unavailable</span>;
   }
@@ -573,31 +617,231 @@ function SourceLinks({ refs }: { refs: SourceRef[] }) {
         const href = sourceRefUrl(ref);
         const label = sourceRefLabel(ref);
         const sourceTitle = `@${String(ref.channel || "").replace(/^@+/, "")} #${String(ref.id || "")}`;
-        const actionLabel = index === 0 ? "Open original" : `Original ${index + 1}`;
-        if (!href) {
-          return (
-            <span className={index === 0 ? "source-chip source-primary" : "source-chip"} key={`${ref.channel}-${ref.id}`} title={sourceTitle}>
-              <span>{index === 0 ? "Original unavailable" : actionLabel}</span>
-              <small>{label}</small>
-            </span>
-          );
-        }
+        const actionLabel = index === 0 ? "View original" : `Original ${index + 1}`;
+        const key = sourcePreviewKey(ref, index);
         return (
-          <a
+          <button
+            aria-controls={previewId}
+            aria-expanded={activePreviewKey === key}
             className={index === 0 ? "source-chip source-link source-primary" : "source-chip source-link"}
-            href={href}
-            key={`${ref.channel}-${ref.id}`}
-            target="_blank"
-            rel="noreferrer"
-            title={telegramMessageUrl(ref) || ref.url ? `Open Telegram source: ${sourceTitle}` : `Open Telegram channel: ${label}`}
+            data-source-preview={key}
+            key={key}
+            onClick={() => onPreviewSource({ key, ref, index })}
+            title={href ? `Preview Telegram source: ${sourceTitle}` : `Preview source details: ${label}`}
+            type="button"
           >
             <span>{actionLabel}</span>
             <small>{label}</small>
-            <ExternalLink size={12} aria-hidden="true" />
-          </a>
+            <Eye size={12} aria-hidden="true" />
+          </button>
         );
       })}
       {refs.length > 4 && <span className="source-chip muted">+{refs.length - 4} originals</span>}
     </>
   );
+}
+
+function SourcePreviewPanel({
+  card,
+  id,
+  onClose,
+  preview,
+}: {
+  card: ReviewCard;
+  id: string;
+  onClose: () => void;
+  preview: SourcePreviewSelection;
+}) {
+  const href = sourceRefUrl(preview.ref);
+  const label = sourceRefLabel(preview.ref);
+  const messageId = String(preview.ref.id || "").trim();
+  const [content, setContent] = useState<SourcePreviewContent>(() =>
+    card.report_path ? { status: "loading" } : { status: "missing", detail: "Original text is not available for this scan." },
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    setContent(card.report_path ? { status: "loading" } : { status: "missing", detail: "Original text is not available for this scan." });
+    if (!card.report_path) {
+      return;
+    }
+    loadRenderedOriginalSource(card, preview.ref)
+      .then((result) => {
+        if (!cancelled) {
+          setContent(result);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setContent({ status: "error", detail: "Original text could not be loaded from scan details." });
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [card.report_path, card.title, preview.key]);
+
+  return (
+    <div className="source-preview-panel" id={id} role="region" aria-label="Original source preview">
+      <div className="source-preview-head">
+        <span>
+          <Eye size={14} />
+          Original source
+        </span>
+        <button type="button" onClick={onClose} title="Close original source preview">
+          <X size={14} />
+          <span>Close</span>
+        </button>
+      </div>
+      <div className="source-preview-body">
+        <SourcePreviewOriginal content={content} />
+        <div className="source-preview-meta" aria-label="Original source details">
+          <span>
+            <strong>Channel</strong>
+            {label}
+          </span>
+          {messageId && (
+            <span>
+              <strong>Message</strong>
+              #{messageId}
+            </span>
+          )}
+        </div>
+        <div className="source-preview-actions">
+          {href ? (
+            <a href={href} rel="noreferrer" target="_blank" title={telegramMessageUrl(preview.ref) || preview.ref.url || href}>
+              <ExternalLink size={14} />
+              <span>Open in Telegram</span>
+            </a>
+          ) : (
+            <span className="source-preview-unavailable">Telegram link unavailable</span>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SourcePreviewOriginal({ content }: { content: SourcePreviewContent }) {
+  if (content.status === "loading") {
+    return <div className="source-preview-loading">Loading original text...</div>;
+  }
+  if (content.status === "ready") {
+    return <div className="source-original-html" dangerouslySetInnerHTML={{ __html: content.html }} />;
+  }
+  return <div className="source-preview-loading">{content.detail}</div>;
+}
+
+async function loadRenderedOriginalSource(card: ReviewCard, ref: SourceRef): Promise<SourcePreviewContent> {
+  if (!card.report_path) {
+    return { status: "missing", detail: "Original text is not available for this scan." };
+  }
+  const response = await fetch(artifactHref(card.report_path), { credentials: "same-origin" });
+  if (!response.ok) {
+    return { status: "error", detail: "Original text could not be loaded from scan details." };
+  }
+  const documentText = await response.text();
+  const parsed = new DOMParser().parseFromString(documentText, "text/html");
+  const article = findReportArticleForSource(parsed, ref);
+  const rawBody = article?.querySelector(".raw-content-body");
+  if (!rawBody?.innerHTML.trim()) {
+    return { status: "missing", detail: "Original text was not saved in this scan." };
+  }
+  return { status: "ready", html: sanitizeSourcePreviewHtml(rawBody.innerHTML) };
+}
+
+function findReportArticleForSource(parsed: Document, ref: SourceRef) {
+  const articles = Array.from(parsed.querySelectorAll<HTMLElement>("[data-feedback-card]"));
+  return articles.find((article) => {
+    const payload = parseFeedbackPayload(article.getAttribute("data-feedback-payload"));
+    return payload.some((candidate) => sourceRefsMatch(candidate, ref));
+  });
+}
+
+function parseFeedbackPayload(value: string | null): SourceRef[] {
+  if (!value) {
+    return [];
+  }
+  try {
+    const payload = JSON.parse(value) as { source_message_refs?: SourceRef[] };
+    return Array.isArray(payload.source_message_refs) ? payload.source_message_refs : [];
+  } catch {
+    return [];
+  }
+}
+
+function sourceRefsMatch(left: SourceRef, right: SourceRef) {
+  return sourceChannelKey(left.channel) === sourceChannelKey(right.channel) && String(left.id || "") === String(right.id || "");
+}
+
+function sourceChannelKey(value: unknown) {
+  return String(value || "").trim().replace(/^@+/, "").toLowerCase();
+}
+
+function sanitizeSourcePreviewHtml(html: string) {
+  const parsed = new DOMParser().parseFromString(`<div>${html}</div>`, "text/html");
+  const sourceRoot = parsed.body.firstElementChild;
+  const cleanDocument = document.implementation.createHTMLDocument("");
+  const cleanRoot = cleanDocument.createElement("div");
+  for (const child of Array.from(sourceRoot?.childNodes ?? [])) {
+    const cleanChild = sanitizeSourcePreviewNode(child, cleanDocument);
+    if (cleanChild) {
+      cleanRoot.appendChild(cleanChild);
+    }
+  }
+  return cleanRoot.innerHTML;
+}
+
+function sanitizeSourcePreviewNode(node: Node, cleanDocument: Document): Node | null {
+  if (node.nodeType === Node.TEXT_NODE) {
+    return cleanDocument.createTextNode(node.textContent || "");
+  }
+  if (node.nodeType !== Node.ELEMENT_NODE) {
+    return null;
+  }
+  const element = node as Element;
+  const tag = element.tagName.toLowerCase();
+  if (!["a", "br", "code", "em", "hr", "span", "strong"].includes(tag)) {
+    const fragment = cleanDocument.createDocumentFragment();
+    for (const child of Array.from(element.childNodes)) {
+      const cleanChild = sanitizeSourcePreviewNode(child, cleanDocument);
+      if (cleanChild) {
+        fragment.appendChild(cleanChild);
+      }
+    }
+    return fragment;
+  }
+  const cleanElement = cleanDocument.createElement(tag);
+  if (tag === "a") {
+    const href = element.getAttribute("href") || "";
+    if (safeSourceHref(href)) {
+      cleanElement.setAttribute("href", href);
+      cleanElement.setAttribute("target", "_blank");
+      cleanElement.setAttribute("rel", "noopener noreferrer");
+    }
+  } else if (tag === "span") {
+    const safeClasses = (element.getAttribute("class") || "")
+      .split(/\s+/)
+      .filter((name) => ["channel-label", "inline-ref-list"].includes(name));
+    if (safeClasses.length) {
+      cleanElement.setAttribute("class", safeClasses.join(" "));
+    }
+  } else if (tag === "hr" && element.classList.contains("raw-divider")) {
+    cleanElement.setAttribute("class", "raw-divider");
+  }
+  for (const child of Array.from(element.childNodes)) {
+    const cleanChild = sanitizeSourcePreviewNode(child, cleanDocument);
+    if (cleanChild) {
+      cleanElement.appendChild(cleanChild);
+    }
+  }
+  return cleanElement;
+}
+
+function safeSourceHref(href: string) {
+  return /^(https?:|mailto:)/i.test(href.trim());
+}
+
+function sourcePreviewKey(ref: SourceRef, index: number) {
+  return `${String(ref.channel || "")}:${String(ref.id || "")}:${index}`;
 }

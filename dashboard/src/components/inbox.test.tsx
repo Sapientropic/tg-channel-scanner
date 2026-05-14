@@ -43,7 +43,7 @@ describe("InboxView", () => {
     expect(html).toContain("Priority");
     expect(html).toContain("Frontend Developer");
     expect(html).toContain("Applied");
-    expect(html).toContain("Tune profile");
+    expect(html).toContain("Not a fit");
     expect(html).not.toContain("Prefer similar");
   });
 
@@ -158,7 +158,7 @@ describe("InboxView", () => {
     expect(html).toContain("Show High 1");
   });
 
-  it("keeps open opportunity actions and profile tuning entry visible", () => {
+  it("keeps open opportunity actions visible and moves close reasons into feedback", () => {
     const html = renderToStaticMarkup(
       <InboxView
         cards={[card()]}
@@ -171,10 +171,11 @@ describe("InboxView", () => {
 
     expect(html).toContain('data-review-action="applied"');
     expect(html).toContain('data-review-action="saved"');
-    expect(html).toContain('data-review-action="contacted"');
-    expect(html).toContain('data-review-action="dismissed"');
-    expect(html).toContain('data-review-action="duplicate"');
     expect(html).toContain('data-review-action="tune"');
+    expect(html).toContain("Reasons + signals");
+    expect(html).not.toContain('data-review-action="contacted"');
+    expect(html).not.toContain('data-review-action="dismissed"');
+    expect(html).not.toContain('data-review-action="duplicate"');
     expect(html).not.toContain('data-review-action="reopen"');
     expect(html).not.toContain('data-review-action="follow_up"');
   });
@@ -218,8 +219,8 @@ describe("InboxView", () => {
     expect(html).toContain("Alert");
     expect(html).toContain("Sent");
     expect(html).toContain("Compensation");
-    expect(html).toContain("Open original");
-    expect(html).toContain("Run details");
+    expect(html).toContain("View original");
+    expect(html).toContain("Scan details");
   });
 
   it("shows repeat counts directly in the card context strip", () => {
@@ -266,7 +267,7 @@ describe("InboxView", () => {
     expect(html).toContain('aria-label="Undo Wrong match review decision"');
   });
 
-  it("renders original source links as the primary detail path with a capped overflow count", () => {
+  it("renders original source previews as the primary detail path with a capped overflow count", () => {
     const html = renderToStaticMarkup(
       <InboxView
         cards={[
@@ -287,14 +288,70 @@ describe("InboxView", () => {
       />,
     );
 
-    expect(html).toContain('href="https://t.me/javascript_jobs/42"');
-    expect(html).toContain("Open original");
+    expect(html).toContain('data-source-preview="javascript_jobs:42:0"');
+    expect(html).toContain('aria-expanded="false"');
+    expect(html).toContain("View original");
     expect(html).toContain("JavaScript Jobs");
     expect(html).toContain("Python Jobs");
     expect(html).toContain("Rust Jobs");
     expect(html).toContain("TS Jobs");
     expect(html).toContain("+1 originals");
     expect(html).not.toContain("Overflow Jobs");
+  });
+
+  it("offers profile draft generation when the review queue is clear and learning decisions exist", () => {
+    const html = renderToStaticMarkup(
+      <InboxView
+        cards={[
+          card({
+            card_id: "handled-role",
+            opportunity_status: "dismissed",
+            opportunity_updated_at: "2026-05-11T02:00:00Z",
+          }),
+        ]}
+        latestRunId="run-1"
+        profileReportNames={{ "jobs-fast": "Jobs Report" }}
+        feedbackSummary={{
+          exportable_count: 3,
+          pending_profile_diff_count: 0,
+        }}
+        act={vi.fn()}
+        busy={false}
+        onGenerateProfileSuggestions={vi.fn()}
+      />,
+    );
+
+    expect(html).toContain("All caught up");
+    expect(html).toContain("Use handled decisions to draft profile changes.");
+    expect(html).toContain("Generate drafts 3");
+  });
+
+  it("routes to existing profile drafts before generating more suggestions", () => {
+    const html = renderToStaticMarkup(
+      <InboxView
+        cards={[
+          card({
+            card_id: "handled-role",
+            opportunity_status: "dismissed",
+            opportunity_updated_at: "2026-05-11T02:00:00Z",
+          }),
+        ]}
+        latestRunId="run-1"
+        profileReportNames={{ "jobs-fast": "Jobs Report" }}
+        feedbackSummary={{
+          exportable_count: 3,
+          pending_profile_diff_count: 2,
+        }}
+        act={vi.fn()}
+        busy={false}
+        onGenerateProfileSuggestions={vi.fn()}
+        onOpenProfiles={vi.fn()}
+      />,
+    );
+
+    expect(html).toContain("Profile drafts are ready to review.");
+    expect(html).toContain("Review drafts 2");
+    expect(html).not.toContain("Generate drafts 3");
   });
 
   it("shows setup recovery details in the empty inbox state", () => {

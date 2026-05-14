@@ -22,21 +22,26 @@ export function PanelHeader({ icon, title, count }: { icon: ReactNode; title: st
 export function InlineEmpty({
   title,
   detail,
+  detailPlacement = "inline",
   tone = "info",
   action,
 }: {
   title: string;
   detail?: string;
+  detailPlacement?: "inline" | "icon";
   tone?: "info" | "warning" | "error";
   action?: ReactNode;
 }) {
   const icon = tone === "info" ? <Info size={16} /> : <AlertTriangle size={16} />;
+  const iconDetail = detailPlacement === "icon" ? detail : undefined;
   return (
     <div className={`inline-empty ${tone}`}>
-      {icon}
+      <span className="inline-empty-icon" title={iconDetail} aria-label={iconDetail}>
+        {icon}
+      </span>
       <span className="inline-empty-copy">
         <strong>{title}</strong>
-        {detail && <small>{detail}</small>}
+        {detail && detailPlacement === "inline" && <small>{detail}</small>}
       </span>
       {action && <span className="inline-empty-action">{action}</span>}
     </div>

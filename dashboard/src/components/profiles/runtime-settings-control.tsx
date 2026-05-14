@@ -8,11 +8,10 @@ import {
   runtimeSettingsSaveState,
 } from "./runtime-settings-model";
 import {
-  RuntimeAlertFields,
   RuntimeMatchingRulesField,
+  RuntimeNotifyFields,
   RuntimeScanScopeFields,
   RuntimeSettingsActions,
-  RuntimeWorkHoursFields,
 } from "./runtime-settings-sections";
 import { profileDisplayName } from "../../domain/format";
 
@@ -127,52 +126,10 @@ export function ProfileRuntimeSettingsControl({
       <div className="profile-runtime-head">
         <div>
           <strong>Profile settings</strong>
-          <span>Control how much this profile reads, when it checks, and what counts as a match.</span>
+          <span>Tune scan depth, alert timing, and matching rules.</span>
         </div>
       </div>
 
-      <RuntimeScanScopeFields
-        profileId={profile.profile_id}
-        busy={busy}
-        scanWindowHours={scanWindowHours}
-        setScanWindowHours={setScanWindowHours}
-        itemLimit={itemLimit}
-        setItemLimit={setItemLimit}
-      />
-
-      <RuntimeWorkHoursFields
-        profileId={profile.profile_id}
-        busy={busy}
-        timezone={timezone}
-        setTimezone={setTimezone}
-        workStart={workStart}
-        setWorkStart={setWorkStart}
-        workEnd={workEnd}
-        setWorkEnd={setWorkEnd}
-        workdays={workdays}
-        setWorkdays={setWorkdays}
-      />
-
-      <RuntimeAlertFields
-        profileId={profile.profile_id}
-        busy={busy}
-        workInterval={workInterval}
-        setWorkInterval={setWorkInterval}
-        offHoursInterval={offHoursInterval}
-        setOffHoursInterval={setOffHoursInterval}
-        alertRule={alertRule}
-        setAlertRule={setAlertRule}
-        alertMaxAge={alertMaxAge}
-        setAlertMaxAge={setAlertMaxAge}
-      />
-
-      <RuntimeMatchingRulesField
-        profileId={profile.profile_id}
-        busy={busy}
-        currentPreferences={currentPreferences}
-        preferenceNote={preferenceNote}
-        setPreferenceNote={setPreferenceNote}
-      />
       <RuntimeSettingsActions
         profileId={profile.profile_id}
         busy={busy}
@@ -197,6 +154,44 @@ export function ProfileRuntimeSettingsControl({
           setAlertMaxAge(currentAlertMaxAge ? String(currentAlertMaxAge) : "");
           setPreferenceNote(currentPreferences);
         }}
+      />
+
+      <RuntimeScanScopeFields
+        profileId={profile.profile_id}
+        busy={busy}
+        scanWindowHours={scanWindowHours}
+        setScanWindowHours={setScanWindowHours}
+        itemLimit={itemLimit}
+        setItemLimit={setItemLimit}
+      />
+
+      <RuntimeNotifyFields
+        profileId={profile.profile_id}
+        busy={busy}
+        timezone={timezone}
+        setTimezone={setTimezone}
+        workStart={workStart}
+        setWorkStart={setWorkStart}
+        workEnd={workEnd}
+        setWorkEnd={setWorkEnd}
+        workdays={workdays}
+        setWorkdays={setWorkdays}
+        workInterval={workInterval}
+        setWorkInterval={setWorkInterval}
+        offHoursInterval={offHoursInterval}
+        setOffHoursInterval={setOffHoursInterval}
+        alertRule={alertRule}
+        setAlertRule={setAlertRule}
+        alertMaxAge={alertMaxAge}
+        setAlertMaxAge={setAlertMaxAge}
+      />
+
+      <RuntimeMatchingRulesField
+        profileId={profile.profile_id}
+        busy={busy}
+        currentPreferences={currentPreferences}
+        preferenceNote={preferenceNote}
+        setPreferenceNote={setPreferenceNote}
       />
     </div>
   );

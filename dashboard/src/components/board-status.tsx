@@ -6,11 +6,10 @@ import {
   opportunityHeadline,
   opportunityTone,
   percentWidth,
-  ratio,
 } from "../domain/display";
 import { profileDisplayName } from "../domain/format";
 import { handledInboxCount, reviewQueueCount } from "../domain/inbox";
-import type { DashboardState, Metric, OpportunitySummary, ValidationSummary } from "../domain/types";
+import type { DashboardState, Metric, OpportunitySummary, ReviewCard, ValidationSummary } from "../domain/types";
 
 export function OpportunitySummaryPanel({
   summary,
@@ -124,55 +123,85 @@ function DecisionMemoryLine({ counts }: { counts?: Record<string, number> }) {
   );
 }
 
-export function ValidationSummaryPanel({ summary }: { summary?: ValidationSummary }) {
+export function ValidationSummaryPanel({ cards = [], summary }: { cards?: ReviewCard[]; summary?: ValidationSummary }) {
   if (!summary) {
     return null;
   }
+  const currentQueueCount = cards.length ? reviewQueueCount(cards) : summary.pending_count ?? 0;
+  const currentHandledCount = cards.length ? handledInboxCount(cards) : Math.max(0, (summary.card_count ?? 0) - (summary.pending_count ?? 0));
+  const currentTotal = cards.length || summary.card_count || currentHandledCount + currentQueueCount;
   const actions = Object.entries(summary.by_action ?? {}).filter(([, count]) => count > 0);
   const firstDecision = firstDecisionLabel(summary);
-  const nextActionDetail = validationNextActionDetail(summary.next_action?.detail);
+  const display = validationDisplayCopy(summary, currentQueueCount, currentHandledCount);
+  const keepRate = validationKeepRate(summary);
   return (
     <details className="validation-brief" aria-label="Local validation summary">
       <summary>
         <div className="validation-copy">
           <span className="panel-kicker">{summary.window_days ?? 14} day review window</span>
-          <strong>{summary.next_action?.label || "Track real outcomes"}</strong>
-          <small>{nextActionDetail || "Mark what happened so future matches improve."}</small>
+          <strong>{display.title}</strong>
+          <small>{display.detail}</small>
         </div>
-        <span className="validation-disclosure-label">Progress</span>
+        <span className="validation-disclosure-label">Details</span>
       </summary>
-      <div className="validation-body">
+      <div className="validation-body" data-compact={actions.length > 0 ? "false" : "true"}>
         <div className="validation-stats">
-          <StatusLine label="Scans" value={String(summary.runs_count ?? 0)} />
-          <StatusLine label="High cards" value={String(summary.high_card_count ?? 0)} />
-          <StatusLine label="Decisions" value={String(summary.action_count ?? 0)} />
-          <StatusLine label="Waiting" value={String(summary.pending_count ?? 0)} />
-          <StatusLine label="First action" value={firstDecision} />
+          <StatusLine label="Handled" value={`${currentHandledCount}/${currentTotal}`} />
+          {keepRate && <StatusLine label="Keep rate" value={keepRate} />}
+          {(summary.high_card_count ?? 0) > 0 && <StatusLine label="High cards" value={String(summary.high_card_count ?? 0)} />}
+          {firstDecision !== "Waiting" && <StatusLine label="First action" value={firstDecision} />}
         </div>
-        <div className="validation-gauges" aria-label="Validation behavior rates">
-          <ValidationGauge
-            label="Reviewed"
-            value={summary.triage_rate ?? ratio(summary.action_count, summary.card_count)}
-            detail={`${summary.action_count ?? 0}/${summary.card_count ?? 0}`}
-          />
-          <ValidationGauge
-            label="Keep rate"
-            value={summary.keep_rate ?? 0}
-            detail={`${Math.round((summary.keep_rate ?? 0) * 100)}%`}
-          />
-          {actions.length ? (
-            actions.map(([action, count]) => (
+        {actions.length > 0 && (
+          <div className="validation-gauges compact" aria-label="Learning choice breakdown">
+            {actions.map(([action, count]) => (
               <span key={action}>
-                {action.replace(/_/g, " ")} {count}
+                {validationActionLabel(action)} {count}
               </span>
-            ))
-          ) : (
-            <span>No decisions yet</span>
-          )}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
     </details>
   );
+}
+
+function validationDisplayCopy(summary: ValidationSummary, queueCount: number, handledCount: number) {
+  if (queueCount === 0 && handledCount > 0) {
+    return {
+      title: "All review cards handled",
+      detail: `${handledCount} handled card${handledCount === 1 ? "" : "s"} saved as history.`,
+    };
+  }
+  const nextActionDetail = validationNextActionDetail(summary.next_action?.detail);
+  return {
+    title: summary.next_action?.label || "Track real outcomes",
+    detail: nextActionDetail || `${queueCount} card${queueCount === 1 ? "" : "s"} still need review.`,
+  };
+}
+
+function validationKeepRate(summary: ValidationSummary) {
+  const actionCount = summary.action_count ?? 0;
+  if (actionCount <= 0 && typeof summary.keep_rate !== "number") {
+    return "";
+  }
+  const rawRate =
+    typeof summary.keep_rate === "number"
+      ? summary.keep_rate
+      : actionCount > 0
+        ? (summary.by_action?.keep ?? 0) / actionCount
+        : 0;
+  const boundedRate = Math.max(0, Math.min(1, rawRate));
+  return `${Math.round(boundedRate * 100)}%`;
+}
+
+function validationActionLabel(action: string) {
+  const labels: Record<string, string> = {
+    false_positive: "Wrong match",
+    follow_up: "Profile draft",
+    keep: "Preferred",
+    skip: "Deprioritized",
+  };
+  return labels[action] || action.replace(/_/g, " ");
 }
 
 function opportunityNextActionLabel(label?: string) {
@@ -235,17 +264,5 @@ function MetricTile({ metric }: { metric: Metric }) {
         </div>
       )}
     </article>
-  );
-}
-
-function ValidationGauge({ label, value, detail }: { label: string; value: number; detail: string }) {
-  return (
-    <div className="validation-gauge" aria-label={`${label}: ${detail}`}>
-      <span>{label}</span>
-      <div style={{ "--gauge": percentWidth(value) } as CSSProperties}>
-        <i />
-      </div>
-      <strong>{detail}</strong>
-    </div>
   );
 }

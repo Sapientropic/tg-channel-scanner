@@ -303,14 +303,22 @@
 .review-card .card-main {
   display: grid;
   grid-template-areas:
-    "title title"
-    "reason sources"
-    "proof proof"
-    "meta meta";
-  grid-template-columns: minmax(0, 1fr) minmax(300px, 0.32fr);
-  gap: 10px 16px;
+    "title"
+    "reason"
+    "proof"
+    "meta"
+    "sources"
+    "preview";
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px 14px;
   align-content: start;
   padding: 18px 18px 16px;
+}
+
+@media (min-width: 1180px) {
+  .review-card .source-row {
+    max-width: min(760px, 100%);
+  }
 }
 
 .card-title-row {
@@ -398,7 +406,7 @@
 .source-row {
   grid-area: sources;
   align-content: start;
-  align-items: flex-start;
+  align-items: stretch;
 }
 
 .meta-row span {
@@ -429,39 +437,65 @@
 .source-chip {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 5px;
   max-width: 100%;
-  min-height: 30px;
-  padding: 0 8px;
+  min-height: 42px;
+  padding: 0 10px;
+  border: 1px solid color-mix(in oklch, var(--teal) 30%, var(--paper-3));
   color: var(--ink-link);
   background: var(--surface-link);
+  font-weight: var(--badge-weight);
+  line-height: 1;
   overflow-wrap: anywhere;
 }
 
-a.source-chip {
-  min-height: 30px;
-  text-decoration: none;
+button.source-chip {
+  appearance: none;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
 }
 
 .source-link {
   gap: 5px;
 }
 
+.source-chip span {
+  min-width: 0;
+  font-size: 12px;
+}
+
 .source-chip small {
   min-width: 0;
-  color: var(--ink-warm);
+  color: color-mix(in oklch, var(--ink-link) 70%, var(--ink));
   font-size: 10px;
   font-weight: var(--label-weight);
   line-height: 1.1;
 }
 
 .source-primary {
-  border: 1px solid color-mix(in oklch, var(--teal) 44%, var(--paper-3));
-  background: color-mix(in oklch, var(--teal) 13%, var(--surface-link));
+  border-color: color-mix(in oklch, var(--teal) 60%, var(--paper-3));
+  background: color-mix(in oklch, var(--teal) 18%, var(--surface-link));
+  color: color-mix(in oklch, var(--ink-link) 84%, var(--ink));
 }
 
 .source-link svg {
   flex: 0 0 auto;
+}
+
+button.source-chip:hover,
+button.source-chip:focus-visible,
+button.source-chip[aria-expanded="true"] {
+  color: var(--ink);
+  background: color-mix(in oklch, var(--teal) 24%, var(--paper));
+  border-color: var(--teal);
+}
+
+button.source-chip:hover small,
+button.source-chip:focus-visible small,
+button.source-chip[aria-expanded="true"] small {
+  color: color-mix(in oklch, var(--ink) 82%, var(--ink-link));
 }
 
 .source-chip.muted {
@@ -475,7 +509,7 @@ a.source-chip {
   gap: 2px 7px;
   align-items: center;
   max-width: 100%;
-  align-self: start;
+  align-self: stretch;
   min-height: 42px;
   padding: 6px 8px;
   border: 1px solid color-mix(in oklch, var(--paper-3) 70%, var(--ink-link));
@@ -491,7 +525,9 @@ a.source-chip {
 
 .report-chip:focus-visible,
 .artifact-link:focus-visible,
-a.source-chip:focus-visible {
+button.source-chip:focus-visible,
+.source-preview-actions a:focus-visible,
+.source-preview-head button:focus-visible {
   outline: 2px solid var(--teal);
   outline-offset: 3px;
 }
@@ -518,13 +554,172 @@ a.source-chip:focus-visible {
   text-transform: uppercase;
 }
 
+.source-preview-panel {
+  grid-area: preview;
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid color-mix(in oklch, var(--teal) 34%, var(--paper-3));
+  background:
+    linear-gradient(90deg, color-mix(in oklch, var(--teal) 9%, transparent) 1px, transparent 1px),
+    color-mix(in oklch, var(--surface-link) 54%, var(--paper));
+  background-size: 14px 100%;
+}
+
+.source-preview-head,
+.source-preview-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.source-preview-head span,
+.source-preview-head button,
+.source-preview-actions a {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+
+.source-preview-head span {
+  color: var(--ink-link);
+  font-size: 11px;
+  font-weight: var(--label-weight);
+  text-transform: uppercase;
+}
+
+.source-preview-head button {
+  min-height: 32px;
+  padding: 0 9px;
+  border: 1px solid color-mix(in oklch, var(--teal) 32%, var(--paper-3));
+  background: color-mix(in oklch, var(--paper) 58%, transparent);
+  color: var(--ink-link);
+  cursor: pointer;
+  font: inherit;
+  font-size: 10px;
+  font-weight: var(--badge-weight);
+  text-transform: uppercase;
+}
+
+.source-preview-body {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.source-preview-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+
+.source-preview-meta span,
+.source-preview-unavailable {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+  padding: 0 8px;
+  border: 1px solid color-mix(in oklch, var(--paper-3) 72%, var(--ink-warm));
+  background: var(--surface-warm);
+  color: var(--ink-warm);
+  font-size: 11px;
+  line-height: 1.1;
+  overflow-wrap: anywhere;
+}
+
+.source-preview-meta strong {
+  color: var(--ink);
+  font-weight: var(--badge-weight);
+}
+
+.source-preview-actions a {
+  min-height: 40px;
+  padding: 0 12px;
+  border: 1px solid var(--ink-link);
+  background: color-mix(in oklch, var(--teal) 14%, var(--surface-link));
+  color: var(--ink-link);
+  font-size: 12px;
+  font-weight: var(--badge-weight);
+  text-decoration: none;
+}
+
+.source-preview-actions a:hover {
+  background: color-mix(in oklch, var(--teal) 24%, var(--paper));
+  color: var(--ink);
+}
+
+.source-original-html,
+.source-preview-loading {
+  min-width: 0;
+  max-height: min(520px, 56vh);
+  overflow: auto;
+  padding: 12px;
+  border: 1px solid color-mix(in oklch, var(--teal) 28%, var(--paper-3));
+  background: color-mix(in oklch, var(--paper) 72%, var(--surface-link));
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 1.48;
+  overflow-wrap: anywhere;
+}
+
+.source-preview-loading {
+  color: var(--ink-warm);
+  font-weight: var(--label-weight);
+}
+
+.source-original-html .channel-label {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--ink-link);
+  font-size: 11px;
+  font-weight: var(--badge-weight);
+  text-transform: uppercase;
+}
+
+.source-original-html strong {
+  color: var(--ink);
+  font-weight: 800;
+}
+
+.source-original-html em {
+  color: var(--ink-warm);
+}
+
+.source-original-html code {
+  padding: 1px 4px;
+  background: var(--surface-warm);
+  color: var(--ink);
+  font-size: 0.92em;
+}
+
+.source-original-html a {
+  color: var(--ink-link);
+  font-weight: var(--badge-weight);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.source-original-html .raw-divider {
+  margin: 10px 0;
+  border: 0;
+  border-top: 1px solid color-mix(in oklch, var(--teal) 28%, var(--paper-3));
+}
+
 .card-actions {
   display: grid;
   grid-column: 2 / -1;
-  grid-template-columns: minmax(0, 1fr) minmax(180px, 0.18fr);
+  grid-template-columns: minmax(260px, 460px) minmax(180px, 220px);
   gap: 10px;
   align-content: start;
   align-items: start;
+  justify-content: start;
   padding: 10px 12px 12px;
   border-top: 1px solid var(--paper-3);
   background:
@@ -539,7 +734,7 @@ a.source-chip:focus-visible {
 }
 
 .lifecycle-cluster {
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .tune-profile-entry {
@@ -669,9 +864,7 @@ a.source-chip:focus-visible {
 }
 
 .action-cluster button[data-review-action="applied"]:hover,
-.action-cluster button[data-review-action="applied"]:focus-visible,
-.action-cluster button[data-review-action="contacted"]:hover,
-.action-cluster button[data-review-action="contacted"]:focus-visible {
+.action-cluster button[data-review-action="applied"]:focus-visible {
   border-color: color-mix(in oklch, var(--signal-high) 72%, var(--ink));
   background: color-mix(in oklch, var(--signal-high) 28%, var(--surface-warm));
   color: var(--ink);
@@ -725,6 +918,20 @@ a.source-chip:focus-visible {
   min-width: 0;
 }
 
+.follow-up-group {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.follow-up-group-label {
+  color: var(--ink-warm);
+  font-size: 10px;
+  font-weight: var(--label-weight);
+  line-height: 1;
+  text-transform: uppercase;
+}
+
 .follow-up-head {
   display: flex;
   align-items: center;
@@ -772,6 +979,10 @@ a.source-chip:focus-visible {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 6px;
   min-width: 0;
+}
+
+.follow-up-reason-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .follow-up-signal {
