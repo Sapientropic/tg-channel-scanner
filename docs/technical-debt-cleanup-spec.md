@@ -624,6 +624,32 @@ privacy behavior:
   action gate covering scheduler, credentials, action dispatch, and bot
   contracts.
 
+## Progress Update: 2026-05-14 Secret Settings Split
+
+The Desk credentials module shed the local secret-settings boundary without
+changing Telegram login, notification target, or settings status contracts:
+
+- `scripts/desk_secret_settings.py` now owns Telegram bot notification token
+  status/update, AI provider key status/update, local credential-store labels,
+  provider-key validation, and `desk_action_env()` provider-env hydration.
+- `scripts/desk_credentials.py` remains the Telegram app credential/login and
+  delivery target/chat-detection owner. It keeps the old notification token,
+  AI settings, and action-env helper names as compatibility wrappers.
+- The wrapper sync layer deliberately keeps `DESK_AI_PROVIDER_CONFIGS`,
+  allowed-field constants, and `_utc_now` facade-aware, so dashboard tests and
+  future local-provider patches do not silently target the wrong module after
+  the split.
+- Regression tests now lock a patched dashboard provider config through both
+  `desk_ai_settings_status()` and `desk_action_env()`, while existing tests
+  continue to cover env-over-local precedence, no token/key echoing,
+  save/clear validation, unsupported command-field rejection, and fixture
+  contracts.
+- The CI explicit `py_compile` list now includes
+  `scripts/desk_secret_settings.py`.
+- Focused gates passed: credential/settings tests plus Desk settings contract
+  tests, targeted `py_compile`, targeted `ruff`, the full dashboard Python
+  test directory, and the mixed credential/action/Bot Gateway contract gate.
+
 ## Current Debt Snapshot: 2026-05-14
 
 The debt register below remains the long-form reasoning. This table is the
@@ -633,7 +659,7 @@ current triage view for what is still real after the later splits:
 | --- | --- | --- |
 | D1. WIP and branch hygiene | Cleared for the known backlog. The dirty implementation slices from the handoff are now checkpoint commits. | Keep using staged snapshot or clean worktree gates for future slices; do not use mixed-worktree gates as commit proof. |
 | D2. Contract sprawl | Materially improved. Shared fixtures now cover the high-risk Python/TypeScript contracts, but `docs/agent-cli-contract.md` is still long. | Keep the contract doc as an index and move new guarantees into fixtures first, prose second. |
-| D3. `dashboard_server.py` boundaries | Artifact, git, fixed dry-run scheduler, Bot Gateway background, credentials, sources, source access, source assistant, action execution, profile creation, server selection, HTTP security, and profile route mutation helpers are split behind the old facade. The facade is currently `1276` lines and mainly owns route dispatch, state payload assembly, pre-state-access guards, and compatibility re-exports. | Keep remaining route dispatch in the facade until a group has focused tests; next backend leverage is test concentration or state payload routing, not low-value line shaving. |
+| D3. `dashboard_server.py` boundaries | Artifact, git, fixed dry-run scheduler, Bot Gateway background, credentials, secret settings, sources, source access, source assistant, action execution, profile creation, server selection, HTTP security, and profile route mutation helpers are split behind the old facade. The facade is currently `1276` lines and mainly owns route dispatch, state payload assembly, pre-state-access guards, and compatibility re-exports. | Keep remaining route dispatch in the facade until a group has focused tests; next backend leverage is test concentration or state payload routing, not low-value line shaving. |
 | D4. `monitor_state.py` boundaries | Mostly reduced to a `411` line facade. DB/schema, common privacy guards, review cards, alerts, feedback, profile patches, and dashboard projection are split. | Profile runtime/settings helpers are the only meaningful remaining state responsibility; split only with focused tests if that area changes. |
 | D5. `report.py` coupling | Mostly reduced. `report.py` is now `503` lines; report behavior moved into `report_*` modules, and report HTML link/source rendering now lives in a focused helper module. | Treat `report_extraction.py`, `report_html.py`, and `report_sources.py` as review units; next report work should be behavior or visual-output driven, not line-count driven. |
 | D6. Dashboard root/settings state | Actions, Profiles, Inbox, Runs, the Settings source library, and the profile runtime settings editor are now composition entrypoints. `inbox.tsx` is down to `137` lines, `runs.tsx` to `76` lines, `source-library-panel.tsx` to `204` lines, and `runtime-settings-control.tsx` to `200` lines, each backed by focused submodules. | The next UI slice should be driven by a real UX/test gap rather than more line-count cleanup. |
@@ -649,6 +675,8 @@ Large current files are still the main maintainability signal:
 | Python server | `scripts/dashboard_server.py` | 1276 | HTTP routing, state payload assembly, route-level validation, and compatibility re-exports remain in the facade after profile creation, server selection, HTTP security, and profile route mutation payloads moved out. |
 | Desk scan scheduler | `scripts/desk_scheduler.py` | 630 | Fixed dry-run auto-scan scheduler and compatibility wrappers remain here after Bot Gateway background/autostart moved out. |
 | Desk Bot Gateway background | `scripts/desk_bot_gateway_background.py` | 556 | Focused Bot Gateway background module for local-first status, token-gated autostart, fixed launcher argv, and launchd/systemd/Windows login task handling. |
+| Desk credentials and delivery | `scripts/desk_credentials.py` | 691 | Telegram app credentials/login, delivery target projection, chat detection, and compatibility wrappers remain here after local secret settings moved out. |
+| Desk secret settings | `scripts/desk_secret_settings.py` | 276 | Focused local secret-settings module for notification bot token status/update, AI provider key status/update, and provider env hydration without echoing secrets. |
 | Desk source registry | `scripts/desk_sources.py` | 552 | Source registry CRUD/import and facade compatibility remain here after source assistant and source access moved out. |
 | Desk source access | `scripts/desk_source_access.py` | 489 | Focused access module for cached source-health files, source-access summaries, Telethon bounded probes, quiet-source semantics, and cached-health repair actions. |
 | Desk source assistant | `scripts/desk_source_assistant.py` | 451 | Focused source planning module for free-text channel extraction, local add/remove/enable/disable plans, confirmed LLM existing-source planning, and resolved-plan application. |

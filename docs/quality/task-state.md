@@ -1,15 +1,15 @@
-state: active_quality_iteration_bot_gateway_background_split_checkpoint
+state: active_quality_iteration_secret_settings_split_checkpoint
 mode: Standard
 run_shape: continuous_until_deadline
-slice_goal: "Continue the technical-debt SPEC with high-value dashboard/backend slices, including Inbox/Runs concentration cleanup, sanitizer test ownership cleanup, dashboard profile-creation facade cleanup, monitor/tgcs CLI test concentration cleanup, monitor delivery runtime cleanup, dashboard profile projection cleanup, monitor command execution cleanup, monitor manifest/result projection cleanup, dashboard opportunity projection cleanup, dashboard setup projection cleanup, Desk server selection cleanup, Desk HTTP security cleanup, Desk profile route mutation cleanup, report HTML link-rendering cleanup, Desk source assistant planning cleanup, Desk source access cleanup, Settings source-library UI cleanup, profile runtime-settings UI cleanup, and Bot Gateway background/autostart cleanup, while preserving public props, review/run action names, sanitizer behavior, route contracts, monitor/tgcs CLI behavior, dashboard state contracts, run manifest contracts, monitor result contracts, report link safety, loopback safety, pre-state-access private input rejection, source assistant external-AI confirmation gates, source access cached-health repair semantics, quiet-source semantics, source library topic-editor behavior, runtime-settings save/reset/draft behavior, Bot Gateway token/confirm gating, fixed scheduler argv, and local-first privacy boundaries."
+slice_goal: "Continue the technical-debt SPEC with high-value dashboard/backend slices, including Inbox/Runs concentration cleanup, sanitizer test ownership cleanup, dashboard profile-creation facade cleanup, monitor/tgcs CLI test concentration cleanup, monitor delivery runtime cleanup, dashboard profile projection cleanup, monitor command execution cleanup, monitor manifest/result projection cleanup, dashboard opportunity projection cleanup, dashboard setup projection cleanup, Desk server selection cleanup, Desk HTTP security cleanup, Desk profile route mutation cleanup, report HTML link-rendering cleanup, Desk source assistant planning cleanup, Desk source access cleanup, Settings source-library UI cleanup, profile runtime-settings UI cleanup, Bot Gateway background/autostart cleanup, and local secret-settings cleanup, while preserving public props, review/run action names, sanitizer behavior, route contracts, monitor/tgcs CLI behavior, dashboard state contracts, run manifest contracts, monitor result contracts, report link safety, loopback safety, pre-state-access private input rejection, source assistant external-AI confirmation gates, source access cached-health repair semantics, quiet-source semantics, source library topic-editor behavior, runtime-settings save/reset/draft behavior, Bot Gateway token/confirm gating, fixed scheduler argv, secret redaction, env-over-local precedence, and local-first privacy boundaries."
 stop_condition: "Do not enter final closeout before 2026-05-14 14:00 Asia/Shanghai unless the user explicitly stops; if SPEC work is exhausted, research competitors/user pain points and expand ROADMAP/SPEC before continuing."
 handoff_policy: after_deadline_closeout
 continuation_policy: "Use docs/technical-debt-cleanup-spec.md as the debt authority; continue with one remaining boundary at a time and keep old facade exports until downstream callers move."
 intake_status: explicit_user_request
-gate_status: bot_gateway_background_split_gates_passed_review_clean
+gate_status: secret_settings_split_gates_passed_review_clean
 blockers: []
 needs_human: []
-residual_risk: "This checkpoint is a Bot Gateway background/autostart structure split. It does not exercise live scheduler install/remove, live Telegram polling, keyring, real bot token resolution, Docker packaging install/build commands, or human product acceptance. Focused tests cover patched dashboard facade paths, token/confirm gating, fixed Windows/macOS/Linux argv/service payloads, and sanitized status output; live operator checks should be rerun only if scheduler command construction or packaging/runtime environment changes again."
+residual_risk: "This checkpoint is a local secret-settings structure split. It does not exercise live OS credential stores, real Telegram bot tokens, real provider keys, Docker packaging install/build commands, or human product acceptance. Focused tests cover env-over-local precedence, no token/key echoing, save/clear validation, unsupported field rejection, settings fixtures, patched provider config, and desk_action_env provider hydration."
 completed_slices:
   - "dashboard_server artifact helpers moved to scripts/desk_artifacts.py with dashboard_server re-export compatibility."
   - "dashboard_server git helpers moved to scripts/desk_git.py with dashboard_server wrapper compatibility."
@@ -49,6 +49,7 @@ completed_slices:
   - "Source access split: scripts/desk_source_access.py now owns source access health files, detail/action-summary projection, Telethon entity/message probing, bounded probe assembly, quiet-source semantics, and cached-health repair actions; scripts/desk_sources.py preserves source registry ownership and old source-access helper names."
   - "Source library UI split: dashboard/src/components/settings/source-library-model.ts now owns saved-source filtering/pagination/activity/topic-validation helpers, source-library-row.tsx owns per-source controls/topic editor, and source-library-panel.tsx remains the composition entrypoint with old helper re-exports."
   - "Runtime settings UI split: dashboard/src/components/profiles/runtime-settings-sections.tsx now owns scan scope, work hours, alert cadence, matching rules, and action rendering; runtime-settings-control.tsx remains the state/save/reset owner."
+  - "Secret settings split: scripts/desk_secret_settings.py now owns notification bot token status/update, AI provider key status/update, provider validation, local credential-store labels, and desk_action_env provider env hydration; scripts/desk_credentials.py preserves Telegram login, delivery target/chat detection, and old helper names."
 verification:
   - "python -m pytest tests/dashboard -q -> 149 passed, 71 subtests passed"
   - "python -m pytest tests/monitor_state -q -> 81 passed, 24 subtests passed"
@@ -206,6 +207,16 @@ verification:
   - "python -m ruff check . -> passed"
   - "CI-list py_compile including scripts/desk_bot_gateway_background.py -> passed"
   - "git diff --check -> passed"
+  - "python -m pytest tests/dashboard/test_credentials_settings.py tests/test_desk_settings_contracts.py -q -> 30 passed, 14 subtests passed"
+  - "python -m ruff check scripts/desk_credentials.py scripts/desk_secret_settings.py tests/dashboard/test_credentials_settings.py -> passed"
+  - "python -m py_compile scripts/desk_credentials.py scripts/desk_secret_settings.py scripts/dashboard_server.py scripts/desk_actions.py -> passed"
+  - "python -m pytest tests/dashboard -q -> 164 passed, 71 subtests passed"
+  - "python -m pytest tests/dashboard/test_credentials_settings.py tests/dashboard/test_desk_actions.py tests/test_desk_settings_contracts.py tests/test_bot_gateway.py tests/test_bot_gateway_contracts.py -q -> 78 passed, 24 subtests passed"
+  - "git diff --check -> passed for the Secret settings split working tree"
+  - "python -m pytest -q -> 512 passed, 2 skipped, 198 subtests passed"
+  - "python -m ruff check . -> passed"
+  - "CI-list py_compile including scripts/desk_secret_settings.py -> passed"
+  - "git diff --check -> passed after docs updates"
 reviewer_status:
   - "Explorer review of the proposed split recommended a搬运式拆分: keep InboxView as facade, move filters/backlog, review-card/actions/source refs, and setup checklist into focused submodules."
   - "Post-diff reviewer found no blocking issues. Remaining risks were untracked new files, SSR-only test coverage, and preserving existing link sanitizer boundaries; untracked files are included in the checkpoint plan and the browser smoke covers the main interaction path."
@@ -232,6 +243,7 @@ reviewer_status:
   - "Runtime settings UI split reviewer found no P0/P1 and confirmed UI text, constraints, disabled states, aria labels, button classes/titles, save/cancel/draft behavior, and state/reset/runtimeSettingsSaveState ownership were preserved. P2 staging risk for runtime-settings-sections.tsx is addressed by staging the new file explicitly before commit. P3 DOM interaction coverage remains a known test-stack gap until jsdom/testing-library is added."
   - "Bot Gateway background pre-diff explorer recommended moving Bot Gateway status/autostart helpers into scripts/desk_bot_gateway_background.py while preserving dashboard_server facade wrappers, constants, PROJECT_ROOT/_pythonw_entry/_run_scheduler_command/token-status patch paths, token gating, Windows immediate /Run semantics, and macOS/Linux fixed argv/service semantics."
   - "Bot Gateway background post-diff reviewer found no P0/P1. It confirmed the dashboard_server -> desk_scheduler -> desk_bot_gateway_background monkeypatch chain, token/confirm gating, Windows immediate /Run behavior, macOS/Linux fixed argv/service semantics, no hidden import cycle, and no real scheduler subprocess bypass. The only P2 was the untracked new-module risk, addressed by explicitly staging scripts/desk_bot_gateway_background.py before commit."
+  - "Secret settings post-diff reviewer found no P0. The only P1 was the new untracked scripts/desk_secret_settings.py risk because CI py_compile and runtime import require it; it is addressed by explicitly staging the new module before commit. Reviewer confirmed no normal status/detail/save-clear secret echo, facade patch sync for provider configs/allowed fields/local_credentials, validation preservation, and desk_action_env non-overwrite semantics."
 operator_checks:
   - "Docker Desktop 4.65.0 / engine 29.2.1 reachable after startup; docker build -t tgcs-local-smoke:<temp> . -> exit 0"
   - "Docker demo container -> exit 0, generated one demo report in a temporary mounted output directory; temporary directory and image removed."
@@ -241,10 +253,10 @@ operator_checks:
   - "Live Windows Task Scheduler dry-run task with random name -> install exit 0, status installed, remove exit 0, final status not_installed."
   - "Live Windows Credential Manager smoke -> random secret write/read/delete passed; post-delete read returned empty."
   - "Live LLM structured call -> provider=deepseek, model=deepseek-v4-flash, JSON response status=TGCS_LIVE_LLM_OK, total_tokens=58."
-next_action: "Stage the Bot Gateway background split explicitly, commit the checkpoint, then continue with the next backend boundary."
+next_action: "Stage scripts/desk_secret_settings.py explicitly, commit the checkpoint, then continue with the next backend boundary."
 candidate_slices:
   - "Inspect scripts/dashboard_server.py for remaining state payload or route dispatch boundaries only if existing tests can preserve patch compatibility and pre-state-access guards."
   - "Inspect scripts/desk_sources.py only for focused registry/import helper cleanup; it is now a 552-line registry facade, so avoid low-value line shaving unless behavior tests expose a clear boundary."
-  - "Inspect scripts/desk_credentials.py for a focused credentials/settings boundary only if token/key/chat-detection tests can preserve local-secret and redaction behavior."
-last_update: "2026-05-14T09:33:04+08:00"
+  - "Inspect remaining scripts/desk_credentials.py delivery-target/chat-detection boundary only if tests can preserve Telegram session fallback and bot update privacy behavior."
+last_update: "2026-05-14T09:44:54+08:00"
 checkpoint_ready: true

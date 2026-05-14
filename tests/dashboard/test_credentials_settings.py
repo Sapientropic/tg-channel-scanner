@@ -6,7 +6,7 @@ from http import HTTPStatus
 from pathlib import Path
 from unittest.mock import patch
 
-from scripts import dashboard_server, desk_credentials, monitor_state
+from scripts import dashboard_server, desk_credentials, desk_secret_settings, monitor_state
 
 
 class DashboardCredentialsSettingsTests(unittest.TestCase):
@@ -17,6 +17,39 @@ class DashboardCredentialsSettingsTests(unittest.TestCase):
         self.assertIs(dashboard_server.desk_notification_token_status, desk_credentials.desk_notification_token_status)
         self.assertIs(dashboard_server.desk_ai_settings_status, desk_credentials.desk_ai_settings_status)
         self.assertIs(dashboard_server.desk_action_env, desk_credentials.desk_action_env)
+        self.assertEqual(desk_credentials.DESK_AI_PROVIDER_CONFIGS, desk_secret_settings.DESK_AI_PROVIDER_CONFIGS)
+
+
+    def test_secret_settings_provider_config_uses_dashboard_facade_patch_after_split(self):
+        custom_config = {
+            "custom": {
+                "label": "Custom",
+                "env_name": "CUSTOM_API_KEY",
+                "target": "tgcs.signal-desk.custom-api-key",
+                "username": "Custom API key",
+            }
+        }
+        stored = dashboard_server.local_credentials.StoredSecret(
+            secret="custom-local-secret",
+            updated_at="2026-05-10T00:00:00Z",
+        )
+
+        with patch.object(dashboard_server, "DESK_AI_PROVIDER_CONFIGS", custom_config):
+            with patch.dict("os.environ", {}, clear=True):
+                with patch.object(dashboard_server.local_credentials, "is_supported", return_value=True):
+                    with patch.object(dashboard_server.local_credentials, "read_secret", return_value=stored):
+                        status = dashboard_server.desk_ai_settings_status()
+                        env = dashboard_server.desk_action_env()
+
+        self.assertEqual([provider["provider"] for provider in status["providers"]], ["custom"])
+        self.assertIn(
+            status["providers"][0]["source"],
+            {
+                dashboard_server.local_credentials.BACKEND_WINDOWS,
+                dashboard_server.local_credentials.BACKEND_KEYRING,
+            },
+        )
+        self.assertEqual(env["CUSTOM_API_KEY"], "custom-local-secret")
 
 
     def test_telegram_credentials_are_saved_without_echoing_secret(self):
