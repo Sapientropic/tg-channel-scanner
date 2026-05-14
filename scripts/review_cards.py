@@ -8,7 +8,7 @@ import uuid
 from pathlib import Path
 from typing import Any, Iterable
 
-from scripts import source_insights as _source_insights
+from scripts import desk_artifacts, source_insights as _source_insights
 from scripts.item_display import display_item_title, is_placeholder_value
 from scripts.monitor_common import (
     ACTION_TO_STATUS,
@@ -29,7 +29,7 @@ from scripts.monitor_common import (
     stable_json,
     utc_now,
 )
-from scripts.profile_patches import create_profile_patch_suggestion
+from scripts.profile_patches import REVIEW_LEARNING_PATCH_NOTE, sync_review_learning_profile_patch_suggestion
 
 
 def _source_refs(item: dict[str, Any]) -> list[dict[str, Any]]:
@@ -226,10 +226,7 @@ def set_card_action(
     # log. Replacing the old row here keeps repeated clicks idempotent and
     # prevents stale choices from leaking into future report learning.
     conn.execute("DELETE FROM feedback_events WHERE card_id = ?", (card_id,))
-    conn.execute(
-        "DELETE FROM profile_patch_suggestions WHERE card_id = ? AND status = 'pending'",
-        (card_id,),
-    )
+    _delete_legacy_pending_profile_patches_for_card(conn, card_id=card_id)
     conn.execute(
         """
         INSERT INTO feedback_events(event_id, card_id, profile_id, action, note, created_at)
@@ -237,36 +234,42 @@ def set_card_action(
         """,
         ("feedback_" + uuid.uuid4().hex, card_id, card["profile_id"], action, note, now),
     )
-    patch = None
-    if action == "follow_up":
-        patch = create_profile_patch_suggestion(
-            conn,
-            profile_id=card["profile_id"],
-            card_id=card_id,
-            note=note,
-            profile_path=profile_path,
-        )
+    patch = sync_review_learning_profile_patch_suggestion(
+        conn,
+        profile_id=card["profile_id"],
+        profile_path=profile_path,
+    )
     conn.commit()
     updated = get_review_card(conn, card_id)
-    if patch:
+    if action == "follow_up" and patch:
         updated["profile_patch_suggestion"] = patch
     return updated
 
 
 def undo_card_action(conn: sqlite3.Connection, *, card_id: str) -> dict[str, Any]:
-    get_review_card(conn, card_id)
+    card = get_review_card(conn, card_id)
     now = utc_now()
     conn.execute("DELETE FROM feedback_events WHERE card_id = ?", (card_id,))
-    conn.execute(
-        "DELETE FROM profile_patch_suggestions WHERE card_id = ? AND status = 'pending'",
-        (card_id,),
-    )
+    _delete_legacy_pending_profile_patches_for_card(conn, card_id=card_id)
+    sync_review_learning_profile_patch_suggestion(conn, profile_id=card["profile_id"])
     conn.execute(
         "UPDATE review_cards SET status = ?, handled_at = NULL, updated_at = ? WHERE card_id = ?",
         (PENDING_STATUS, now, card_id),
     )
     conn.commit()
     return get_review_card(conn, card_id)
+
+
+def _delete_legacy_pending_profile_patches_for_card(conn: sqlite3.Connection, *, card_id: str) -> None:
+    conn.execute(
+        """
+        DELETE FROM profile_patch_suggestions
+        WHERE card_id = ?
+          AND status = 'pending'
+          AND note != ?
+        """,
+        (card_id, REVIEW_LEARNING_PATCH_NOTE),
+    )
 
 
 def _card_from_row(row: sqlite3.Row, source_link_lookup: dict[str, dict[str, Any]] | None = None) -> dict[str, Any]:
@@ -363,13 +366,37 @@ def telegram_source_ref_url(*, channel: str, message_id: object, source_info: di
 
 
 def preferred_report_path(report_path: str) -> str:
-    if not report_path:
+    normalized = _dashboard_report_path(report_path)
+    if not normalized:
         return ""
-    path = Path(report_path)
+    path = Path(normalized)
     if path.suffix.lower() != ".md":
-        return report_path
+        return normalized
     html_path = path.with_suffix(".html")
-    html_path_for_exists = html_path if html_path.is_absolute() else PROJECT_ROOT / html_path
+    html_path_for_exists = PROJECT_ROOT / html_path
     if not html_path_for_exists.exists():
-        return report_path
+        return normalized
+    html_report_path = str(html_path).replace("\\", "/")
+    if not desk_artifacts.is_dashboard_openable_artifact_path(html_report_path):
+        return normalized
     return str(html_path).replace("\\", "/")
+
+
+def _dashboard_report_path(report_path: str) -> str:
+    raw = str(report_path or "").strip()
+    if not raw:
+        return ""
+    candidate = Path(raw)
+    if candidate.is_absolute():
+        try:
+            raw = str(candidate.resolve().relative_to(PROJECT_ROOT.resolve()))
+        except ValueError:
+            return ""
+    normalized = raw.replace("\\", "/")
+    # Review-card previews fetch the rendered report through the guarded local
+    # artifact route. Returning only route-openable paths prevents old imports
+    # from surfacing private absolute paths or report files the Desk cannot use
+    # to recover original source snippets.
+    if not desk_artifacts.is_dashboard_openable_artifact_path(normalized):
+        return ""
+    return normalized

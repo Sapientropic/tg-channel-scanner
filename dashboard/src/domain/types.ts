@@ -409,6 +409,9 @@ export type ProfilePatch = {
   base_profile_hash?: string;
   base_profile_short_hash?: string;
   replayed_from_patch_id?: string;
+  duplicate_patch_count?: number;
+  source_card_count?: number;
+  source_card_titles?: string[];
   apply_readiness?: {
     status?: string;
     label?: string;
@@ -590,11 +593,13 @@ export type DeskSchedulerStatus = {
   installed: boolean;
   status: string;
   task_label: string;
+  profile_id?: string;
   interval_minutes: number;
   platform?: string;
   backend?: string;
   can_install?: boolean;
   can_remove?: boolean;
+  display_command?: string;
   detail: string;
   next_action: string;
   checked_at: string;

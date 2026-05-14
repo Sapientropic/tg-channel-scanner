@@ -85,6 +85,10 @@ The bot can show status, run dry scans, summarize the latest results, and
 preview source changes. It installs its Telegram command menu on start, and
 source changes still require an Apply confirmation.
 
+Background mode only means the local scheduler is allowed to start the gateway.
+If Settings shows the gateway as stale or not detected, turn background mode off
+and on again, or run `./tgcs bot run` manually.
+
 ## Quick Start
 
 Requirements:
@@ -100,8 +104,9 @@ Requirements:
 4. Keep the launcher window open while using the browser dashboard.
 
 The launcher prepares the local Python environment, builds dashboard assets when
-Node.js 20.19+ or 22.12+ with npm is available, and opens Signal Desk on `127.0.0.1`. If port `8765` is
-busy, it tries `8766-8799`.
+Node.js 20.19+ or 22.12+ with npm is available, and opens Signal Desk on
+`127.0.0.1`. It reuses an existing compatible Signal Desk when one is already
+running; if port `8765` is occupied by something else, it tries `8766-8799`.
 
 ### macOS / Linux
 
@@ -150,7 +155,7 @@ competitor monitoring, and developer opportunities. `market-news` is the default
 starter; `jobs-fast` is available when you specifically want the developer
 opportunity lane.
 
-## Reports
+## Output and Review Cards
 
 Every scan can produce a standalone dark-theme HTML report with cards, source
 links, decision labels, diagnostics, and run metadata. Report titles and labels
@@ -168,9 +173,16 @@ do not need to look like the same workflow.
   </tr>
 </table>
 
-Reports are written under `output/`; monitor runs use
-`output/runs/<run_id>/`. Output files are local artifacts and are ignored by
-Git.
+T-Sense keeps generated artifacts out of Git:
+
+| Path | What belongs there | Desk behavior |
+| --- | --- | --- |
+| `output/runs/<run_id>/` | Monitor runs, replay imports, reports, manifests, scan sidecars. | Creates or updates Review cards and keeps report evidence openable. |
+| `output/<name>` | Demo reports, one-off manual reports, feedback exports, screenshots, evals. | Opens report/brief files, but does not create Review cards by itself. |
+
+If a historical or manual scan should appear in Review, run it through the
+monitor lane with `tgcs monitor run --scan-input ...`. The full artifact contract
+lives in [docs/output-artifacts.md](docs/output-artifacts.md).
 
 ## CLI for Agents
 
@@ -226,6 +238,7 @@ python scripts/monitor.py feedback-export \
 | `channel_lists/` | Example channel-list inputs. |
 | `templates/` | Report templates and demo fixtures used by `tgcs demo`. |
 | `docs/desktop-platforms.md` | Desktop launcher, key storage, and auto-scan platform notes. |
+| `docs/output-artifacts.md` | Local `output/` artifact lanes, Desk-openable report paths, and cleanup policy. |
 | `docs/agent-cli-contract.md` | Stable JSON/CLI contract for agents. |
 | `docs/testing.md` | Canonical local testing and quality-gate commands. |
 | `docs/getting-api-credentials.md` | Telegram API credential guide. |

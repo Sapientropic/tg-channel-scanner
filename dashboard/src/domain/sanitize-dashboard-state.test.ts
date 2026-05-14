@@ -384,6 +384,9 @@ describe("dashboard state sanitizers", () => {
           status: "pending",
           diff_text: "{}",
           created_at: "2026-05-09T00:00:00Z",
+          source_card_count: 2,
+          duplicate_patch_count: 3,
+          source_card_titles: ["First", "Second", "Third", "Fourth"],
           apply_readiness: { status: 1, label: "Ready", detail: null, extra: "ignored" },
         },
       ],
@@ -416,6 +419,9 @@ describe("dashboard state sanitizers", () => {
       ],
     });
     expect(state.profile_patch_suggestions[0].apply_readiness).toEqual({ label: "Ready" });
+    expect(state.profile_patch_suggestions[0].source_card_count).toBe(2);
+    expect(state.profile_patch_suggestions[0].duplicate_patch_count).toBe(3);
+    expect(state.profile_patch_suggestions[0].source_card_titles).toEqual(["First", "Second", "Third"]);
     expect(state.source_insights[0].next_action).toEqual({ label: "Review source" });
     expect(state.inbox[0].item).toEqual({
       why: "Strong match",
@@ -495,5 +501,21 @@ describe("dashboard state sanitizers", () => {
         },
       },
     ]);
+  });
+
+  it("keeps only dashboard-openable report paths on review cards", () => {
+    const cards = sanitizeInboxCards([
+      { ...validCard, card_id: "card-output-report", report_path: "output/runs/run-1/report.html" },
+      { ...validCard, card_id: "card-output-brief", report_path: "output/demo-report.html" },
+      { ...validCard, card_id: "card-private", report_path: "C:/Users/Administrator/private/report.html" },
+      { ...validCard, card_id: "card-traversal", report_path: "output/runs/run-1/../secret-report.html" },
+      { ...validCard, card_id: "card-scan", report_path: "output/runs/run-1/scan.jsonl" },
+    ]);
+
+    expect(cards[0].report_path).toBe("output/runs/run-1/report.html");
+    expect(cards[1].report_path).toBe("output/demo-report.html");
+    expect(cards[2].report_path).toBeUndefined();
+    expect(cards[3].report_path).toBeUndefined();
+    expect(cards[4].report_path).toBeUndefined();
   });
 });

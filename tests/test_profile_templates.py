@@ -27,6 +27,7 @@ class ProfileTemplateTests(unittest.TestCase):
 
     def test_jobs_profile_uses_compact_fast_alert_schema(self):
         text = Path("profiles/templates/jobs.md").read_text(encoding="utf-8")
+        normalized_text = " ".join(text.casefold().split())
         config = parse_profile_config(text)
         field_names = {field.name for field in config.mode.fields}
         opportunity_type = next(field for field in config.mode.fields if field.name == "opportunity_type")
@@ -40,13 +41,17 @@ class ProfileTemplateTests(unittest.TestCase):
         self.assertNotIn("stack", field_names)
         self.assertIn("contract", opportunity_type.values)
         self.assertIn("mini_app_ton_project", opportunity_type.values)
-        self.assertIn("developer opportunity", text.casefold())
-        self.assertIn("mini apps", text.casefold())
-        self.assertIn("ton", text.casefold())
-        self.assertIn("freelance", text.casefold())
-        self.assertIn("budget", text.casefold())
-        self.assertIn("at most 8 items", text.casefold())
-        self.assertIn("do not copy full job descriptions", text.casefold())
+        self.assertIn("candidate_profile", opportunity_type.values)
+        self.assertIn("non_vacancy", opportunity_type.values)
+        self.assertIn("developer opportunity", normalized_text)
+        self.assertIn("mini apps", normalized_text)
+        self.assertIn("ton", normalized_text)
+        self.assertIn("freelance", normalized_text)
+        self.assertIn("budget", normalized_text)
+        self.assertIn("candidate cv", normalized_text)
+        self.assertIn("not an employer/recruiter/client opening", normalized_text)
+        self.assertIn("at most 8 items", normalized_text)
+        self.assertIn("do not copy full job descriptions", normalized_text)
 
 
 if __name__ == "__main__":

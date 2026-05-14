@@ -177,17 +177,22 @@ action API for human-friendly wrappers around fixed local commands:
 - `POST /api/desk/actions/<action_id>/run` returns `desk_action_result_v1`.
 - Action IDs are server-side allowlist entries; request bodies are not command
   input.
-- Execute-mode actions call `sys.executable scripts/tgcs.py ...` with static
-  argv.
+- Execute-mode actions call `sys.executable scripts/tgcs.py ...` with
+  server-side allowlisted argv. A small number of actions may substitute the
+  server-selected profile id, but they never accept browser-supplied command
+  strings, paths, or argv.
 - Dry-run scheduler install/remove actions require an explicit confirmation
-  body, then call only fixed server-side argv/files for the local `jobs-fast`
-  dry-run task. Windows uses `schtasks.exe`, macOS uses a per-user launchd
-  LaunchAgent, and Linux uses a `systemd --user` service/timer when available.
-  They do not accept browser-supplied command strings, paths, or argv.
+  body, then call only fixed server-side argv/files for the local dry-run task.
+  Windows uses `schtasks.exe`, macOS uses a per-user launchd LaunchAgent, and
+  Linux uses a `systemd --user` service/timer when available. The task identity
+  stays stable, while install/preview commands choose the newest enabled
+  `profiles/desk/*` profile before falling back to `jobs-fast`. They do not
+  accept browser-supplied command strings, paths, or argv.
 - `GET /api/desk/scheduler-status` returns `desk_scheduler_status_v1` by
   checking only that fixed dry-run task. The payload may include optional
-  `platform`, `backend`, `can_install`, and `can_remove` fields. It never
-  returns raw scheduler output, local launcher paths, or command strings.
+  `platform`, `backend`, `profile_id`, `display_command`, `can_install`, and
+  `can_remove` fields. It never returns raw scheduler output or local launcher
+  paths.
 - Dedicated Telegram setup/login endpoints handle the normal human login path
   from the browser: `/api/desk/telegram-status`,
   `/api/desk/telegram-credentials`, `/api/desk/telegram-login/send-code`,
@@ -284,7 +289,9 @@ When `--interval-minutes` is omitted, it previews the selected profile's
 `work_interval_minutes`; an explicit `--interval-minutes` remains the override.
 Signal Desk may install or remove only its fixed dry-run scheduler task after a
 browser confirmation; this remains intentionally narrower than the expert CLI
-schedule preview.
+schedule preview. The installed command follows the same current-profile
+selection used by manual Desk dry-runs, but the OS task name is stable to avoid
+orphaning old per-profile tasks.
 Agents should call the lower-level commands when they need stable JSON output:
 
 ```powershell
@@ -401,9 +408,7 @@ prefilter_keywords = [
   "岗位",
   "职位",
   "远程",
-  "简历",
   "外包",
-  "接活",
   "兼职",
   "私活",
   "项目",

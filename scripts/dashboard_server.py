@@ -634,9 +634,9 @@ def _scheduler_backend() -> str:
     return desk_scheduler.scheduler_backend()
 
 
-def _scheduler_base(backend: str) -> dict:
+def _scheduler_base(backend: str, *, profile_id: str | None = None) -> dict:
     _sync_desk_scheduler_context()
-    return desk_scheduler.scheduler_base(backend)
+    return desk_scheduler.scheduler_base(backend, profile_id=profile_id)
 
 
 def _launchd_plist_path() -> Path:
@@ -677,9 +677,9 @@ def _pythonw_entry() -> Path:
 _ORIGINAL_PYTHONW_ENTRY_WRAPPER = _pythonw_entry
 
 
-def _fixed_monitor_argv(entry: Path) -> list[str]:
+def _fixed_monitor_argv(entry: Path, *, profile_id: str | None = None) -> list[str]:
     _sync_desk_scheduler_context()
-    return desk_scheduler.fixed_monitor_argv(entry)
+    return desk_scheduler.fixed_monitor_argv(entry, profile_id=profile_id)
 
 
 def _systemd_exec_path(path: Path) -> str:
@@ -717,14 +717,14 @@ def desk_scheduler_status() -> dict:
     return desk_scheduler.desk_scheduler_status()
 
 
-def _write_launchd_plist(path: Path, entry: Path) -> None:
+def _write_launchd_plist(path: Path, entry: Path, *, profile_id: str | None = None) -> None:
     _sync_desk_scheduler_context()
-    desk_scheduler.write_launchd_plist(path, entry)
+    desk_scheduler.write_launchd_plist(path, entry, profile_id=profile_id)
 
 
-def _write_systemd_units(service_path: Path, timer_path: Path, entry: Path) -> None:
+def _write_systemd_units(service_path: Path, timer_path: Path, entry: Path, *, profile_id: str | None = None) -> None:
     _sync_desk_scheduler_context()
-    desk_scheduler.write_systemd_units(service_path, timer_path, entry)
+    desk_scheduler.write_systemd_units(service_path, timer_path, entry, profile_id=profile_id)
 
 
 def run_desk_scheduler_action(action_id: str, *, body: dict | None = None) -> dict:

@@ -71,6 +71,17 @@ def setup_check(
 def preferred_setup_profile(active_profiles: list[dict[str, Any]]) -> dict[str, Any]:
     if not active_profiles:
         return {"profile_id": "market-news", "config": {"id": "market-news"}}
+    desk_profiles = [
+        profile
+        for profile in active_profiles
+        if str(profile.get("path") or "").replace("\\", "/").startswith("profiles/desk/")
+    ]
+    if desk_profiles:
+        # A profile created in Signal Desk is usually the user's current
+        # matching intent. Prefer the newest registered Desk profile for manual
+        # first/fresh scans so users do not tune a custom profile while Start
+        # keeps pointing them back at the packaged jobs-fast template.
+        return sorted(desk_profiles, key=lambda profile: str(profile.get("updated_at") or ""))[-1]
     return next(
         (profile for profile in active_profiles if profile.get("profile_id") == "jobs-fast"),
         active_profiles[0],

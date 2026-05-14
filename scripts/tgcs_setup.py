@@ -134,7 +134,7 @@ def _write_default_profiles_config(path: Path, *, force: bool = False) -> None:
                 "semantic_max_tokens = 6000",
                 "semantic_batch_size = 20",
                 "semantic_concurrency = 2",
-                "prefilter_keywords = [\"hiring\", \"we're hiring\", \"is hiring\", \"job opening\", \"open role\", \"remote\", \"apply\", \"frontend\", \"backend\", \"fullstack\", \"react\", \"typescript\", \"engineer\", \"developer\", \"招聘\", \"招人\", \"岗位\", \"职位\", \"远程\", \"简历\"]",
+                "prefilter_keywords = [\"hiring\", \"we're hiring\", \"is hiring\", \"job opening\", \"open role\", \"remote\", \"apply\", \"frontend\", \"backend\", \"fullstack\", \"react\", \"typescript\", \"engineer\", \"developer\", \"freelance\", \"contract\", \"contractor\", \"gig\", \"bounty\", \"paid project\", \"mini app\", \"mini apps\", \"telegram mini app\", \"ton\", \"usdt\", \"budget\", \"招聘\", \"招人\", \"岗位\", \"职位\", \"远程\", \"外包\", \"兼职\", \"私活\", \"项目\", \"预算\"]",
                 "",
                 "[[delivery]]",
                 'id = "telegram-bot-default"',

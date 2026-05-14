@@ -153,6 +153,38 @@ class MonitorStateReviewCardsAlertsTests(unittest.TestCase):
             conn.row_factory = sqlite3.Row
             monitor_state.init_db(conn)
 
+            old_project_root = review_cards.PROJECT_ROOT
+            try:
+                review_cards.PROJECT_ROOT = root
+                cards = monitor_state.upsert_review_cards(
+                    conn,
+                    profile_id="market-news",
+                    run_id="run-1",
+                    items=[
+                        {
+                            "topic": "Market event",
+                            "rating": "high",
+                            "source_message_refs": [{"channel": "news", "id": 1}],
+                        }
+                    ],
+                    report_path=str(report_md),
+                )
+            finally:
+                review_cards.PROJECT_ROOT = old_project_root
+
+        self.assertEqual(cards[0]["report_path"], "output/runs/run-1/report.html")
+
+
+    def test_review_card_report_path_rejects_non_dashboard_openable_path(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            report = root / "private" / "report.html"
+            report.parent.mkdir(parents=True)
+            report.write_text("<html>private</html>", encoding="utf-8")
+            conn = sqlite3.connect(":memory:")
+            conn.row_factory = sqlite3.Row
+            monitor_state.init_db(conn)
+
             cards = monitor_state.upsert_review_cards(
                 conn,
                 profile_id="market-news",
@@ -164,10 +196,10 @@ class MonitorStateReviewCardsAlertsTests(unittest.TestCase):
                         "source_message_refs": [{"channel": "news", "id": 1}],
                     }
                 ],
-                report_path=str(report_md),
+                report_path=str(report),
             )
 
-        self.assertEqual(cards[0]["report_path"], str(report_html).replace("\\", "/"))
+        self.assertEqual(cards[0]["report_path"], "")
 
 
     def test_legacy_unknown_review_card_title_is_recovered_from_item_json(self):

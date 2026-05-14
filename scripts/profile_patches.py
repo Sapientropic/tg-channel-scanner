@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import difflib
+import json
+import os
 import re
 import sqlite3
 import sys
@@ -10,14 +12,35 @@ import uuid
 from pathlib import Path
 from typing import Any
 
+from scripts.item_display import display_item_title
 from scripts.monitor_common import (
     MonitorStateError,
     PROFILE_PATCH_SCHEMA_VERSION,
     PROJECT_ROOT,
+    parse_json,
     require_profile_text_without_private_fragments,
     sha256_text,
     utc_now,
 )
+
+
+REVIEW_LEARNING_PATCH_NOTE = "Signal Desk Review learning batch: combine Review decisions into future matching rules."
+
+
+def _patch_from_row(row: sqlite3.Row) -> dict[str, Any]:
+    return {
+        "schema_version": PROFILE_PATCH_SCHEMA_VERSION,
+        "patch_id": row["patch_id"],
+        "profile_id": row["profile_id"],
+        "card_id": row["card_id"],
+        "note": row["note"],
+        "status": row["status"],
+        "diff_text": row["diff_text"],
+        "proposed_profile_text": row["proposed_profile_text"],
+        "base_profile_hash": row["base_profile_hash"],
+        "created_at": row["created_at"],
+        "applied_at": row["applied_at"],
+    }
 
 
 def _project_root() -> Path:
@@ -27,29 +50,183 @@ def _project_root() -> Path:
 
 
 def _append_follow_up_rule(profile_text: str, note: str) -> str:
-    clean_note = " ".join(note.split())
-    line = f"- {clean_note}" if clean_note else "- Follow up on similar future items."
+    lines = _profile_patch_preference_lines(profile_text=profile_text, note=note)
+    return _append_follow_up_rules(profile_text, lines)
+
+
+def _append_follow_up_rules(profile_text: str, preferences: list[str]) -> str:
+    lines_to_add = _normalize_preference_lines("\n".join(preferences))
+    if not lines_to_add:
+        lines_to_add = ["Exclude future matches that do not clearly satisfy this profile's stated requirements."]
     heading = "## Follow-up Preferences"
     if heading not in profile_text:
         suffix = "\n\n" if profile_text.endswith("\n") else "\n\n"
-        return f"{profile_text}{suffix}{heading}\n{line}\n"
+        return f"{profile_text}{suffix}{heading}\n" + "\n".join(f"- {line}" for line in lines_to_add) + "\n"
     lines = profile_text.splitlines()
     output: list[str] = []
     inserted = False
     in_section = False
+    existing_keys: set[str] = set()
+    for raw in lines:
+        line = re.sub(r"^\s*[-*]\s+", "", raw).strip()
+        if line and not line.startswith("## "):
+            existing_keys.add(" ".join(line.split()).casefold())
+    insert_lines = [f"- {line}" for line in lines_to_add if line.casefold() not in existing_keys]
+    if not insert_lines:
+        return profile_text.rstrip() + "\n"
     for raw in lines:
         if raw.strip() == heading:
             in_section = True
             output.append(raw)
             continue
         if in_section and raw.startswith("## "):
-            output.append(line)
+            output.extend(insert_lines)
             inserted = True
             in_section = False
         output.append(raw)
     if in_section and not inserted:
-        output.append(line)
+        output.extend(insert_lines)
     return "\n".join(output).rstrip() + "\n"
+
+
+def _profile_patch_preference_lines(
+    *,
+    profile_text: str,
+    note: str,
+    feedback_context: list[dict[str, Any]] | None = None,
+) -> list[str]:
+    lines = _llm_profile_patch_preference_lines(
+        profile_text=profile_text,
+        note=note,
+        feedback_context=feedback_context or [],
+    )
+    if lines:
+        return lines
+    return _fallback_profile_patch_preference_lines(note=note, feedback_context=feedback_context or [])
+
+
+def _llm_profile_patch_preference_lines(
+    *,
+    profile_text: str,
+    note: str,
+    feedback_context: list[dict[str, Any]],
+) -> list[str]:
+    if os.environ.get("TGCS_PROFILE_PATCH_DISABLE_LLM") == "1":
+        return []
+    try:
+        from openai import OpenAI
+        from scripts.report_extraction import (
+            DEFAULT_MODEL,
+            add_token_limit,
+            api_key_for_provider,
+            deepseek_thinking_extra,
+            llm_provider,
+            llm_temperature,
+            minimax_thinking_extra,
+            resolve_llm_settings,
+        )
+    except ImportError:
+        return []
+
+    base_url, model = resolve_llm_settings(None, DEFAULT_MODEL)
+    provider = llm_provider(base_url, model)
+    api_key = api_key_for_provider(provider)
+    if not api_key:
+        return []
+    context = [
+        {
+            "action": str(item.get("action") or ""),
+            "title": str(item.get("title") or "")[:160],
+            "note": str(item.get("note") or "")[:240],
+            "card": item.get("card") if isinstance(item.get("card"), dict) else {},
+        }
+        for item in feedback_context[:12]
+        if isinstance(item, dict)
+    ]
+    system_prompt = """You rewrite Signal Desk review learning signals into durable matching-profile rules.
+
+Return JSON only:
+{"preferences":["..."]}
+
+Rules:
+- Review cards are evidence; the note is a future-matching learning signal, not a per-card annotation.
+- Read every card together with its note before deciding the direction of the rule.
+- Write broad reusable matching rules, not one-off card titles.
+- Do not quote the user's raw note verbatim.
+- Do not include secrets, local paths, command lines, or provider names.
+- Keep each preference under 180 characters.
+- Prefer concrete exclusions/priorities a future scan can apply.
+- Infer rule direction from the current profile plus repeated feedback.
+"""
+    user_prompt = json.dumps(
+        {
+            "current_profile": profile_text[:8000],
+            "draft_source": note,
+            "review_learning_signals": context,
+            "task": "Suggest 1-4 durable Follow-up Preferences that improve future matching for this profile.",
+        },
+        ensure_ascii=False,
+    )
+    create_kwargs: dict[str, Any] = {
+        "model": model,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+        "temperature": llm_temperature(provider),
+    }
+    if provider in {"deepseek", "openai"}:
+        create_kwargs["response_format"] = {"type": "json_object"}
+    thinking_extra = minimax_thinking_extra(provider) or deepseek_thinking_extra(provider, model)
+    if thinking_extra:
+        create_kwargs["extra_body"] = thinking_extra
+    add_token_limit(create_kwargs, provider=provider, max_tokens=650)
+    try:
+        response = OpenAI(api_key=api_key, base_url=base_url).chat.completions.create(**create_kwargs)
+    except Exception as exc:
+        raise MonitorStateError(f"AI profile draft failed: {exc}") from exc
+    raw_response = response.choices[0].message.content or ""
+    try:
+        payload = json.loads(raw_response)
+    except json.JSONDecodeError as exc:
+        raise MonitorStateError("AI profile draft returned invalid JSON; try again.") from exc
+    preferences = payload.get("preferences")
+    if not isinstance(preferences, list):
+        raise MonitorStateError("AI profile draft did not return preferences; try again.")
+    cleaned: list[str] = []
+    raw_note_keys = {
+        " ".join(str(value or "").split()).casefold()
+        for value in [note, *(item.get("note") for item in context if isinstance(item, dict))]
+        if str(value or "").strip()
+    }
+    for item in preferences:
+        line = " ".join(str(item or "").split())
+        if not line:
+            continue
+        line = require_profile_text_without_private_fragments("AI profile preference", line)
+        line_key = line.casefold()
+        if any(raw_note_key and (line_key == raw_note_key or raw_note_key in line_key) for raw_note_key in raw_note_keys):
+            continue
+        cleaned.append(line)
+    return _normalize_preference_lines("\n".join(cleaned))
+
+
+def _fallback_profile_patch_preference_lines(*, note: str, feedback_context: list[dict[str, Any]]) -> list[str]:
+    combined_notes = " ".join(
+        [
+            str(note or ""),
+            *[str(item.get("note") or "") for item in feedback_context if isinstance(item, dict)],
+        ]
+    )
+    normalized = " ".join(combined_notes.split()).casefold()
+    context_actions = {str(item.get("action") or "").casefold() for item in feedback_context if isinstance(item, dict)}
+    if "full stack" in normalized and any(token in normalized for token in ("not", "不是", "非")):
+        return ["Exclude full-stack roles; prefer opportunities with a focused frontend, backend, or specialist scope."]
+    if any(token in normalized for token in ("not a fit", "wrong match", "false positive", "不合适", "不匹配")):
+        return ["Exclude matches that do not clearly satisfy the profile's role, stack, seniority, and work-mode requirements."]
+    if note.startswith("Desk feedback tuning") or context_actions.intersection({"skip", "false_positive"}):
+        return ["Down-rank recurring wrong-match patterns unless the item clearly satisfies the profile's core requirements."]
+    return ["Require future matches to clearly satisfy the profile's stated role, stack, seniority, location, and work-mode requirements."]
 
 
 def _normalize_preference_lines(text: str) -> list[str]:
@@ -113,6 +290,105 @@ def dashboard_profile_file_path(profile_path: object) -> Path:
     return resolved
 
 
+def profile_patch_feedback_context(
+    conn: sqlite3.Connection,
+    *,
+    profile_id: str,
+    note: str | None = None,
+    limit: int = 12,
+) -> list[dict[str, Any]]:
+    note_filter = "" if note == REVIEW_LEARNING_PATCH_NOTE else str(note or "")
+    where_note = "AND f.note = ?" if note_filter else ""
+    params: list[Any] = [profile_id]
+    if note_filter:
+        params.append(note_filter)
+    params.append(limit)
+    rows = conn.execute(
+        f"""
+        SELECT f.action, f.note, c.title, c.item_json
+        FROM feedback_events f
+        LEFT JOIN review_cards c ON c.card_id = f.card_id
+        WHERE f.profile_id = ?
+          AND f.action = 'follow_up'
+          {where_note}
+        ORDER BY f.created_at DESC, f.event_id DESC
+        LIMIT ?
+        """,
+        params,
+    ).fetchall()
+    context: list[dict[str, Any]] = []
+    for row in rows:
+        item = parse_json(row["item_json"], {})
+        card = _compact_feedback_card(item if isinstance(item, dict) else {})
+        context.append(
+            {
+                "action": row["action"] or "",
+                "note": row["note"] or "",
+                "title": display_item_title(item if isinstance(item, dict) else {}, fallback=row["title"] or "", max_len=160),
+                "card": card,
+            }
+        )
+    return context
+
+
+def _compact_feedback_card(item: dict[str, Any]) -> dict[str, Any]:
+    allowed_keys = [
+        "topic",
+        "title",
+        "company",
+        "role",
+        "summary",
+        "description",
+        "location",
+        "work_mode",
+        "employment_type",
+        "stack",
+        "tags",
+        "rating",
+        "why",
+    ]
+    compact: dict[str, Any] = {}
+    for key in allowed_keys:
+        if key not in item:
+            continue
+        value = _safe_card_context_value(item.get(key))
+        if value not in {"", None}:
+            compact[key] = value
+    decision_state = item.get("decision_state")
+    if isinstance(decision_state, dict):
+        signals = _safe_card_context_value(decision_state.get("signals"))
+        if signals:
+            compact["signals"] = signals
+        status = _safe_card_context_value(decision_state.get("status"))
+        if status:
+            compact["decision_status"] = status
+    return compact
+
+
+def profile_patch_card_context(item: dict[str, Any]) -> dict[str, Any]:
+    return _compact_feedback_card(item)
+
+
+def _safe_card_context_value(value: Any) -> Any:
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        text = " ".join(value.split())[:500]
+        if not text:
+            return ""
+        try:
+            require_profile_text_without_private_fragments("Review card context", text)
+        except MonitorStateError:
+            return ""
+        return text
+    if isinstance(value, (int, float, bool)):
+        return value
+    if isinstance(value, list):
+        output = [_safe_card_context_value(item) for item in value[:8]]
+        return [item for item in output if item not in {"", None}]
+    return ""
+
+
 def create_profile_patch_suggestion(
     conn: sqlite3.Connection,
     *,
@@ -120,8 +396,21 @@ def create_profile_patch_suggestion(
     card_id: str | None,
     note: str,
     profile_path: Path | None,
+    feedback_context: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     note = require_profile_text_without_private_fragments("Profile note", note)
+    existing = conn.execute(
+        """
+        SELECT *
+        FROM profile_patch_suggestions
+        WHERE profile_id = ?
+          AND note = ?
+          AND status = 'pending'
+        ORDER BY created_at DESC, patch_id DESC
+        LIMIT 1
+        """,
+        (profile_id, note),
+    ).fetchone()
     if profile_path is None:
         row = conn.execute("SELECT path FROM profiles WHERE profile_id = ?", (profile_id,)).fetchone()
         if not row:
@@ -132,7 +421,9 @@ def create_profile_patch_suggestion(
     current = profile_path.read_text(encoding="utf-8")
     require_profile_text_without_private_fragments("Current profile", current)
     base_profile_hash = sha256_text(current)
-    proposed = _append_follow_up_rule(current, note)
+    context = feedback_context if feedback_context is not None else profile_patch_feedback_context(conn, profile_id=profile_id, note=note)
+    preference_lines = _profile_patch_preference_lines(profile_text=current, note=note, feedback_context=context)
+    proposed = _append_follow_up_rules(current, preference_lines)
     require_profile_text_without_private_fragments("Proposed profile", proposed)
     diff = "\n".join(
         difflib.unified_diff(
@@ -144,6 +435,37 @@ def create_profile_patch_suggestion(
         )
     )
     now = utc_now()
+    if existing:
+        # One Review-learning draft can represent many cards with different
+        # notes. Keep one live profile-level draft so applying it cannot make
+        # sibling drafts stale, but let the representative card follow the
+        # current feedback set after undo/reclassify operations.
+        existing_card_id = str(existing["card_id"] or "")
+        next_card_id = card_id if note == REVIEW_LEARNING_PATCH_NOTE else (existing_card_id or card_id)
+        conn.execute(
+            """
+            UPDATE profile_patch_suggestions
+            SET card_id = ?,
+                diff_text = ?,
+                proposed_profile_text = ?,
+                base_profile_hash = ?,
+                created_at = ?
+            WHERE patch_id = ?
+            """,
+            (
+                next_card_id,
+                diff,
+                proposed,
+                base_profile_hash,
+                now,
+                existing["patch_id"],
+            ),
+        )
+        refreshed = conn.execute(
+            "SELECT * FROM profile_patch_suggestions WHERE patch_id = ?",
+            (existing["patch_id"],),
+        ).fetchone()
+        return _patch_from_row(refreshed)
     patch = {
         "schema_version": PROFILE_PATCH_SCHEMA_VERSION,
         "patch_id": "patch_" + uuid.uuid4().hex,
@@ -177,6 +499,65 @@ def create_profile_patch_suggestion(
             now,
             None,
         ),
+    )
+    return patch
+
+
+def sync_review_learning_profile_patch_suggestion(
+    conn: sqlite3.Connection,
+    *,
+    profile_id: str,
+    profile_path: Path | None = None,
+) -> dict[str, Any] | None:
+    context = profile_patch_feedback_context(conn, profile_id=profile_id, note=REVIEW_LEARNING_PATCH_NOTE)
+    if not context:
+        conn.execute(
+            """
+            DELETE FROM profile_patch_suggestions
+            WHERE profile_id = ?
+              AND note = ?
+              AND status = 'pending'
+            """,
+            (profile_id, REVIEW_LEARNING_PATCH_NOTE),
+        )
+        return None
+    card_row = conn.execute(
+        """
+        SELECT card_id
+        FROM feedback_events
+        WHERE profile_id = ?
+          AND action = 'follow_up'
+          AND card_id IS NOT NULL
+        ORDER BY created_at DESC, event_id DESC
+        LIMIT 1
+        """,
+        (profile_id,),
+    ).fetchone()
+    patch = create_profile_patch_suggestion(
+        conn,
+        profile_id=profile_id,
+        card_id=str(card_row["card_id"] or "") if card_row else None,
+        note=REVIEW_LEARNING_PATCH_NOTE,
+        profile_path=profile_path,
+        feedback_context=context,
+    )
+    # Older versions created one pending patch per Review card/note. Once the
+    # profile-level learning batch exists, those siblings are stale UX debt:
+    # applying one would mutate the profile hash and strand the rest as blocked.
+    conn.execute(
+        """
+        DELETE FROM profile_patch_suggestions
+        WHERE profile_id = ?
+          AND status = 'pending'
+          AND patch_id != ?
+          AND card_id IN (
+              SELECT card_id
+              FROM feedback_events
+              WHERE profile_id = ?
+                AND action = 'follow_up'
+          )
+        """,
+        (profile_id, patch["patch_id"], profile_id),
     )
     return patch
 
@@ -286,6 +667,44 @@ def apply_profile_patch(conn: sqlite3.Connection, *, patch_id: str, profile_path
         "UPDATE profile_patch_suggestions SET status = ?, applied_at = ? WHERE patch_id = ?",
         ("applied", now, patch_id),
     )
+    duplicate_rows = conn.execute(
+        """
+        SELECT patch_id
+        FROM profile_patch_suggestions
+        WHERE profile_id = ?
+          AND status = 'pending'
+          AND patch_id != ?
+          AND (
+              note = ?
+              OR card_id IN (
+                  SELECT card_id
+                  FROM feedback_events
+                  WHERE profile_id = ?
+                    AND action = 'follow_up'
+              )
+          )
+        """,
+        (row["profile_id"], patch_id, row["note"], row["profile_id"]),
+    ).fetchall()
+    if duplicate_rows:
+        conn.execute(
+            """
+            DELETE FROM profile_patch_suggestions
+            WHERE profile_id = ?
+              AND status = 'pending'
+              AND patch_id != ?
+              AND (
+                  note = ?
+                  OR card_id IN (
+                      SELECT card_id
+                      FROM feedback_events
+                      WHERE profile_id = ?
+                        AND action = 'follow_up'
+                  )
+              )
+            """,
+            (row["profile_id"], patch_id, row["note"], row["profile_id"]),
+        )
     conn.commit()
     return {
         "patch_id": patch_id,
@@ -294,6 +713,7 @@ def apply_profile_patch(conn: sqlite3.Connection, *, patch_id: str, profile_path
         "snapshot_id": snapshot_id,
         "profile_path": str(profile_path),
         "applied_at": now,
+        "duplicate_draft_count": len(duplicate_rows),
     }
 
 

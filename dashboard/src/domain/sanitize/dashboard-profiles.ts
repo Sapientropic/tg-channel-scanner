@@ -91,6 +91,11 @@ export function sanitizeProfilePatches(value: unknown): ProfilePatch[] {
       "replayed_from_patch_id",
       "applied_at",
     ]);
+    assignOptionalNumbers(patch, record, ["duplicate_patch_count", "source_card_count"]);
+    const sourceCardTitles = stringArray(record.source_card_titles).slice(0, 3);
+    if (sourceCardTitles.length) {
+      patch.source_card_titles = sourceCardTitles;
+    }
     const applyReadiness = sanitizeApplyReadiness(record.apply_readiness);
     if (applyReadiness) {
       patch.apply_readiness = applyReadiness;

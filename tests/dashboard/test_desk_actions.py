@@ -104,6 +104,45 @@ class DashboardDeskActionCatalogTests(unittest.TestCase):
         self.assertEqual(result["next_action"], "Open dashboard.")
 
 
+    def test_run_desk_action_prefers_latest_desk_profile_over_packaged_jobs_fast(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            config_path = root / ".tgcs" / "profiles.toml"
+            config_path.parent.mkdir(parents=True)
+            config_path.write_text(
+                "\n".join(
+                    [
+                        'schema_version = "profile_run_config_v1"',
+                        "",
+                        "[[profiles]]",
+                        'id = "jobs-fast"',
+                        'path = "profiles/templates/jobs.md"',
+                        "enabled = true",
+                        "",
+                        "[[profiles]]",
+                        'id = "frontend-only"',
+                        'path = "profiles/desk/frontend-only.md"',
+                        "enabled = true",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            completed = subprocess.CompletedProcess(
+                ["python"],
+                0,
+                stdout=json.dumps({"ok": True, "data": {"status": "complete"}, "error": None}),
+                stderr="",
+            )
+
+            with patch.object(dashboard_server, "PROJECT_ROOT", root):
+                with patch.object(dashboard_server.subprocess, "run", return_value=completed) as run_mock:
+                    result = dashboard_server.run_desk_action("monitor_jobs_dry_run")
+
+        cmd = [str(part) for part in run_mock.call_args.args[0]]
+        self.assertEqual(cmd[cmd.index("--profile-id") + 1], "frontend-only")
+        self.assertEqual(result["display_command"], "tgcs monitor run --profile-id frontend-only --delivery-mode dry-run")
+
+
     def test_run_desk_action_only_returns_openable_report_artifacts(self):
         cases = [
             ("demo_render", {"html_path": "output/demo-report.html"}, "output/demo-report.html"),
@@ -158,11 +197,49 @@ class DashboardDeskActionCatalogTests(unittest.TestCase):
         self.assertIn("print", cmd)
         self.assertNotIn("/Create", cmd)
         self.assertIn("dry-run", cmd)
+        self.assertEqual(cmd[cmd.index("--profile-id") + 1], "jobs-fast")
         self.assertNotIn("live", cmd)
         self.assertEqual(result["status"], "success")
         self.assertIn("practice scans would run every 15 minutes", result["detail"])
         self.assertNotIn("schtasks", result["detail"].lower())
         self.assertIn("Signal Desk", result["next_action"])
+
+
+    def test_schedule_preview_prefers_latest_desk_profile(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            config_path = root / ".tgcs" / "profiles.toml"
+            config_path.parent.mkdir(parents=True)
+            config_path.write_text(
+                "\n".join(
+                    [
+                        'schema_version = "profile_run_config_v1"',
+                        "",
+                        "[[profiles]]",
+                        'id = "jobs-fast"',
+                        'path = "profiles/templates/jobs.md"',
+                        "enabled = true",
+                        "",
+                        "[[profiles]]",
+                        'id = "frontend-only"',
+                        'path = "profiles/desk/frontend-only.md"',
+                        "enabled = true",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            completed = subprocess.CompletedProcess(["python"], 0, stdout="preview\n", stderr="")
+
+            with patch.object(dashboard_server, "PROJECT_ROOT", root):
+                with patch.object(dashboard_server.subprocess, "run", return_value=completed) as run_mock:
+                    result = dashboard_server.run_desk_action("schedule_preview")
+
+        cmd = [str(part) for part in run_mock.call_args.args[0]]
+        self.assertEqual(cmd[cmd.index("--profile-id") + 1], "frontend-only")
+        self.assertEqual(
+            result["display_command"],
+            "tgcs schedule print --profile-id frontend-only --interval-minutes 15 --delivery-mode dry-run",
+        )
 
 
     def test_source_access_probe_action_returns_cached_counts_without_shell_commands(self):

@@ -169,6 +169,8 @@ describe("Desk bot and local settings sanitizers", () => {
         checked_at: " 2026-05-10T00:00:00Z ",
         platform: " linux ",
         backend: " linux_systemd_user ",
+        profile_id: " frontend-only ",
+        display_command: " tgcs schedule print --profile-id frontend-only --interval-minutes 15 --delivery-mode dry-run ",
         can_install: true,
         can_remove: false,
         stdout: "ignored",
@@ -186,6 +188,8 @@ describe("Desk bot and local settings sanitizers", () => {
       checked_at: "2026-05-10T00:00:00Z",
       platform: "linux",
       backend: "linux_systemd_user",
+      profile_id: "frontend-only",
+      display_command: "tgcs schedule print --profile-id frontend-only --interval-minutes 15 --delivery-mode dry-run",
       can_install: true,
       can_remove: false,
     });

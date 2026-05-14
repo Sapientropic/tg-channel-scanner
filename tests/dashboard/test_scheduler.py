@@ -83,10 +83,55 @@ class DashboardSchedulerTests(unittest.TestCase):
         self.assertIn(dashboard_server.DESK_SCHEDULER_TASK_NAME, args)
         trigger = args[args.index("/TR") + 1]
         self.assertIn("tgcs.bat", trigger)
+        self.assertIn("--profile-id jobs-fast", trigger)
         self.assertIn("--delivery-mode dry-run", trigger)
         self.assertNotIn("--delivery-mode live", trigger)
         self.assertEqual(result["status"], "success")
         self.assertNotIn(str(project_root), result["detail"])
+
+
+    def test_schedule_install_dry_run_prefers_latest_desk_profile(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project_root = Path(tmp)
+            (project_root / "tgcs.bat").write_text("@echo off\n", encoding="utf-8")
+            config_path = project_root / ".tgcs" / "profiles.toml"
+            config_path.parent.mkdir(parents=True)
+            config_path.write_text(
+                "\n".join(
+                    [
+                        'schema_version = "profile_run_config_v1"',
+                        "",
+                        "[[profiles]]",
+                        'id = "jobs-fast"',
+                        'path = "profiles/templates/jobs.md"',
+                        "enabled = true",
+                        "",
+                        "[[profiles]]",
+                        'id = "frontend-only"',
+                        'path = "profiles/desk/frontend-only.md"',
+                        "enabled = true",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            completed = subprocess.CompletedProcess(["schtasks.exe"], 0, stdout="SUCCESS\n", stderr="")
+
+            with patch.object(dashboard_server.sys, "platform", "win32"):
+                with patch.object(dashboard_server, "PROJECT_ROOT", project_root):
+                    with patch.object(dashboard_server, "_run_scheduler_command", return_value=completed) as run_mock:
+                        result = dashboard_server.run_desk_action(
+                            "schedule_install_dry_run",
+                            body={"confirm": True},
+                        )
+
+        args = run_mock.call_args.args[0]
+        trigger = args[args.index("/TR") + 1]
+        self.assertIn("--profile-id frontend-only", trigger)
+        self.assertEqual(
+            result["display_command"],
+            "tgcs schedule print --profile-id frontend-only --interval-minutes 15 --delivery-mode dry-run",
+        )
+        self.assertIn("frontend-only practice scans", result["detail"])
 
 
     def test_schedule_remove_dry_run_uses_fixed_schtasks_argv(self):

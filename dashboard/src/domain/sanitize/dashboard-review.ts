@@ -55,7 +55,7 @@ function sanitizeInboxCard(record: Record<string, unknown>, index: number): Revi
   };
   const firstRunId = optionalString(record.first_run_id);
   const lastRunId = optionalString(record.last_run_id);
-  const reportPath = optionalString(record.report_path);
+  const reportPath = sanitizeOpenableReportPath(record.report_path);
   const dashboardUrl = optionalString(record.dashboard_url);
   const duplicateOfCardId = optionalStringOrNull(record.duplicate_of_card_id);
   const alertSummary = sanitizeAlertSummary(record.alert_summary);
@@ -145,6 +145,39 @@ function sanitizeDecisionState(value: unknown): ReviewCard["item"]["decision_sta
     decisionState.explanations = explanations;
   }
   return Object.keys(decisionState).length ? decisionState : undefined;
+}
+
+function sanitizeOpenableReportPath(value: unknown): string {
+  if (typeof value !== "string") {
+    return "";
+  }
+  const cleaned = value.trim().replace(/\\/g, "/");
+  if (!cleaned || cleaned.startsWith("/") || /^[A-Za-z]:/.test(cleaned) || /^[a-z][a-z0-9+.-]*:\/\//i.test(cleaned)) {
+    return "";
+  }
+  const parts = cleaned.split("/").filter(Boolean);
+  if (!parts.length || parts.includes("..") || !isDashboardReportArtifactName(parts[parts.length - 1] ?? "")) {
+    return "";
+  }
+  const runIndex = parts.indexOf("runs");
+  if (runIndex >= 0) {
+    return runIndex < parts.length - 2 ? cleaned : "";
+  }
+  return parts[0] === "output" && parts.length >= 2 ? cleaned : "";
+}
+
+function isDashboardReportArtifactName(value: string): boolean {
+  const lower = value.trim().toLowerCase();
+  if (lower === "report.html" || lower === "report.md") {
+    return true;
+  }
+  const dotIndex = lower.lastIndexOf(".");
+  if (dotIndex < 0) {
+    return false;
+  }
+  const stem = lower.slice(0, dotIndex);
+  const suffix = lower.slice(dotIndex);
+  return (suffix === ".html" || suffix === ".md") && stem.split("-").some((token) => token === "report" || token === "brief");
 }
 
 const PRIVATE_STRING_RECORD_KEYS = new Set([

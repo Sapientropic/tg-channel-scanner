@@ -86,6 +86,43 @@ class MonitorStateProjectionTests(unittest.TestCase):
         )
 
 
+    def test_dashboard_setup_prefers_latest_desk_profile_for_first_run(self):
+        conn = sqlite3.connect(":memory:")
+        conn.row_factory = sqlite3.Row
+        monitor_state.init_db(conn)
+        monitor_state.upsert_profile(
+            conn,
+            {
+                "id": "jobs-fast",
+                "path": "profiles/templates/jobs.md",
+                "enabled": True,
+                "alert_schedule_mode": "work_hours",
+            },
+        )
+        monitor_state.upsert_profile(
+            conn,
+            {
+                "id": "frontend-only",
+                "path": "profiles/desk/frontend-only.md",
+                "enabled": True,
+                "source_topics": ["jobs"],
+                "alert_schedule_mode": "work_hours",
+            },
+        )
+
+        snapshot = monitor_state.dashboard_snapshot(conn)
+
+        self.assertEqual(
+            snapshot["setup_status"]["next_step"],
+            "tgcs monitor run --profile-id frontend-only --delivery-mode dry-run",
+        )
+        checks = {item["check_id"]: item for item in snapshot["setup_status"]["checks"]}
+        self.assertEqual(
+            checks["first_run"]["command"],
+            "tgcs monitor run --profile-id frontend-only --delivery-mode dry-run",
+        )
+
+
     def test_dashboard_setup_status_handles_all_profiles_disabled(self):
         conn = sqlite3.connect(":memory:")
         conn.row_factory = sqlite3.Row

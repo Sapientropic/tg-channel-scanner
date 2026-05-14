@@ -99,12 +99,14 @@ from scripts.monitor_feedback import (
     validation_summary as validation_summary,
 )
 from scripts.profile_patches import (
+    REVIEW_LEARNING_PATCH_NOTE as REVIEW_LEARNING_PATCH_NOTE,
     apply_profile_patch as apply_profile_patch,
     create_profile_patch_suggestion as create_profile_patch_suggestion,
     create_profile_preferences_patch_suggestion as create_profile_preferences_patch_suggestion,
     dashboard_profile_file_path as dashboard_profile_file_path,
     replay_profile_patch as replay_profile_patch,
     revert_profile_patch as revert_profile_patch,
+    sync_review_learning_profile_patch_suggestion as sync_review_learning_profile_patch_suggestion,
 )
 from scripts.review_cards import (
     card_id_for_item as card_id_for_item,

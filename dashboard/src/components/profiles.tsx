@@ -49,8 +49,9 @@ export function ProfilesView({
 }) {
   const [draftsOpen, setDraftsOpen] = useState(() => shouldOpenDraftsByDefault());
   const draftsPanelId = "profile-drafts-panel";
+  const visiblePatches = patches.filter((patch) => patch.status === "pending");
   return (
-    <section className="split-section profiles-section" data-has-drafts={patches.length > 0 ? "true" : "false"}>
+    <section className="split-section profiles-section" data-has-drafts={visiblePatches.length > 0 ? "true" : "false"}>
       <div className="plain-panel">
         <PanelHeader icon={<UserRoundCog size={18} />} title="Profiles" />
         <NewProfilePanel
@@ -89,7 +90,7 @@ export function ProfilesView({
           />
         )}
       </div>
-      {patches.length > 0 && (
+      {visiblePatches.length > 0 && (
         <div className="plain-panel profile-drafts-panel" data-collapsed={draftsOpen ? "false" : "true"}>
           <header className="panel-header profile-drafts-header">
             <button
@@ -106,10 +107,10 @@ export function ProfilesView({
               <span className="profile-drafts-toggle-copy">{draftsOpen ? "Collapse" : "Review drafts"}</span>
               <ChevronDown size={17} />
             </button>
-            <span className="count-badge">{patches.length}</span>
+            <span className="count-badge">{visiblePatches.length}</span>
           </header>
           <div className="patch-list" hidden={!draftsOpen} id={draftsPanelId}>
-            {patches.map((patch) => (
+            {visiblePatches.map((patch) => (
               <ProfilePatchCard
                 applyPatch={applyPatch}
                 busy={busy}

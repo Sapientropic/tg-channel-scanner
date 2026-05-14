@@ -64,6 +64,34 @@ Guardrails for future splits and refactors:
   feedback changes a later scan, matters more than the polish of the generated
   digest.
 
+## Current Product Debt From Issue #7
+
+GitHub issue #7 and its 2026-05-14 comments are the current authority for the
+personal developer-opportunity monitor friction slice. The actionable debt is:
+
+- Profile binding: manual Desk scans, schedule previews, and installed dry-run
+  scheduler commands should follow the user's current `profiles/desk/*` profile
+  before falling back to the packaged `jobs-fast` template. The OS task name
+  stays stable so reinstalling updates the existing task instead of creating
+  per-profile orphan tasks.
+- Report vs Review: report-only output must not be mistaken for Desk inbox
+  ingestion. The artifact contract lives in `docs/output-artifacts.md`; use
+  `tgcs monitor run --scan-input ...` when historical/manual scans should
+  upsert Review cards.
+- Evidence paths: Review cards should only expose dashboard-openable report
+  artifacts, so original-source preview does not depend on private absolute
+  paths or stale top-level report links.
+- Non-vacancy filtering: developer-opportunity matching must gate on real
+  employer/recruiter/client openings before scoring stack fit. Candidate CV,
+  resume, portfolio, self-promotion, and "looking for work" posts are not high
+  or medium opportunities.
+- Bot Gateway recovery: background installation only means the local scheduler
+  can start the gateway. A stale or not-detected gateway still needs Settings
+  recovery or a manual `tgcs bot run`.
+- Signal Desk restart: the launcher should reuse a compatible running Desk,
+  skip unrelated local services in auto-port mode, and keep explicit `--port`
+  strict.
+
 ## Progress Update: 2026-05-13 Hardening Iteration
 
 The 2026-05-13 hardening branch established a clean-HEAD baseline independent
@@ -116,7 +144,7 @@ gates without changing HTTP endpoints, SQLite table names, or dashboard
 contract names:
 
 - `scripts/dashboard_server.py` is still the public server facade, but artifact
-  helpers, git update helpers, fixed dry-run scheduler helpers, and Bot Gateway
+  helpers, git update helpers, fixed-task/current-profile scheduler helpers, and Bot Gateway
   background helpers now live in `scripts/desk_artifacts.py`,
   `scripts/desk_git.py`, `scripts/desk_scheduler.py`, and
   `scripts/desk_bot_gateway_background.py`. A follow-up split moved Telegram credentials,
@@ -632,8 +660,9 @@ privacy behavior:
   local-first status projection, background status, fixed Bot Gateway argv,
   launchd plist writing, systemd service writing, and confirmed autostart
   install/remove actions.
-- `scripts/desk_scheduler.py` remains the fixed dry-run auto-scan scheduler
-  owner and keeps the old Bot Gateway helper names as compatibility wrappers.
+- `scripts/desk_scheduler.py` remains the fixed-task/current-profile dry-run
+  auto-scan scheduler owner and keeps the old Bot Gateway helper names as
+  compatibility wrappers.
   Its sync layer deliberately forwards `PROJECT_ROOT`, token status, scheduler
   backend, `_pythonw_entry`, `_run_scheduler_command`, and Bot Gateway constants
   into the new module so the `dashboard_server` monkeypatch surface stays
@@ -982,7 +1011,7 @@ current triage view for what is still real after the later splits:
 | --- | --- | --- |
 | D1. WIP and branch hygiene | Cleared for the known backlog. The dirty implementation slices from the handoff are now checkpoint commits. | Keep using staged snapshot or clean worktree gates for future slices; do not use mixed-worktree gates as commit proof. |
 | D2. Contract sprawl | Materially improved. Shared fixtures now cover the high-risk Python/TypeScript contracts, but `docs/agent-cli-contract.md` is still long. | Keep the contract doc as an index and move new guarantees into fixtures first, prose second. |
-| D3. `dashboard_server.py` boundaries | Artifact, git, fixed dry-run scheduler, Bot Gateway background, credentials facade, Telegram login, delivery settings, secret settings, source registry, source access, source assistant, action execution, profile creation, server selection, HTTP security, profile route mutation helpers, state payload assembly, GET route dispatch, settings POST routes, source POST routes, profile POST routes, and operation POST routes are split behind the old facade. The facade is currently `896` lines and mainly owns HTTP orchestration, static serving, exception mapping, and compatibility re-exports. | Further backend work should target behavior or owner boundaries outside pure route dispatch; avoid low-value line shaving. |
+| D3. `dashboard_server.py` boundaries | Artifact, git, fixed-task/current-profile scheduler, Bot Gateway background, credentials facade, Telegram login, delivery settings, secret settings, source registry, source access, source assistant, action execution, profile creation, server selection, HTTP security, profile route mutation helpers, state payload assembly, GET route dispatch, settings POST routes, source POST routes, profile POST routes, and operation POST routes are split behind the old facade. The facade is currently `896` lines and mainly owns HTTP orchestration, static serving, exception mapping, and compatibility re-exports. | Further backend work should target behavior or owner boundaries outside pure route dispatch; avoid low-value line shaving. |
 | D4. `monitor_state.py` boundaries | Mostly reduced to a `411` line facade. DB/schema, common privacy guards, review cards, alerts, feedback, profile patches, and dashboard projection are split. | Profile runtime/settings helpers are the only meaningful remaining state responsibility; split only with focused tests if that area changes. |
 | D5. `report.py` coupling | Mostly reduced. `report.py` is now `503` lines; report behavior moved into `report_*` modules, and report HTML link/source rendering now lives in a focused helper module. | Treat `report_extraction.py`, `report_html.py`, and `report_sources.py` as review units; next report work should be behavior or visual-output driven, not line-count driven. |
 | D6. Dashboard root/settings state | Actions, Profiles, Inbox, Runs, the Settings source library, and the profile runtime settings editor are now composition entrypoints. `inbox.tsx` is down to `137` lines, `runs.tsx` to `76` lines, `source-library-panel.tsx` to `204` lines, and `runtime-settings-control.tsx` to `200` lines, each backed by focused submodules. | The next UI slice should be driven by a real UX/test gap rather than more line-count cleanup. |
@@ -1180,7 +1209,7 @@ Cleanup:
     mutations, source access health.
   - `scripts/desk_credentials.py`: Telegram credentials, notification tokens,
     AI key status, delivery chat detection.
-  - `scripts/desk_scheduler.py`: fixed dry-run scheduler helpers.
+  - `scripts/desk_scheduler.py`: fixed-task/current-profile dry-run scheduler helpers.
   - `scripts/desk_bot_gateway_background.py`: Bot Gateway status and
     autostart helpers.
   - `scripts/desk_artifacts.py`: artifact path resolution and report/markdown

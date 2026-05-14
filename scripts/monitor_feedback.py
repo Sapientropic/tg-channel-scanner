@@ -19,7 +19,11 @@ from scripts.monitor_common import (
     title_case_label,
     utc_now,
 )
-from scripts.profile_patches import create_profile_patch_suggestion
+from scripts.profile_patches import (
+    REVIEW_LEARNING_PATCH_NOTE,
+    create_profile_patch_suggestion,
+    profile_patch_card_context,
+)
 
 
 def clear_feedback_decisions(conn: sqlite3.Connection) -> dict[str, Any]:
@@ -105,6 +109,23 @@ def _feedback_profile_suggestion_note(rows: list[sqlite3.Row]) -> str:
     return "Desk feedback tuning: Analyze the recent Keep/Skip/Wrong Match feedback. Extract the generalized matching patterns, industry preferences, and explicit exclusions. Do not list specific card titles. Write broad, reusable rules."
 
 
+def _feedback_profile_patch_context(rows: list[sqlite3.Row]) -> list[dict[str, Any]]:
+    context: list[dict[str, Any]] = []
+    for row in rows[:24]:
+        item = parse_json(row["item_json"], {})
+        card = profile_patch_card_context(item if isinstance(item, dict) else {})
+        title = display_item_title(item if isinstance(item, dict) else {}, fallback=row["title"] or "Review card", max_len=120)
+        context.append(
+            {
+                "action": str(row["action"] or ""),
+                "title": title,
+                "note": "",
+                "card": card,
+            }
+        )
+    return context
+
+
 def _existing_profile_patch_for_note(conn: sqlite3.Connection, *, profile_id: str, note: str) -> sqlite3.Row | None:
     return conn.execute(
         """
@@ -168,6 +189,7 @@ def create_feedback_profile_patch_suggestions(
                 card_id=str(profile_rows[0]["card_id"] or "") or None,
                 note=note,
                 profile_path=None,
+                feedback_context=_feedback_profile_patch_context(profile_rows),
             )
         except MonitorStateError as exc:
             skipped.append({"profile_id": profile_id, "reason": str(exc)})
@@ -294,11 +316,26 @@ def recent_feedback_impacts(conn: sqlite3.Connection, *, limit: int = 6) -> list
             p.status AS patch_status
         FROM feedback_events f
         LEFT JOIN review_cards c ON c.card_id = f.card_id
-        LEFT JOIN profile_patch_suggestions p ON p.card_id = f.card_id AND f.action = 'follow_up'
+        LEFT JOIN profile_patch_suggestions p ON p.patch_id = (
+            SELECT p2.patch_id
+            FROM profile_patch_suggestions p2
+            WHERE f.action = 'follow_up'
+              AND p2.profile_id = f.profile_id
+              AND p2.note IN (f.note, ?)
+            ORDER BY CASE p2.status
+                WHEN 'pending' THEN 0
+                WHEN 'applied' THEN 1
+                WHEN 'reverted' THEN 2
+                ELSE 3
+            END,
+            p2.created_at DESC,
+            p2.patch_id DESC
+            LIMIT 1
+        )
         ORDER BY f.created_at DESC, f.event_id DESC
         LIMIT ?
         """,
-        (limit,),
+        (REVIEW_LEARNING_PATCH_NOTE, limit),
     ).fetchall()
     impacts: list[dict[str, Any]] = []
     for row in rows:
@@ -374,7 +411,11 @@ def feedback_summary(conn: sqlite3.Connection) -> dict[str, Any]:
     patch_rows = conn.execute(
         """
         SELECT status, COUNT(*) AS count
-        FROM profile_patch_suggestions
+        FROM (
+            SELECT status, profile_id, note
+            FROM profile_patch_suggestions
+            GROUP BY status, profile_id, note
+        )
         GROUP BY status
         """
     ).fetchall()

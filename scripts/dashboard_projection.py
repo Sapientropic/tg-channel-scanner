@@ -24,6 +24,7 @@ from scripts.monitor_common import (
     sha256_text,
 )
 from scripts.monitor_feedback import feedback_summary, validation_summary
+from scripts.profile_patches import REVIEW_LEARNING_PATCH_NOTE
 from scripts.review_cards import _card_from_row, source_link_lookup_from_runs
 
 
@@ -188,38 +189,7 @@ def dashboard_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
         delivery_target_from_row(row)
         for row in conn.execute("SELECT * FROM delivery_targets ORDER BY target_id").fetchall()
     ]
-    patches = [
-        {
-            "schema_version": PROFILE_PATCH_SCHEMA_VERSION,
-            "patch_id": row["patch_id"],
-            "profile_id": row["profile_id"],
-            "profile_display_path": display_profile_path(str(row["profile_path"] or "")),
-            "card_id": row["card_id"],
-            "card_title": patch_card_title(row),
-            "note": row["note"],
-            "status": row["status"],
-            "diff_text": row["diff_text"],
-            "base_profile_hash": row["base_profile_hash"] or "",
-            "base_profile_short_hash": str(row["base_profile_hash"] or "")[:12],
-            "apply_readiness": profile_patch_apply_readiness(
-                status=str(row["status"] or ""),
-                profile_path=str(row["profile_path"] or ""),
-                base_profile_hash=str(row["base_profile_hash"] or ""),
-            ),
-            "created_at": row["created_at"],
-            "applied_at": row["applied_at"],
-        }
-        for row in conn.execute(
-            """
-            SELECT p.*, profiles.path AS profile_path, c.title AS card_title, c.item_json AS card_item_json
-            FROM profile_patch_suggestions p
-            LEFT JOIN profiles ON profiles.profile_id = p.profile_id
-            LEFT JOIN review_cards c ON c.card_id = p.card_id
-            ORDER BY p.created_at DESC
-            LIMIT 100
-            """
-        ).fetchall()
-    ]
+    patches = dashboard_profile_patch_suggestions(conn)
     source_stats = source_value_stats(conn, runs=internal_runs)
     setup_status = dashboard_setup_status(
         profiles=internal_profiles,
@@ -454,9 +424,119 @@ def delivery_target_detail(*, target_type: str, enabled: bool, config: dict[str,
 
 
 def patch_card_title(row: sqlite3.Row) -> str:
-    item = parse_json(row["card_item_json"], {}) if "card_item_json" in row.keys() else {}
-    fallback = str(row["card_title"] or "Review card") if "card_title" in row.keys() else "Review card"
+    if "card_item_json" in row.keys():
+        item = parse_json(row["card_item_json"], {})
+    elif "item_json" in row.keys():
+        item = parse_json(row["item_json"], {})
+    else:
+        item = {}
+    if "card_title" in row.keys():
+        fallback = str(row["card_title"] or "Review card")
+    elif "title" in row.keys():
+        fallback = str(row["title"] or "Review card")
+    else:
+        fallback = "Review card"
     return display_item_title(item if isinstance(item, dict) else {}, fallback=fallback)
+
+
+def dashboard_profile_patch_suggestions(conn: sqlite3.Connection) -> list[dict[str, Any]]:
+    rows = conn.execute(
+        """
+        SELECT p.*, profiles.path AS profile_path, c.title AS card_title, c.item_json AS card_item_json
+        FROM profile_patch_suggestions p
+        LEFT JOIN profiles ON profiles.profile_id = p.profile_id
+        LEFT JOIN review_cards c ON c.card_id = p.card_id
+        WHERE p.status = 'pending'
+        ORDER BY p.created_at DESC, p.patch_id DESC
+        LIMIT 100
+        """
+    ).fetchall()
+    grouped: dict[tuple[str, str], list[dict[str, Any]]] = {}
+    for row in rows:
+        readiness = profile_patch_apply_readiness(
+            status=str(row["status"] or ""),
+            profile_path=str(row["profile_path"] or ""),
+            base_profile_hash=str(row["base_profile_hash"] or ""),
+        )
+        patch = {
+            "schema_version": PROFILE_PATCH_SCHEMA_VERSION,
+            "patch_id": row["patch_id"],
+            "profile_id": row["profile_id"],
+            "profile_display_path": display_profile_path(str(row["profile_path"] or "")),
+            "card_id": row["card_id"],
+            "card_title": patch_card_title(row),
+            "note": row["note"],
+            "status": row["status"],
+            "diff_text": row["diff_text"],
+            "base_profile_hash": row["base_profile_hash"] or "",
+            "base_profile_short_hash": str(row["base_profile_hash"] or "")[:12],
+            "apply_readiness": readiness,
+            "created_at": row["created_at"],
+            "applied_at": row["applied_at"],
+        }
+        grouped.setdefault((str(row["profile_id"] or ""), str(row["note"] or "")), []).append(patch)
+
+    patches: list[dict[str, Any]] = []
+    for (profile_id, note), candidates in grouped.items():
+        representative = max(candidates, key=profile_patch_projection_rank)
+        patch = dict(representative)
+        context = profile_patch_source_context(
+            conn,
+            profile_id=profile_id,
+            note=note,
+            fallback_title=str(representative.get("card_title") or ""),
+            fallback_card_id=str(representative.get("card_id") or ""),
+        )
+        patch.update(context)
+        patch["duplicate_patch_count"] = len(candidates)
+        if context["source_card_count"] > 1:
+            patch["card_title"] = f"{context['source_card_count']} Review choices"
+        patches.append(patch)
+    return sorted(patches, key=lambda item: (str(item.get("created_at") or ""), str(item.get("patch_id") or "")), reverse=True)
+
+
+def profile_patch_projection_rank(patch: dict[str, Any]) -> tuple[int, str, str]:
+    readiness = patch.get("apply_readiness") if isinstance(patch.get("apply_readiness"), dict) else {}
+    status = str(readiness.get("status") or "")
+    readiness_rank = {"ready": 3, "unknown": 2, "blocked": 1}.get(status, 0)
+    return readiness_rank, str(patch.get("created_at") or ""), str(patch.get("patch_id") or "")
+
+
+def profile_patch_source_context(
+    conn: sqlite3.Connection,
+    *,
+    profile_id: str,
+    note: str,
+    fallback_title: str,
+    fallback_card_id: str,
+) -> dict[str, Any]:
+    rows = conn.execute(
+        f"""
+        SELECT f.card_id, c.title, c.item_json
+        FROM feedback_events f
+        LEFT JOIN review_cards c ON c.card_id = f.card_id
+        WHERE f.profile_id = ?
+          AND f.action = 'follow_up'
+          {"AND f.note = ?" if note != REVIEW_LEARNING_PATCH_NOTE else ""}
+        ORDER BY f.created_at DESC, f.event_id DESC
+        LIMIT 24
+        """,
+        (profile_id, note) if note != REVIEW_LEARNING_PATCH_NOTE else (profile_id,),
+    ).fetchall()
+    titles: list[str] = []
+    seen_titles: set[str] = set()
+    for row in rows:
+        title = patch_card_title(row)
+        key = title.casefold()
+        if title and key not in seen_titles:
+            titles.append(title)
+            seen_titles.add(key)
+    if not rows and fallback_card_id and fallback_title:
+        titles = [fallback_title]
+    return {
+        "source_card_count": len(rows) if rows else (1 if fallback_card_id else 0),
+        "source_card_titles": titles[:3],
+    }
 
 
 def profile_patch_apply_readiness(

@@ -272,6 +272,8 @@ export function sanitizeDeskSchedulerStatus(value: unknown): DeskSchedulerStatus
   }
   const status = optionalString(value.status);
   const taskLabel = optionalString(value.task_label);
+  const profileId = optionalString(value.profile_id);
+  const displayCommand = optionalString(value.display_command);
   const detail = optionalString(value.detail);
   const nextAction = optionalString(value.next_action);
   const checkedAt = optionalString(value.checked_at);
@@ -300,6 +302,12 @@ export function sanitizeDeskSchedulerStatus(value: unknown): DeskSchedulerStatus
   }
   if (backend) {
     sanitized.backend = backend;
+  }
+  if (profileId) {
+    sanitized.profile_id = profileId;
+  }
+  if (displayCommand) {
+    sanitized.display_command = displayCommand;
   }
   if ("can_install" in value) {
     sanitized.can_install = value.can_install === true;

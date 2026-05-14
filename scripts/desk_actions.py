@@ -95,6 +95,63 @@ def _run_bot_gateway_autostart_action(action_id: str, *, body: dict | None = Non
         return helper(action_id, body=body)
     return desk_scheduler.run_bot_gateway_autostart_action(action_id, body=body)
 
+
+def _safe_profile_id(value: object) -> str:
+    text = str(value or "").strip()
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,79}", text):
+        return ""
+    return text
+
+
+def _profile_id_from_body(body: dict | None) -> str:
+    return _safe_profile_id((body or {}).get("profile_id"))
+
+
+def _preferred_monitor_profile_id(body: dict | None = None) -> str:
+    requested = _profile_id_from_body(body)
+    if requested:
+        return requested
+    fallback_profile_id = str(
+        _facade_attr("DESK_SCHEDULER_PROFILE_ID", desk_scheduler.DESK_SCHEDULER_PROFILE_ID)
+        or desk_scheduler.DESK_SCHEDULER_PROFILE_ID
+    )
+    return desk_scheduler.preferred_scheduler_profile_id(
+        project_root=_project_root(),
+        fallback_profile_id=fallback_profile_id,
+    )
+
+
+def _argv_for_action(action_id: str, action: dict, body: dict | None) -> list[str]:
+    argv = [str(part) for part in action["argv"]]
+    if action_id in {"monitor_jobs_dry_run", "schedule_preview"}:
+        profile_id = _preferred_monitor_profile_id(body)
+        try:
+            index = argv.index("--profile-id")
+        except ValueError:
+            return argv
+        if index + 1 < len(argv):
+            argv[index + 1] = profile_id
+    return argv
+
+
+def _display_command_for_argv(action: dict, argv: list[str]) -> str:
+    if argv[:2] == ["monitor", "run"] and "--profile-id" in argv:
+        profile_id = argv[argv.index("--profile-id") + 1]
+        delivery_mode = "dry-run"
+        if "--delivery-mode" in argv:
+            delivery_mode = argv[argv.index("--delivery-mode") + 1]
+        return f"tgcs monitor run --profile-id {profile_id} --delivery-mode {delivery_mode}"
+    if argv[:2] == ["schedule", "print"] and "--profile-id" in argv:
+        profile_id = argv[argv.index("--profile-id") + 1]
+        interval_minutes = str(desk_scheduler.DESK_SCHEDULER_INTERVAL_MINUTES)
+        delivery_mode = "dry-run"
+        if "--interval-minutes" in argv:
+            interval_minutes = argv[argv.index("--interval-minutes") + 1]
+        if "--delivery-mode" in argv:
+            delivery_mode = argv[argv.index("--delivery-mode") + 1]
+        return f"tgcs schedule print --profile-id {profile_id} --interval-minutes {interval_minutes} --delivery-mode {delivery_mode}"
+    return str(action["display_command"])
+
 _DESK_ACTION_LOCKS: dict[str, Lock] = {}
 _DESK_ACTION_LOCKS_GUARD = Lock()
 _DESK_LONG_RUNNING_ACTIONS = {"monitor_jobs_dry_run", "sources_probe_access"}
@@ -608,8 +665,9 @@ def _run_desk_action_unlocked(action_id: str, *, action: dict, body: dict | None
     # The browser may send UI state in `body`, but execution never trusts a
     # client-supplied command. Every runnable Desk action maps to this static
     # argv allowlist so Signal Desk cannot become a localhost shell proxy.
-    _ = body
-    cmd = [sys.executable, str(_project_root() / "scripts" / "tgcs.py"), *action["argv"]]
+    argv = _argv_for_action(action_id, action, body)
+    display_command = _display_command_for_argv(action, argv)
+    cmd = [sys.executable, str(_project_root() / "scripts" / "tgcs.py"), *argv]
     if action_id == "monitor_jobs_dry_run":
         _desk_update_action_progress(
             action_id,
@@ -632,7 +690,7 @@ def _run_desk_action_unlocked(action_id: str, *, action: dict, body: dict | None
             "status": "failed",
             "title": action["title"],
             "detail": f"{action['title']} timed out.",
-            "display_command": action["display_command"],
+            "display_command": display_command,
             "exit_code": None,
             "artifact_path": "",
             "next_action": "Inspect the terminal or rerun the action with a narrower input.",
@@ -655,7 +713,7 @@ def _run_desk_action_unlocked(action_id: str, *, action: dict, body: dict | None
         "status": status,
         "title": action["title"],
         "detail": detail,
-        "display_command": action["display_command"],
+        "display_command": display_command,
         "exit_code": completed.returncode,
         "artifact_path": artifact_path,
         "next_action": next_action,

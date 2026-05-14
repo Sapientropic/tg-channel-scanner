@@ -111,6 +111,7 @@ describe("ProfilesView", () => {
       note: "Prefer remote React roles.",
       status: "pending",
       diff_text: "-old\n+new",
+      source_card_count: 2,
       created_at: "2026-05-10T00:00:00Z",
     };
     const html = renderToStaticMarkup(
@@ -133,17 +134,20 @@ describe("ProfilesView", () => {
 
     expect(html).toContain("Profile Drafts");
     expect(html).toContain("aria-expanded=\"true\"");
-    expect(html).toContain("React contract role");
-    expect(html).toContain("Apply to profile");
-    expect(html).toContain("Adds your manual preference");
+    expect(html).toContain("Jobs Fast feedback batch");
+    expect(html).toContain("2 Review decisions");
+    expect(html).toContain("Apply batch");
+    expect(html).toContain("Combines 2 Review decisions into reusable matching rules for future scans.");
+    expect(html).not.toContain("Prefer remote React roles.");
+    expect(html).not.toContain("Adds your manual preference");
   });
 
-  it("offers replay only for reverted profile diffs", () => {
+  it("hides applied and reverted profile diffs from the default review queue", () => {
     const patch: ProfilePatch = {
       patch_id: "patch-1",
       profile_id: "jobs-fast",
       note: "Prefer remote React roles.",
-      status: "reverted",
+      status: "applied",
       diff_text: "-old\n+new",
       created_at: "2026-05-10T00:00:00Z",
     };
@@ -165,9 +169,47 @@ describe("ProfilesView", () => {
       />,
     );
 
-    expect(html).toContain("Replay");
+    expect(html).not.toContain("Profile Drafts");
     expect(html).not.toContain("Apply to profile");
     expect(html).not.toContain("Revert");
+    expect(html).not.toContain("Replay");
+  });
+
+  it("keeps blocked pending drafts visible but disables apply", () => {
+    const patch: ProfilePatch = {
+      patch_id: "patch-1",
+      profile_id: "jobs-fast",
+      note: "Prefer remote React roles.",
+      status: "pending",
+      diff_text: "-old\n+new",
+      apply_readiness: {
+        status: "blocked",
+        label: "Profile changed",
+        detail: "Regenerate before applying.",
+      },
+      created_at: "2026-05-10T00:00:00Z",
+    };
+    const html = renderToStaticMarkup(
+      <ProfilesView
+        profiles={[profile({ enabled: true })]}
+        patches={[patch]}
+        applyPatch={vi.fn()}
+        revertPatch={vi.fn()}
+        replayPatch={vi.fn()}
+        setAlertMode={vi.fn()}
+        setProfileEnabled={vi.fn()}
+        setProfileRuntimeSettings={vi.fn()}
+        createProfileDraftNote={vi.fn()}
+        createProfileMatchingPreferencesDraft={vi.fn()}
+        createProfileFromBrief={createProfileFromBrief}
+        profileCreateResult={null}
+        busy={false}
+      />,
+    );
+
+    expect(html).toContain("Profile changed");
+    expect(html).toContain("Regenerate before applying.");
+    expect(html).toContain("disabled=\"\"");
   });
 
   it("validates profile scan setting edits before save", () => {

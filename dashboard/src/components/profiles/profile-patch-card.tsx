@@ -19,35 +19,35 @@ export function ProfilePatchCard({
   busy: boolean;
 }) {
   const { added, removed } = parseDiff(patch.diff_text || "");
-  const draftSummary = profileDraftUserSummary(patch.note);
+  const draftSummary = profileDraftUserSummary(patch);
+  const readiness = patch.apply_readiness;
+  const readinessStatus = readiness?.status || "";
+  const showReadiness = Boolean(readiness && readinessStatus !== "ready");
+  const applyBlocked = patch.status === "pending" && Boolean(readinessStatus && readinessStatus !== "ready");
   return (
     <article className="review-card patch-card">
       <div className="card-main">
         <div className="card-title-row">
-          <h3>{patch.card_title || profileDisplayName(patch.profile_id)}</h3>
+          <h3>{profilePatchTitle(patch)}</h3>
           <span className={`status ${toneClass(patch.status)}`}>{patch.status}</span>
         </div>
         <div className="patch-context-row">
-          <span>Profile change</span>
+          <span>{draftSourceLabel(patch)}</span>
           <span>{formatDate(patch.created_at)}</span>
           {added.length > 0 && <span>{added.length} added</span>}
           {removed.length > 0 && <span>{removed.length} removed</span>}
         </div>
-        {patch.apply_readiness && (
-          <div className={`patch-readiness ${toneClass(patch.apply_readiness.status || "unknown")}`}>
-            <strong>{patch.apply_readiness.label || "Readiness check"}</strong>
-            {patch.apply_readiness.detail && <span>{patch.apply_readiness.detail}</span>}
+        {showReadiness && (
+          <div className={`patch-readiness ${toneClass(readiness?.status || "unknown")}`}>
+            <strong>{readiness?.label || "Readiness check"}</strong>
+            {readiness?.detail && <span>{readiness.detail}</span>}
           </div>
         )}
-        <div className="patch-user-explainer">
-          <strong>{profileDraftEffectTitle(patch.note)}</strong>
-          <p>{profileDraftEffectDetail(patch.note)}</p>
-        </div>
         <p className="note-line">{draftSummary}</p>
         <details className="patch-diff-details">
           <summary>
             <FileDiff size={14} />
-            <span>Preview changes</span>
+            <span>Preview</span>
           </summary>
           <div className="visual-diff">
             {added.length > 0 && (
@@ -85,11 +85,11 @@ export function ProfilePatchCard({
               className="text-button"
               type="button"
               onClick={() => applyPatch(patch.patch_id)}
-              disabled={busy}
+              disabled={busy || applyBlocked}
               title="Apply this draft to the local profile file after checking it."
             >
               <Check size={15} />
-              <span>Apply to profile</span>
+              <span>{applyButtonLabel(patch)}</span>
             </button>
           )}
           {patch.status === "applied" && (
@@ -122,32 +122,46 @@ export function ProfilePatchCard({
   );
 }
 
-function profileDraftEffectTitle(note: string) {
-  if (note.startsWith("User edited matching preferences")) {
-    return "Updates your matching rules";
+function profilePatchTitle(patch: ProfilePatch) {
+  const sourceCount = patch.source_card_count || 0;
+  if (sourceCount > 1) {
+    return `${profileDisplayName(patch.profile_id)} feedback batch`;
   }
-  return note.startsWith("Desk feedback tuning") ? "Learns from your Review choices" : "Adds your manual preference";
+  return patch.card_title || profileDisplayName(patch.profile_id);
 }
 
-function profileDraftEffectDetail(note: string) {
-  if (note.startsWith("Desk feedback tuning")) {
-    return "Signal Desk should generalize your Keep, Skip, and Wrong Match decisions into reusable rules. It should not copy single card titles as permanent preferences.";
+function draftSourceLabel(patch: ProfilePatch) {
+  const sourceCount = patch.source_card_count || 0;
+  if (sourceCount > 1) {
+    return `${sourceCount} Review decisions`;
   }
-  if (note.startsWith("User edited matching preferences")) {
-    return "Apply this after checking the preview. Future scans will use these plain-language rules when ranking matches.";
+  if (sourceCount === 1 || patch.card_id) {
+    return "1 Review decision";
   }
-  return "Apply this after checking it. Future scans will use this background or preference note when ranking matches for this profile.";
+  return "Profile draft";
 }
 
-function profileDraftUserSummary(note: string) {
+function applyButtonLabel(patch: ProfilePatch) {
+  return (patch.source_card_count || 0) > 1 ? "Apply batch" : "Apply";
+}
+
+function profileDraftUserSummary(patch: ProfilePatch) {
+  const note = patch.note || "";
+  const sourceCount = patch.source_card_count || 0;
   if (!note) {
     return "Profile rule change awaiting review.";
   }
+  if (sourceCount > 1) {
+    return `Combines ${sourceCount} Review decisions into reusable matching rules for future scans.`;
+  }
+  if (sourceCount === 1 || patch.card_id) {
+    return "Turns this Review decision into a reusable matching rule for future scans.";
+  }
   if (note.startsWith("Desk feedback tuning")) {
-    return "Draft from learning loop: extract broad rules from confirmed Review choices.";
+    return "Summarizes confirmed Review decisions into reusable matching rules.";
   }
   if (note.startsWith("User edited matching preferences")) {
-    return "Draft from your profile editor: update the editable matching rules.";
+    return "Updates the editable matching rules for future scans.";
   }
   return note;
 }

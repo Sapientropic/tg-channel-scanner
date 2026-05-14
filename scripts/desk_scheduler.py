@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import plistlib
+import re
 import shutil
 import subprocess
 import sys
@@ -12,9 +13,10 @@ from pathlib import Path
 from typing import Any
 
 try:
-    from scripts import desk_bot_gateway_background
+    from scripts import desk_bot_gateway_background, monitor_config
 except ModuleNotFoundError:
     import desk_bot_gateway_background
+    import monitor_config
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -125,6 +127,48 @@ def _sync_bot_gateway_context() -> None:
     desk_bot_gateway_background.pythonw_entry = pythonw_entry
 
 
+def _safe_profile_id(value: object) -> str:
+    text = str(value or "").strip()
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,79}", text):
+        return ""
+    return text
+
+
+def preferred_scheduler_profile_id(
+    *,
+    project_root: Path | None = None,
+    fallback_profile_id: str | None = None,
+) -> str:
+    fallback = _safe_profile_id(fallback_profile_id or DESK_SCHEDULER_PROFILE_ID) or DESK_SCHEDULER_PROFILE_ID
+    root = PROJECT_ROOT if project_root is None else project_root
+    try:
+        config = monitor_config.load_config(root / ".tgcs" / "profiles.toml")
+    except ValueError:
+        return fallback
+    active_profiles = [profile for profile in config.profiles.values() if profile.get("enabled", True)]
+    desk_profiles = [
+        (index, profile)
+        for index, profile in enumerate(active_profiles)
+        if str(profile.get("path") or "").replace("\\", "/").startswith("profiles/desk/")
+    ]
+    if not desk_profiles:
+        return fallback
+    # Signal Desk-created profiles are the user's current matching intent.
+    # Prefer the newest `profiles/desk/*` record so manual scans, schedule
+    # previews, and installed background scans do not silently split into
+    # different profiles. Keep the OS task name stable; reinstalling updates the
+    # fixed task instead of creating per-profile orphan tasks.
+    _, profile = sorted(desk_profiles, key=lambda item: (str(item[1].get("updated_at") or ""), item[0]))[-1]
+    return _safe_profile_id(profile.get("id")) or fallback
+
+
+def schedule_display_command(profile_id: str) -> str:
+    return (
+        f"tgcs schedule print --profile-id {profile_id} "
+        f"--interval-minutes {DESK_SCHEDULER_INTERVAL_MINUTES} --delivery-mode dry-run"
+    )
+
+
 def scheduler_result(
     action_id: str,
     *,
@@ -133,6 +177,7 @@ def scheduler_result(
     detail: str,
     next_action: str,
     exit_code: int | None = None,
+    display_command: str | None = None,
 ) -> dict:
     action = DESK_ACTION_BY_ID[action_id]
     return {
@@ -141,7 +186,7 @@ def scheduler_result(
         "status": status,
         "title": title,
         "detail": detail,
-        "display_command": action["display_command"],
+        "display_command": display_command or action["display_command"],
         "exit_code": exit_code,
         "artifact_path": "",
         "next_action": next_action,
@@ -159,16 +204,19 @@ def scheduler_backend() -> str:
     return "manual_cron_preview"
 
 
-def scheduler_base(backend: str) -> dict:
+def scheduler_base(backend: str, *, profile_id: str | None = None) -> dict:
+    selected_profile_id = profile_id or preferred_scheduler_profile_id()
     can_install = backend in {"windows_schtasks", "macos_launchd", "linux_systemd_user"}
     return {
         "schema_version": "desk_scheduler_status_v1",
-        "task_label": "jobs-fast dry-run",
+        "task_label": f"{selected_profile_id} dry-run",
+        "profile_id": selected_profile_id,
         "interval_minutes": DESK_SCHEDULER_INTERVAL_MINUTES,
         "platform": sys.platform,
         "backend": backend,
         "can_install": can_install,
         "can_remove": can_install,
+        "display_command": schedule_display_command(selected_profile_id),
         "checked_at": _utc_now(),
     }
 
@@ -210,13 +258,14 @@ def pythonw_entry() -> Path:
 _DEFAULT_PYTHONW_ENTRY = pythonw_entry
 
 
-def fixed_monitor_argv(entry: Path) -> list[str]:
+def fixed_monitor_argv(entry: Path, *, profile_id: str | None = None) -> list[str]:
+    selected_profile_id = profile_id or preferred_scheduler_profile_id()
     return [
         str(entry),
         "monitor",
         "run",
         "--profile-id",
-        DESK_SCHEDULER_PROFILE_ID,
+        selected_profile_id,
         "--delivery-mode",
         "dry-run",
     ]
@@ -256,7 +305,8 @@ def desk_bot_gateway_background_status(*, token_configured: bool | None = None) 
 
 def desk_scheduler_status() -> dict:
     backend = scheduler_backend()
-    base = scheduler_base(backend)
+    profile_id = preferred_scheduler_profile_id()
+    base = scheduler_base(backend, profile_id=profile_id)
     if backend == "manual_cron_preview":
         return {
             **base,
@@ -337,23 +387,25 @@ def desk_scheduler_status() -> dict:
     }
 
 
-def write_launchd_plist(path: Path, entry: Path) -> None:
+def write_launchd_plist(path: Path, entry: Path, *, profile_id: str | None = None) -> None:
+    selected_profile_id = profile_id or preferred_scheduler_profile_id()
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = {
         "Label": DESK_SCHEDULER_LAUNCHD_LABEL,
-        "ProgramArguments": fixed_monitor_argv(entry),
+        "ProgramArguments": fixed_monitor_argv(entry, profile_id=selected_profile_id),
         "RunAtLoad": True,
         "StartInterval": DESK_SCHEDULER_INTERVAL_MINUTES * 60,
         "WorkingDirectory": str(PROJECT_ROOT),
-        "StandardOutPath": str(PROJECT_ROOT / "output" / f"tgcs-{DESK_SCHEDULER_PROFILE_ID}.log"),
-        "StandardErrorPath": str(PROJECT_ROOT / "output" / f"tgcs-{DESK_SCHEDULER_PROFILE_ID}.err.log"),
+        "StandardOutPath": str(PROJECT_ROOT / "output" / f"tgcs-{selected_profile_id}.log"),
+        "StandardErrorPath": str(PROJECT_ROOT / "output" / f"tgcs-{selected_profile_id}.err.log"),
     }
     PROJECT_ROOT.joinpath("output").mkdir(parents=True, exist_ok=True)
     with path.open("wb") as handle:
         plistlib.dump(payload, handle)
 
 
-def write_systemd_units(service_path: Path, timer_path: Path, entry: Path) -> None:
+def write_systemd_units(service_path: Path, timer_path: Path, entry: Path, *, profile_id: str | None = None) -> None:
+    selected_profile_id = profile_id or preferred_scheduler_profile_id()
     service_path.parent.mkdir(parents=True, exist_ok=True)
     PROJECT_ROOT.joinpath("output").mkdir(parents=True, exist_ok=True)
     exec_start = " ".join(
@@ -362,7 +414,7 @@ def write_systemd_units(service_path: Path, timer_path: Path, entry: Path) -> No
             "monitor",
             "run",
             "--profile-id",
-            DESK_SCHEDULER_PROFILE_ID,
+            selected_profile_id,
             "--delivery-mode",
             "dry-run",
         ]
@@ -371,7 +423,7 @@ def write_systemd_units(service_path: Path, timer_path: Path, entry: Path) -> No
         "\n".join(
             [
                 "[Unit]",
-                "Description=T-Sense jobs-fast dry-run scan",
+                f"Description=T-Sense {selected_profile_id} dry-run scan",
                 "",
                 "[Service]",
                 "Type=oneshot",
@@ -386,7 +438,7 @@ def write_systemd_units(service_path: Path, timer_path: Path, entry: Path) -> No
         "\n".join(
             [
                 "[Unit]",
-                "Description=Run T-Sense jobs-fast dry-run scan every 15 minutes",
+                f"Description=Run T-Sense {selected_profile_id} dry-run scan every 15 minutes",
                 "",
                 "[Timer]",
                 "OnBootSec=1min",
@@ -410,6 +462,8 @@ def run_desk_scheduler_action(action_id: str, *, body: dict | None = None) -> di
         raise DashboardDeskActionError("Scheduler actions only accept an explicit confirmation flag.")
     if body.get("confirm") is not True:
         raise DashboardDeskActionError("Automation changes require explicit confirmation.")
+    profile_id = preferred_scheduler_profile_id()
+    display_command = schedule_display_command(profile_id)
     backend = scheduler_backend()
     if backend == "manual_cron_preview":
         return scheduler_result(
@@ -418,6 +472,7 @@ def run_desk_scheduler_action(action_id: str, *, body: dict | None = None) -> di
             title="Auto scan needs a supported scheduler",
             detail="Signal Desk will not edit crontab directly. This machine can use the schedule preview or manual scans.",
             next_action="Run tgcs schedule print --platform cron for a no-side-effect crontab preview.",
+            display_command=display_command,
         )
 
     tgcs_entry = PROJECT_ROOT / "tgcs.bat" if backend == "windows_schtasks" else posix_tgcs_entry()
@@ -428,6 +483,7 @@ def run_desk_scheduler_action(action_id: str, *, body: dict | None = None) -> di
             title="Launcher file is missing",
             detail="Signal Desk could not find the local T-Sense launcher needed by the scheduler.",
             next_action="Repair the repo-local install, then turn on auto scan again.",
+            display_command=display_command,
         )
 
     if action_id not in {"schedule_install_dry_run", "schedule_remove_dry_run"}:
@@ -437,7 +493,7 @@ def run_desk_scheduler_action(action_id: str, *, body: dict | None = None) -> di
         # Keep this as a single fixed /TR argument in a list argv call. Do not
         # refactor this path through shell=True: the browser must never be able
         # to turn scheduler setup into a local shell proxy.
-        task_action = f'"{tgcs_entry}" monitor run --profile-id {DESK_SCHEDULER_PROFILE_ID} --delivery-mode dry-run'
+        task_action = f'"{tgcs_entry}" monitor run --profile-id {profile_id} --delivery-mode dry-run'
         if action_id == "schedule_install_dry_run":
             args = [
                 "schtasks.exe",
@@ -453,7 +509,7 @@ def run_desk_scheduler_action(action_id: str, *, body: dict | None = None) -> di
                 "/F",
             ]
             success_title = "Auto scan is on"
-            success_detail = "Windows Task Scheduler will run local practice scans every 15 minutes. Live Telegram delivery is still off."
+            success_detail = f"Windows Task Scheduler will run {profile_id} practice scans every 15 minutes. Live Telegram delivery is still off."
             success_next = "You can leave Signal Desk and return later to review new Inbox cards."
         else:
             args = ["schtasks.exe", "/Delete", "/TN", DESK_SCHEDULER_TASK_NAME, "/F"]
@@ -470,6 +526,7 @@ def run_desk_scheduler_action(action_id: str, *, body: dict | None = None) -> di
                 title="Scheduler change timed out",
                 detail="The local scheduler did not finish the requested change in time.",
                 next_action="Check the local scheduler, then retry from Signal Desk.",
+                display_command=display_command,
             )
         except OSError:
             return scheduler_result(
@@ -478,6 +535,7 @@ def run_desk_scheduler_action(action_id: str, *, body: dict | None = None) -> di
                 title="Scheduler is unavailable",
                 detail="Signal Desk could not start the local scheduler command on this machine.",
                 next_action="Use manual scans in Signal Desk, or install the task from the local scheduler.",
+                display_command=display_command,
             )
 
         if completed.returncode == 0:
@@ -488,6 +546,7 @@ def run_desk_scheduler_action(action_id: str, *, body: dict | None = None) -> di
                 detail=success_detail,
                 next_action=success_next,
                 exit_code=completed.returncode,
+                display_command=display_command,
             )
 
         failure = _desk_safe_result_text(completed.stderr, completed.stdout) or "The local scheduler rejected the change."
@@ -498,15 +557,16 @@ def run_desk_scheduler_action(action_id: str, *, body: dict | None = None) -> di
             detail=failure,
             next_action="Check scheduler permissions, then retry from Signal Desk.",
             exit_code=completed.returncode,
+            display_command=display_command,
         )
 
     if backend == "macos_launchd":
         plist_path = launchd_plist_path()
         if action_id == "schedule_install_dry_run":
-            write_launchd_plist(plist_path, tgcs_entry)
+            write_launchd_plist(plist_path, tgcs_entry, profile_id=profile_id)
             args = ["launchctl", "load", "-w", str(plist_path)]
             success_title = "Auto scan is on"
-            success_detail = "launchd will run local practice scans every 15 minutes. Live Telegram delivery is still off."
+            success_detail = f"launchd will run {profile_id} practice scans every 15 minutes. Live Telegram delivery is still off."
             success_next = "You can leave Signal Desk and return later to review new Inbox cards."
         else:
             args = ["launchctl", "unload", "-w", str(plist_path)]
@@ -518,7 +578,7 @@ def run_desk_scheduler_action(action_id: str, *, body: dict | None = None) -> di
         service_path = systemd_service_path()
         timer_path = systemd_timer_path()
         if action_id == "schedule_install_dry_run":
-            write_systemd_units(service_path, timer_path, tgcs_entry)
+            write_systemd_units(service_path, timer_path, tgcs_entry, profile_id=profile_id)
             try:
                 reload_result = _run_scheduler_command(["systemctl", "--user", "daemon-reload"])
             except (OSError, subprocess.TimeoutExpired):
@@ -532,10 +592,11 @@ def run_desk_scheduler_action(action_id: str, *, body: dict | None = None) -> di
                     detail=failure,
                     next_action="Check systemd --user availability, then retry from Signal Desk.",
                     exit_code=reload_result.returncode,
+                    display_command=display_command,
                 )
             args = ["systemctl", "--user", "enable", "--now", f"{DESK_SCHEDULER_SYSTEMD_NAME}.timer"]
             success_title = "Auto scan is on"
-            success_detail = "systemd --user will run local practice scans every 15 minutes. Live Telegram delivery is still off."
+            success_detail = f"systemd --user will run {profile_id} practice scans every 15 minutes. Live Telegram delivery is still off."
             success_next = "You can leave Signal Desk and return later to review new Inbox cards."
         else:
             args = ["systemctl", "--user", "disable", "--now", f"{DESK_SCHEDULER_SYSTEMD_NAME}.timer"]
@@ -554,6 +615,7 @@ def run_desk_scheduler_action(action_id: str, *, body: dict | None = None) -> di
             title="Scheduler change timed out",
             detail="The local scheduler did not finish the requested change in time.",
             next_action="Check the local scheduler, then retry from Signal Desk.",
+            display_command=display_command,
         )
     except OSError:
         return scheduler_result(
@@ -562,6 +624,7 @@ def run_desk_scheduler_action(action_id: str, *, body: dict | None = None) -> di
             title="Scheduler is unavailable",
             detail="Signal Desk could not start the local scheduler command on this machine.",
             next_action="Use manual scans in Signal Desk, or install the task from the local scheduler.",
+            display_command=display_command,
         )
 
     if backend == "macos_launchd" and action_id == "schedule_remove_dry_run":
@@ -582,6 +645,7 @@ def run_desk_scheduler_action(action_id: str, *, body: dict | None = None) -> di
             detail=success_detail,
             next_action=success_next,
             exit_code=completed.returncode,
+            display_command=display_command,
         )
 
     failure = _desk_safe_result_text(completed.stderr, completed.stdout) or "The local scheduler rejected the change."
@@ -592,6 +656,7 @@ def run_desk_scheduler_action(action_id: str, *, body: dict | None = None) -> di
         detail=failure,
         next_action="Check scheduler permissions, then retry from Signal Desk.",
         exit_code=completed.returncode,
+        display_command=display_command,
     )
 
 

@@ -82,11 +82,27 @@ dry-run scans, and confirmed Source assistant plans. The gateway needs local
 Signal Desk state and does not make T-Sense available while the computer or
 process is offline.
 
+Background mode and gateway liveness are separate checks. A login task can be
+installed while the gateway is still `not_detected` or `stale`; Signal Desk
+marks the gateway stale when its local heartbeat is older than 120 seconds. In
+that state, refresh after login, turn background mode off and on again from
+Settings, or run `./tgcs bot run` manually.
+
+## Signal Desk Restart and Ports
+
+The app launcher starts from `127.0.0.1:8765`. With the default auto-port mode,
+it first reuses an already-running compatible Signal Desk discovered through the
+local health endpoint. If the port is occupied by another local service, it
+skips that port and tries `8766-8799`. Passing an explicit `--port` is strict:
+the command fails instead of reusing or moving ports.
+
 ## Auto Scan
 
-Signal Desk only installs or removes its fixed `jobs-fast` dry-run task after an
+Signal Desk only installs or removes its fixed dry-run scheduler task after an
 explicit browser confirmation. The browser never supplies scheduler paths,
-commands, or argv.
+commands, or argv. The task name stays stable across profile edits, but the
+installed command follows the newest enabled `profiles/desk/*` profile before it
+falls back to `jobs-fast`.
 
 | Platform | Backend |
 | --- | --- |
