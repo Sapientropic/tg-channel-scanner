@@ -43,6 +43,7 @@ try:
         desk_profile_routes,
         desk_scheduler,
         desk_server_selection,
+        desk_state_payload,
         desk_sources as _desk_sources_module,
         local_credentials as local_credentials,
         monitor_state,
@@ -73,6 +74,7 @@ except ModuleNotFoundError:
         desk_profile_routes,
         desk_scheduler,
         desk_server_selection,
+        desk_state_payload,
         desk_sources as _desk_sources_module,
         local_credentials as local_credentials,
         monitor_state,
@@ -724,26 +726,18 @@ def run_bot_gateway_autostart_action(action_id: str, *, body: dict | None = None
 
 
 def dashboard_state_payload(conn) -> dict:
-    snapshot = monitor_state.dashboard_snapshot(conn)
-    snapshot["active_actions"] = desk_active_actions()
-    health = _source_access_health_loaded()
-    if not health:
-        return snapshot
-    setup = snapshot.get("setup_status") if isinstance(snapshot.get("setup_status"), dict) else {}
-    checks = setup.get("checks") if isinstance(setup.get("checks"), list) else []
-    if not checks:
-        return snapshot
-    detail = _source_access_health_detail(health)
-    if not _source_access_health_is_fresh(health):
-        detail = f"Last source access check is stale. {detail}"
-    updated_checks: list[dict] = []
-    for check in checks:
-        if isinstance(check, dict) and check.get("check_id") == "source_access":
-            updated_checks.append({**check, "detail": detail, "source_access": _source_access_action_summary(health)})
-        else:
-            updated_checks.append(check)
-    snapshot["setup_status"] = {**setup, "checks": updated_checks}
-    return snapshot
+    # Keep this wrapper as the compatibility boundary: dashboard_server is the
+    # public test/HTTP monkeypatch surface, while desk_state_payload owns the
+    # product assembly logic for /api/state.
+    return desk_state_payload.dashboard_state_payload(
+        conn,
+        dashboard_snapshot=monitor_state.dashboard_snapshot,
+        active_actions=desk_active_actions,
+        source_access_health_loaded=_source_access_health_loaded,
+        source_access_health_detail=_source_access_health_detail,
+        source_access_health_is_fresh=_source_access_health_is_fresh,
+        source_access_action_summary=_source_access_action_summary,
+    )
 
 
 def resolve_static_path(request_path: str, *, static_dir: Path) -> Path:

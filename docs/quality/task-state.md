@@ -1,4 +1,4 @@
-state: active_quality_iteration_source_registry_split_checkpoint
+state: active_quality_iteration_state_payload_split_checkpoint
 mode: Standard
 run_shape: continuous_until_deadline
 slice_goal: "Continue the technical-debt SPEC with high-value dashboard/backend slices, including Inbox/Runs concentration cleanup, sanitizer test ownership cleanup, dashboard profile-creation facade cleanup, monitor/tgcs CLI test concentration cleanup, monitor delivery runtime cleanup, dashboard profile projection cleanup, monitor command execution cleanup, monitor manifest/result projection cleanup, dashboard opportunity projection cleanup, dashboard setup projection cleanup, Desk server selection cleanup, Desk HTTP security cleanup, Desk profile route mutation cleanup, report HTML link-rendering cleanup, Desk source assistant planning cleanup, Desk source access cleanup, Settings source-library UI cleanup, profile runtime-settings UI cleanup, Bot Gateway background/autostart cleanup, and local secret-settings cleanup, while preserving public props, review/run action names, sanitizer behavior, route contracts, monitor/tgcs CLI behavior, dashboard state contracts, run manifest contracts, monitor result contracts, report link safety, loopback safety, pre-state-access private input rejection, source assistant external-AI confirmation gates, source access cached-health repair semantics, quiet-source semantics, source library topic-editor behavior, runtime-settings save/reset/draft behavior, Bot Gateway token/confirm gating, fixed scheduler argv, secret redaction, env-over-local precedence, and local-first privacy boundaries."
@@ -6,10 +6,10 @@ stop_condition: "Do not enter final closeout before 2026-05-14 14:00 Asia/Shangh
 handoff_policy: after_deadline_closeout
 continuation_policy: "Use docs/technical-debt-cleanup-spec.md as the debt authority; continue with one remaining boundary at a time and keep old facade exports until downstream callers move."
 intake_status: explicit_user_request
-gate_status: source_registry_split_gates_passed_review_clean
+gate_status: state_payload_split_gates_passed_review_clean
 blockers: []
 needs_human: []
-residual_risk: "This checkpoint is a source registry structure split. It does not exercise live Telegram source access probes, real source quality, Docker packaging install/build commands, or human product acceptance. Tests cover dashboard facade compatibility, patched source import limits, patched projection helpers, no preview writes, no browser-controlled paths/commands, sanitized registry paths, topic merging, source toggles, removal confirmation, source assistant AI gates, source-access contracts, and dashboard state contracts."
+residual_risk: "This checkpoint is a dashboard state payload split. It does not change HTTP route dispatch, live Telegram source access probes, real source quality, Docker packaging install/build commands, or human product acceptance. Tests cover the new state-payload owner, dashboard_server facade monkeypatch compatibility for snapshot/active-actions/source-access helpers, full dashboard backend behavior, source-access contracts, dashboard state contracts, and full Python regression. Reviewer found no behavior/facade/import blocker; its only P1 was untracked new files, addressed by explicitly staging them before commit."
 completed_slices:
   - "dashboard_server artifact helpers moved to scripts/desk_artifacts.py with dashboard_server re-export compatibility."
   - "dashboard_server git helpers moved to scripts/desk_git.py with dashboard_server wrapper compatibility."
@@ -53,6 +53,7 @@ completed_slices:
   - "Delivery settings split: scripts/desk_delivery_settings.py now owns default delivery target validation/projection/save/test, dry-run notification test payloads, Telegram bot update chat detection, and no-secret detection payloads; scripts/desk_credentials.py preserves Telegram login and old delivery helper names with facade-aware wrappers."
   - "Telegram login split: scripts/desk_telegram_login.py now owns Telegram app credential loading, status projection, login-code state, expiration checks, Telethon error mapping, send/verify/cancel flows, and current-user chat-id lookup; scripts/desk_credentials.py is now a compatibility facade over login, delivery, and secret settings."
   - "Source registry split: scripts/desk_source_registry.py now owns desk_sources_v1 listing, pasted/starter source imports, source enable/topic/remove mutations, validation, import limits, and sanitized source-import payloads; scripts/desk_sources.py remains the compatibility facade and assistant/access glue."
+  - "State payload split: scripts/desk_state_payload.py now owns /api/state payload assembly, active Desk action injection, and cached source-access setup-check health overlay; scripts/dashboard_server.py preserves the HTTP route and old monkeypatch-compatible state facade."
 verification:
   - "python -m pytest tests/dashboard -q -> 149 passed, 71 subtests passed"
   - "python -m pytest tests/monitor_state -q -> 81 passed, 24 subtests passed"
@@ -247,6 +248,15 @@ verification:
   - "python -m pytest -q -> 517 passed, 2 skipped, 198 subtests passed"
   - "python -m ruff check . -> passed"
   - "git diff --check -> passed after reviewer-suggested projection test and docs updates"
+  - "python -m ruff check scripts/desk_state_payload.py scripts/dashboard_server.py tests/dashboard/test_state_payload.py -> passed"
+  - "python -m py_compile scripts/desk_state_payload.py scripts/dashboard_server.py -> passed"
+  - "python -m pytest tests/dashboard/test_state_payload.py tests/dashboard/test_desk_actions.py::DashboardDeskActionCatalogTests::test_dashboard_state_includes_structured_cached_source_access_health tests/dashboard/test_status_endpoints.py::DashboardStatusEndpointTests::test_get_state_returns_json_error_when_snapshot_fails -q -> 4 passed"
+  - "python -m pytest tests/dashboard -q -> 171 passed, 71 subtests passed"
+  - "python -m pytest tests/test_desk_contract_fixtures.py tests/test_desk_source_access_contracts.py tests/test_dashboard_state_contracts.py -q -> 5 passed, 31 subtests passed"
+  - "python -m pytest -q -> 519 passed, 2 skipped, 198 subtests passed"
+  - "python -m ruff check . -> passed"
+  - "CI-list py_compile including scripts/desk_state_payload.py -> passed"
+  - "git diff --check -> passed"
 reviewer_status:
   - "Explorer review of the proposed split recommended a搬运式拆分: keep InboxView as facade, move filters/backlog, review-card/actions/source refs, and setup checklist into focused submodules."
   - "Post-diff reviewer found no blocking issues. Remaining risks were untracked new files, SSR-only test coverage, and preserving existing link sanitizer boundaries; untracked files are included in the checkpoint plan and the browser smoke covers the main interaction path."
@@ -277,6 +287,7 @@ reviewer_status:
   - "Delivery settings post-diff reviewer found no P0/P1. It confirmed dashboard_server facade exposure, facade-aware sync for target ids/allowed fields/timeout/session fallback, dry-run-only notification tests, Bot update urlopen/timeout monkeypatching, CI py_compile inclusion, and no secret-leak regression. The reviewer noted direct new-module calls would otherwise lose Telegram-session fallback; this was fixed with a lazy credentials fallback and a direct-owner regression test."
   - "Telegram login post-diff reviewer found no P0 and three P1 risks: untracked scripts/desk_telegram_login.py, old desk_credentials async hook patches being bypassed, and direct delivery fallback bypassing desk_credentials._telegram_current_user_chat_id patches. All three were addressed: the new file is in the explicit staging plan, telegram_send_code/telegram_verify_code now preserve old desk_credentials hook patches with identity-guarded hook resolution, and delivery fallback again goes through the credentials facade with an owner fallback. Regression tests now cover both patch surfaces."
   - "Source registry post-diff reviewer found no P0 and one P1 staging risk for untracked scripts/desk_source_registry.py, addressed by explicit staging before commit. Reviewer also suggested direct facade projection coverage; this was added for patched dashboard_server._utc_now and dashboard_relative_path through preview_desk_source_import()."
+  - "State payload post-diff reviewer found no /api/state behavior, facade monkeypatch, import-cycle, or CI blocker. P1 staging risk for the new scripts/desk_state_payload.py and tests/dashboard/test_state_payload.py files is addressed by staging both explicitly before commit. Reviewer noted successful-path HTTP coverage remains indirect because the route call point did not change."
 operator_checks:
   - "Docker Desktop 4.65.0 / engine 29.2.1 reachable after startup; docker build -t tgcs-local-smoke:<temp> . -> exit 0"
   - "Docker demo container -> exit 0, generated one demo report in a temporary mounted output directory; temporary directory and image removed."
@@ -286,10 +297,10 @@ operator_checks:
   - "Live Windows Task Scheduler dry-run task with random name -> install exit 0, status installed, remove exit 0, final status not_installed."
   - "Live Windows Credential Manager smoke -> random secret write/read/delete passed; post-delete read returned empty."
   - "Live LLM structured call -> provider=deepseek, model=deepseek-v4-flash, JSON response status=TGCS_LIVE_LLM_OK, total_tokens=58."
-next_action: "Stage scripts/desk_source_registry.py explicitly, commit the checkpoint, then continue with the next backend boundary."
+next_action: "Stage scripts/desk_state_payload.py and tests/dashboard/test_state_payload.py explicitly, commit the checkpoint, then continue with the next backend boundary."
 candidate_slices:
-  - "Inspect scripts/dashboard_server.py for remaining state payload or route dispatch boundaries only if existing tests can preserve patch compatibility and pre-state-access guards."
+  - "After the state payload checkpoint, inspect scripts/dashboard_server.py route dispatch only if a coherent route group can move with focused tests while preserving old monkeypatch paths and pre-state-access guards."
   - "Inspect scripts/desk_sources.py only for compatibility-facade cleanup if downstream callers can move off old helper names; do not delete facade names while dashboard_server.py still re-exports them."
   - "Inspect scripts/desk_credentials.py only for compatibility-facade cleanup if downstream callers can move off old helper names; do not delete facade names while dashboard_server.py still re-exports them."
-last_update: "2026-05-14T10:20:40+08:00"
+last_update: "2026-05-14T10:37:10+08:00"
 checkpoint_ready: true
