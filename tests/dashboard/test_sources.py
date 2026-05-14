@@ -5,12 +5,14 @@ from http import HTTPStatus
 from pathlib import Path
 from unittest.mock import patch
 
-from scripts import dashboard_server, desk_source_assistant, desk_sources
+from scripts import dashboard_server, desk_source_assistant, desk_source_registry, desk_sources
 
 
 class DashboardSourcesTests(unittest.TestCase):
     def test_source_assistant_split_preserves_dashboard_facade_helpers(self):
         self.assertIs(dashboard_server.run_source_assistant, desk_sources.run_source_assistant)
+        self.assertIs(dashboard_server.preview_desk_source_import, desk_sources.preview_desk_source_import)
+        self.assertEqual(desk_sources._clean_source_topic("Jobs"), desk_source_registry._clean_source_topic("Jobs"))
         self.assertEqual(
             dashboard_server._source_assistant_plan("add @remote_jobs; pause @web3_jobs"),
             desk_source_assistant._source_assistant_plan("add @remote_jobs; pause @web3_jobs"),
@@ -21,6 +23,23 @@ class DashboardSourcesTests(unittest.TestCase):
             ),
             {"add": ["remote_jobs"], "remove": ["telegram:old_jobs"], "disable": [], "enable": []},
         )
+
+
+    def test_source_registry_split_uses_dashboard_facade_limits_after_split(self):
+        with patch.object(dashboard_server, "DESK_SOURCE_IMPORT_MAX_CHANNELS", 1):
+            with self.assertRaises(ValueError):
+                dashboard_server.preview_desk_source_import(
+                    {"sources": "@remote_jobs\n@web3_jobs", "topic": "jobs"}
+                )
+
+
+    def test_source_registry_split_uses_dashboard_facade_projection_helpers_after_split(self):
+        with patch.object(dashboard_server, "_utc_now", return_value="2026-05-14T02:00:00Z"):
+            with patch.object(dashboard_server, "dashboard_relative_path", return_value="patched/sources.json"):
+                result = dashboard_server.preview_desk_source_import({"sources": "@remote_jobs", "topic": "jobs"})
+
+        self.assertEqual(result["finished_at"], "2026-05-14T02:00:00Z")
+        self.assertEqual(result["registry_path"], "patched/sources.json")
 
     def test_desk_source_import_preview_does_not_write_default_registry(self):
         with tempfile.TemporaryDirectory() as tmp:

@@ -711,6 +711,38 @@ state machine without changing browser routes or login error semantics:
   credential/action/Bot Gateway contract gate, full Python tests, full ruff,
   CI-list `py_compile`, and `git diff --check`.
 
+## Progress Update: 2026-05-14 Source Registry Split
+
+The Desk sources facade shed the saved-source registry/import mutation
+boundary without changing source access, source assistant, or Settings HTTP
+contracts:
+
+- `scripts/desk_source_registry.py` now owns `desk_sources_v1` listing,
+  source import preview/write, starter-source import, source enable/disable,
+  topic updates, source removal, import payload projection, source-id
+  validation, source-topic validation, and pasted-source size/channel limits.
+- `scripts/desk_sources.py` remains the compatibility facade for source
+  registry, source access, and source assistant helpers. The assistant glue
+  payload stays there because it is the bridge between assistant plans and the
+  current registry listing, not pure registry ownership.
+- The wrapper sync layer deliberately keeps `PROJECT_ROOT`,
+  `dashboard_relative_path`, `_utc_now`, import limits, and allowed-field
+  constants facade-aware, preserving existing `dashboard_server` monkeypatch
+  behavior.
+- Regression tests now lock the split facade path, a patched
+  `dashboard_server.DESK_SOURCE_IMPORT_MAX_CHANNELS` limit, and patched
+  projection helpers for `_utc_now` / `dashboard_relative_path`, while existing
+  tests continue to cover no default-registry writes during preview, no
+  browser-controlled paths/commands, sanitized registry paths, topic merging,
+  source toggles, removal confirmation, source assistant AI gates, and HTTP
+  endpoint dispatch.
+- The CI explicit `py_compile` list now includes
+  `scripts/desk_source_registry.py`.
+- Gates passed: source/dashboard action/source-access contract tests, targeted
+  `py_compile`, targeted `ruff`, the full dashboard Python test directory,
+  Desk contract fixtures, full Python tests, full ruff, CI-list `py_compile`,
+  and `git diff --check`.
+
 ## Current Debt Snapshot: 2026-05-14
 
 The debt register below remains the long-form reasoning. This table is the
@@ -720,7 +752,7 @@ current triage view for what is still real after the later splits:
 | --- | --- | --- |
 | D1. WIP and branch hygiene | Cleared for the known backlog. The dirty implementation slices from the handoff are now checkpoint commits. | Keep using staged snapshot or clean worktree gates for future slices; do not use mixed-worktree gates as commit proof. |
 | D2. Contract sprawl | Materially improved. Shared fixtures now cover the high-risk Python/TypeScript contracts, but `docs/agent-cli-contract.md` is still long. | Keep the contract doc as an index and move new guarantees into fixtures first, prose second. |
-| D3. `dashboard_server.py` boundaries | Artifact, git, fixed dry-run scheduler, Bot Gateway background, credentials facade, Telegram login, delivery settings, secret settings, sources, source access, source assistant, action execution, profile creation, server selection, HTTP security, and profile route mutation helpers are split behind the old facade. The facade is currently `1276` lines and mainly owns route dispatch, state payload assembly, pre-state-access guards, and compatibility re-exports. | Keep remaining route dispatch in the facade until a group has focused tests; next backend leverage is test concentration or state payload routing, not low-value line shaving. |
+| D3. `dashboard_server.py` boundaries | Artifact, git, fixed dry-run scheduler, Bot Gateway background, credentials facade, Telegram login, delivery settings, secret settings, source registry, source access, source assistant, action execution, profile creation, server selection, HTTP security, and profile route mutation helpers are split behind the old facade. The facade is currently `1276` lines and mainly owns route dispatch, state payload assembly, pre-state-access guards, and compatibility re-exports. | Keep remaining route dispatch in the facade until a group has focused tests; next backend leverage is test concentration or state payload routing, not low-value line shaving. |
 | D4. `monitor_state.py` boundaries | Mostly reduced to a `411` line facade. DB/schema, common privacy guards, review cards, alerts, feedback, profile patches, and dashboard projection are split. | Profile runtime/settings helpers are the only meaningful remaining state responsibility; split only with focused tests if that area changes. |
 | D5. `report.py` coupling | Mostly reduced. `report.py` is now `503` lines; report behavior moved into `report_*` modules, and report HTML link/source rendering now lives in a focused helper module. | Treat `report_extraction.py`, `report_html.py`, and `report_sources.py` as review units; next report work should be behavior or visual-output driven, not line-count driven. |
 | D6. Dashboard root/settings state | Actions, Profiles, Inbox, Runs, the Settings source library, and the profile runtime settings editor are now composition entrypoints. `inbox.tsx` is down to `137` lines, `runs.tsx` to `76` lines, `source-library-panel.tsx` to `204` lines, and `runtime-settings-control.tsx` to `200` lines, each backed by focused submodules. | The next UI slice should be driven by a real UX/test gap rather than more line-count cleanup. |
@@ -740,7 +772,8 @@ Large current files are still the main maintainability signal:
 | Desk Telegram login | `scripts/desk_telegram_login.py` | 328 | Focused Telegram app credential/login/session module for config loading, status projection, login-code state, Telethon error mapping, send/verify/cancel flows, and current user chat-id lookup. |
 | Desk delivery settings | `scripts/desk_delivery_settings.py` | 235 | Focused delivery target module for default target validation, sanitized target projection, dry-run notification tests, Bot update chat detection, Telegram session fallback bridging, and no-secret detection payloads. |
 | Desk secret settings | `scripts/desk_secret_settings.py` | 276 | Focused local secret-settings module for notification bot token status/update, AI provider key status/update, and provider env hydration without echoing secrets. |
-| Desk source registry | `scripts/desk_sources.py` | 552 | Source registry CRUD/import and facade compatibility remain here after source assistant and source access moved out. |
+| Desk sources facade | `scripts/desk_sources.py` | 304 | Compatibility facade and assistant/access glue after source registry, source assistant, and source access moved out behind old helper names. |
+| Desk source registry | `scripts/desk_source_registry.py` | 243 | Focused registry/list/import/mutation module for saved-source listing, pasted and starter imports, source enable/topic/remove mutations, validation, limits, and sanitized payload projection. |
 | Desk source access | `scripts/desk_source_access.py` | 489 | Focused access module for cached source-health files, source-access summaries, Telethon bounded probes, quiet-source semantics, and cached-health repair actions. |
 | Desk source assistant | `scripts/desk_source_assistant.py` | 451 | Focused source planning module for free-text channel extraction, local add/remove/enable/disable plans, confirmed LLM existing-source planning, and resolved-plan application. |
 | Desk server selection | `scripts/desk_server_selection.py` | 184 | Focused local server selection module for health payloads, loopback host checks, auto-port reuse, listener detection, and URL normalization. |
