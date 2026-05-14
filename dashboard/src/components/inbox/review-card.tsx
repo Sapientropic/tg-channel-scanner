@@ -72,37 +72,47 @@ function ActionProofStrip({
   profileReportNames: Record<string, string>;
 }) {
   const decisionState = card.item.decision_state ?? {};
+  const decisionItem = {
+    label: "Decision",
+    value: decisionProofValue(card.decision_status, decisionState),
+    title: decisionProofTitle(decisionState),
+    key: "decision",
+  };
+  const evidenceItem = {
+    label: "Evidence",
+    value: sourceRefCountLabel(card.source_refs.length),
+    title: sourceRefProofTitle(card.source_refs),
+    key: "evidence",
+  };
+  const runItem = {
+    label: "Run",
+    value: runProofLabel(card, latestRunId),
+    title: runProofTitle(card, latestRunId),
+    key: "run",
+  };
+  const alertItem = {
+    label: "Alert",
+    value: alertProofLabel(card),
+    title: alertProofTitle(card),
+    key: "alert",
+  };
   const proofItems = [
     {
       label: "Profile",
       value: reportProfileName(card.profile_id, profileReportNames),
       title: "Profile that evaluated this card",
+      key: "profile",
     },
-    {
-      label: "Decision",
-      value: decisionProofValue(card.decision_status, decisionState),
-      title: decisionProofTitle(decisionState),
-    },
+    decisionItem,
     {
       label: "Review",
       value: reviewStatusLabel(card.status),
       title: "Current local review decision",
+      key: "review",
     },
-    {
-      label: "Evidence",
-      value: sourceRefCountLabel(card.source_refs.length),
-      title: sourceRefProofTitle(card.source_refs),
-    },
-    {
-      label: "Run",
-      value: runProofLabel(card, latestRunId),
-      title: runProofTitle(card, latestRunId),
-    },
-    {
-      label: "Alert",
-      value: alertProofLabel(card),
-      title: alertProofTitle(card),
-    },
+    evidenceItem,
+    runItem,
+    alertItem,
   ];
   const signals = (decisionState.signals ?? []).slice(0, 2);
   signals.forEach((signal) => {
@@ -110,6 +120,7 @@ function ActionProofStrip({
       label: "Signal",
       value: titleCaseLabel(signal),
       title: "Decision signal carried by this review card",
+      key: `signal-${signal}`,
     });
   });
   const materialChangeFields = (decisionState.material_change_fields ?? []).slice(0, 2);
@@ -118,20 +129,96 @@ function ActionProofStrip({
       label: "Changed",
       value: titleCaseLabel(field),
       title: "Material field that changed since earlier review memory",
+      key: `changed-${field}`,
     });
   });
+  const compactItems = compactProofItems({
+    decisionItem,
+    evidenceItem,
+    runItem,
+    alertItem,
+    materialChangeFields,
+    decisionState,
+  });
+  const compactKeys = new Set(compactItems.map((item) => item.key));
+  const extraItems = proofItems.filter((item) => !compactKeys.has(item.key));
 
   return (
     <div className="action-proof-strip" aria-label="Action proof">
-      {proofItems.map((item) => (
-        <span className="action-proof-chip" key={`${item.label}-${item.value}`} title={item.title}>
+      {compactItems.map((item) => (
+        <span className="action-proof-chip" key={item.key} title={item.title}>
           <strong>{item.label}</strong>
           <span>{item.value}</span>
         </span>
       ))}
+      {extraItems.length > 0 && (
+        <details className="action-proof-more">
+          <summary>More proof</summary>
+          <div>
+            {extraItems.map((item) => (
+              <span className="action-proof-chip is-secondary" key={item.key} title={item.title}>
+                <strong>{item.label}</strong>
+                <span>{item.value}</span>
+              </span>
+            ))}
+          </div>
+        </details>
+      )}
     </div>
   );
 }
+
+function compactProofItems({
+  decisionItem,
+  evidenceItem,
+  runItem,
+  alertItem,
+  materialChangeFields,
+  decisionState,
+}: {
+  decisionItem: ProofItem;
+  evidenceItem: ProofItem;
+  runItem: ProofItem;
+  alertItem: ProofItem;
+  materialChangeFields: string[];
+  decisionState: NonNullable<ReviewCard["item"]["decision_state"]>;
+}) {
+  const changedItem = compactChangeItem(materialChangeFields, decisionState);
+  const deliveryItem = alertItem.value === "Not sent" ? runItem : alertItem;
+  return [decisionItem, changedItem, evidenceItem, deliveryItem].filter(Boolean).slice(0, 4) as ProofItem[];
+}
+
+function compactChangeItem(
+  fields: string[],
+  decisionState: NonNullable<ReviewCard["item"]["decision_state"]>,
+): ProofItem | null {
+  if (fields.length > 0) {
+    const [first = "", ...rest] = fields;
+    return {
+      label: "Change",
+      value: rest.length ? `${titleCaseLabel(first)} +${rest.length}` : titleCaseLabel(first),
+      title: "Material fields that changed since earlier review memory",
+      key: "change-summary",
+    };
+  }
+  const signal = decisionState.signals?.[0];
+  if (!signal) {
+    return null;
+  }
+  return {
+    label: "Signal",
+    value: titleCaseLabel(signal),
+    title: "Top decision signal carried by this review card",
+    key: "signal-summary",
+  };
+}
+
+type ProofItem = {
+  label: string;
+  value: string;
+  title: string;
+  key: string;
+};
 
 function decisionProofTitle(decisionState: NonNullable<ReviewCard["item"]["decision_state"]>) {
   const parts = [

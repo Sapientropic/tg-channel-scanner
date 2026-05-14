@@ -315,6 +315,45 @@
   line-height: 1.2;
 }
 
+.start-profile-guide {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(146px, auto);
+  gap: 10px;
+  align-items: center;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid color-mix(in oklch, var(--teal) 42%, var(--wash-paper-14));
+  background:
+    linear-gradient(90deg, color-mix(in oklch, var(--teal) 10%, transparent), transparent 60%),
+    color-mix(in oklch, var(--ink-2) 72%, transparent);
+}
+
+.start-profile-guide > div {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.start-profile-guide strong {
+  color: var(--paper);
+  font-size: 14px;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+
+.start-profile-guide p {
+  max-width: 64ch;
+  margin: 0;
+  color: color-mix(in oklch, var(--paper) 72%, var(--muted));
+  font-size: 12px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.start-profile-guide .journey-button {
+  min-height: 46px;
+}
+
 .start-setup-drawer-head .journey-button {
   width: auto;
   min-width: 88px;

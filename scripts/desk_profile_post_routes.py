@@ -23,6 +23,7 @@ def handle_profile_post_route(
     profile_draft_note_max_length: int,
     profile_matching_preferences_allowed_fields: Set[str],
     profile_matching_preferences_max_length: int,
+    delete_profile: Callable[[Any, str], dict] | None = None,
 ) -> bool:
     if path == "/api/profiles/create":
         require_loopback_access(handler, "Profile creation")
@@ -69,6 +70,20 @@ def handle_profile_post_route(
                 body=body,
                 monitor_state_module=monitor_state_module,
                 allowed_fields=profile_runtime_settings_allowed_fields,
+            )
+        handler._json(HTTPStatus.OK, payload)
+        return True
+    if path.startswith("/api/profiles/") and path.endswith("/delete"):
+        require_loopback_access(handler, "Profile deletion")
+        profile_routes_module.validate_profile_delete_body(body)
+        if delete_profile is None:
+            raise ValueError("Profile deletion is not available.")
+        with close_after_use(handler._connect()) as conn:
+            payload = profile_routes_module.profile_delete_payload(
+                conn,
+                path=path,
+                body=body,
+                delete_profile=delete_profile,
             )
         handler._json(HTTPStatus.OK, payload)
         return True

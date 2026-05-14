@@ -18,6 +18,7 @@ export function ProfilesView({
   setAlertMode,
   setProfileEnabled,
   setProfileRuntimeSettings,
+  deleteProfile = () => undefined,
   createProfileDraftNote,
   createProfileMatchingPreferencesDraft,
   createProfileFromBrief,
@@ -33,6 +34,7 @@ export function ProfilesView({
   setAlertMode: (profileId: string, mode: string) => void;
   setProfileEnabled: (profileId: string, enabled: boolean) => void;
   setProfileRuntimeSettings: (profileId: string, settings: ProfileRuntimeSettings) => void;
+  deleteProfile?: (profileId: string) => void;
   createProfileDraftNote: (profileId: string, note: string) => Promise<void>;
   createProfileMatchingPreferencesDraft: (profileId: string, preferences: string) => Promise<void>;
   createProfileFromBrief: (payload: {
@@ -68,6 +70,7 @@ export function ProfilesView({
                 setAlertMode={setAlertMode}
                 setProfileEnabled={setProfileEnabled}
                 setProfileRuntimeSettings={setProfileRuntimeSettings}
+                deleteProfile={deleteProfile}
               />
             ))}
           </div>

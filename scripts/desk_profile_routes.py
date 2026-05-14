@@ -33,6 +33,12 @@ def validate_profile_runtime_settings_body(body: Mapping[str, Any], *, allowed_f
     _reject_unexpected_fields(body, allowed_fields, label="profile setting")
 
 
+def validate_profile_delete_body(body: Mapping[str, Any]) -> None:
+    _reject_unexpected_fields(body, {"confirm"}, label="profile deletion")
+    if body.get("confirm") is not True:
+        raise ValueError("Profile deletion requires confirmation.")
+
+
 def validate_profile_draft_note_text(
     body: Mapping[str, Any],
     *,
@@ -105,6 +111,18 @@ def profile_runtime_settings_payload(
         settings=body,
     )
     return {"ok": True, "profile": profile}
+
+
+def profile_delete_payload(
+    conn: Any,
+    *,
+    path: str,
+    body: Mapping[str, Any],
+    delete_profile: Any,
+) -> dict:
+    validate_profile_delete_body(body)
+    result = delete_profile(conn, _profile_id_from_path(path))
+    return {"ok": True, "profile": result}
 
 
 def profile_draft_note_payload(

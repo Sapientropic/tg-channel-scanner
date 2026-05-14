@@ -543,6 +543,7 @@ apply_source_assistant_resolved_plan = _desk_sources_module.apply_source_assista
 
 
 create_profile_from_brief = desk_profiles.create_profile_from_brief
+delete_profile = desk_profiles.delete_profile
 _profile_create_input_text = desk_profiles._profile_create_input_text
 _profile_text_from_base64_file = desk_profiles._profile_text_from_base64_file
 _profile_title_from_text = desk_profiles._profile_title_from_text
@@ -916,6 +917,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 profile_draft_note_max_length=PROFILE_DRAFT_NOTE_MAX_LENGTH,
                 profile_matching_preferences_allowed_fields=PROFILE_MATCHING_PREFERENCES_ALLOWED_FIELDS,
                 profile_matching_preferences_max_length=PROFILE_MATCHING_PREFERENCES_MAX_LENGTH,
+                delete_profile=delete_profile,
             ):
                 return
             self._json(HTTPStatus.NOT_FOUND, {"ok": False, "error": "not_found"})

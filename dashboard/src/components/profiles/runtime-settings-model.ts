@@ -10,6 +10,18 @@ export const PROFILE_WEEKDAY_OPTIONS = [
   { value: "sun", label: "Sun" },
 ];
 
+export const COMMON_TIMEZONE_OPTIONS = [
+  "Asia/Shanghai",
+  "Asia/Hong_Kong",
+  "Asia/Singapore",
+  "Asia/Tokyo",
+  "UTC",
+  "America/Los_Angeles",
+  "America/New_York",
+  "Europe/London",
+  "Europe/Berlin",
+];
+
 const PROFILE_WEEKDAY_SET = new Set(PROFILE_WEEKDAY_OPTIONS.map((day) => day.value));
 const PROFILE_ALERT_RULES = new Set(["high_new_or_changed", "high_new_only"]);
 
@@ -112,6 +124,30 @@ export function isOptionalTimezoneValid(value: string, current: string | undefin
     return true;
   }
   return /^[A-Za-z0-9_+\-]+(?:\/[A-Za-z0-9_+\-]+)*$/.test(value) && !value.includes("..") && !value.includes("//");
+}
+
+export function detectedBrowserTimezone() {
+  try {
+    return friendlyTimezone(Intl.DateTimeFormat().resolvedOptions().timeZone || "");
+  } catch {
+    return "";
+  }
+}
+
+export function timezoneOptions(current: string, detected: string) {
+  const options = [detected, current, ...COMMON_TIMEZONE_OPTIONS].filter(Boolean);
+  return Array.from(new Set(options));
+}
+
+function friendlyTimezone(value: string) {
+  const normalized = value.trim();
+  const aliases: Record<string, string> = {
+    "Etc/GMT-8": "Asia/Shanghai",
+    "Etc/GMT-9": "Asia/Tokyo",
+    "Etc/GMT": "UTC",
+    "Etc/UTC": "UTC",
+  };
+  return aliases[normalized] || normalized;
 }
 
 export function isOptionalTimeValid(value: string, current: string | undefined) {

@@ -306,6 +306,41 @@ def update_profile_enabled(conn: sqlite3.Connection, *, profile_id: str, enabled
     return _profile_from_row(updated)
 
 
+def delete_profile(conn: sqlite3.Connection, *, profile_id: str) -> dict[str, Any]:
+    row = conn.execute("SELECT * FROM profiles WHERE profile_id = ?", (profile_id,)).fetchone()
+    if not row:
+        raise MonitorStateError(f"Profile is not registered: {profile_id}")
+    # Removing a profile from the Desk should also remove the current work it
+    # owns. Historical runs stay as audit evidence, but pending review cards and
+    # draft profile changes would be orphaned and confusing if left visible.
+    counts = {
+        "review_card_count": conn.execute(
+            "SELECT COUNT(*) AS count FROM review_cards WHERE profile_id = ?",
+            (profile_id,),
+        ).fetchone()["count"],
+        "profile_patch_count": conn.execute(
+            "SELECT COUNT(*) AS count FROM profile_patch_suggestions WHERE profile_id = ?",
+            (profile_id,),
+        ).fetchone()["count"],
+        "feedback_count": conn.execute(
+            "SELECT COUNT(*) AS count FROM feedback_events WHERE profile_id = ?",
+            (profile_id,),
+        ).fetchone()["count"],
+    }
+    conn.execute("DELETE FROM alert_events WHERE profile_id = ?", (profile_id,))
+    conn.execute("DELETE FROM profile_patch_suggestions WHERE profile_id = ?", (profile_id,))
+    conn.execute("DELETE FROM feedback_events WHERE profile_id = ?", (profile_id,))
+    conn.execute("DELETE FROM review_cards WHERE profile_id = ?", (profile_id,))
+    conn.execute("DELETE FROM profiles WHERE profile_id = ?", (profile_id,))
+    conn.commit()
+    return {
+        "schema_version": "desk_profile_delete_result_v1",
+        "profile_id": profile_id,
+        "deleted": True,
+        **counts,
+    }
+
+
 def _clean_runtime_hhmm(key: str, value: object) -> str:
     if not isinstance(value, str) or not re.fullmatch(r"\d{2}:\d{2}", value.strip()):
         raise MonitorStateError(f"{key} must use HH:MM format.")

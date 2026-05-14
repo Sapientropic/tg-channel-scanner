@@ -156,6 +156,11 @@ export async function createProfileFromBrief(payload: {
   return result;
 }
 
+export async function deleteProfile(profileId: string) {
+  const payload = await postJson(`/api/profiles/${encodeURIComponent(profileId)}/delete`, { confirm: true });
+  assertSchemaVersion(payload.profile, "desk_profile_delete_result_v1", "Invalid profile deletion response");
+}
+
 export async function checkGitUpdates(): Promise<GitUpdateStatus> {
   const payload = await postJson("/api/git/check-updates", {});
   assertSchemaVersion(payload.git, "git_update_status_v1", "Invalid git status response");

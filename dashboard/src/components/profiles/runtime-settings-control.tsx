@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 
 import type { Profile, ProfileRuntimeSettings } from "../../domain/types";
 import {
+  detectedBrowserTimezone,
   normalizeWeekdays,
   runtimeSettingsSaveState,
 } from "./runtime-settings-model";
@@ -31,6 +32,8 @@ export function ProfileRuntimeSettingsControl({
   const currentScanWindow = typeof profile.scan_window_hours === "number" ? profile.scan_window_hours : 24;
   const currentItemLimit = typeof profile.semantic_max_messages === "number" ? profile.semantic_max_messages : 20;
   const currentTimezone = profile.timezone || "";
+  const browserTimezone = detectedBrowserTimezone();
+  const preferredTimezone = currentTimezone || browserTimezone;
   const currentWorkdays = normalizeWeekdays(profile.workdays);
   const currentWorkStart = profile.work_start || "";
   const currentWorkEnd = profile.work_end || "";
@@ -41,7 +44,7 @@ export function ProfileRuntimeSettingsControl({
   const currentPreferences = profile.matching_profile?.editable_text || "";
   const [scanWindowHours, setScanWindowHours] = useState(String(currentScanWindow));
   const [itemLimit, setItemLimit] = useState(String(currentItemLimit));
-  const [timezone, setTimezone] = useState(currentTimezone);
+  const [timezone, setTimezone] = useState(preferredTimezone);
   const [workdays, setWorkdays] = useState<string[]>(currentWorkdays);
   const [workStart, setWorkStart] = useState(currentWorkStart);
   const [workEnd, setWorkEnd] = useState(currentWorkEnd);
@@ -55,7 +58,7 @@ export function ProfileRuntimeSettingsControl({
   useEffect(() => {
     setScanWindowHours(String(currentScanWindow));
     setItemLimit(String(currentItemLimit));
-    setTimezone(currentTimezone);
+    setTimezone(preferredTimezone);
     setWorkdays(currentWorkdays);
     setWorkStart(currentWorkStart);
     setWorkEnd(currentWorkEnd);
@@ -69,7 +72,7 @@ export function ProfileRuntimeSettingsControl({
   }, [
     currentScanWindow,
     currentItemLimit,
-    currentTimezone,
+    preferredTimezone,
     currentWorkdays.join(","),
     currentWorkStart,
     currentWorkEnd,
@@ -184,7 +187,7 @@ export function ProfileRuntimeSettingsControl({
         resetDraft={() => {
           setScanWindowHours(String(currentScanWindow));
           setItemLimit(String(currentItemLimit));
-          setTimezone(currentTimezone);
+          setTimezone(preferredTimezone);
           setWorkdays(currentWorkdays);
           setWorkStart(currentWorkStart);
           setWorkEnd(currentWorkEnd);

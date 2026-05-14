@@ -149,6 +149,46 @@
   text-transform: uppercase;
 }
 
+.new-profile-starters {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+}
+
+.new-profile-starters > span {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: var(--badge-weight);
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.new-profile-starters > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+
+.new-profile-starters button {
+  min-height: 34px;
+  padding: 0 9px;
+  border: 1px solid color-mix(in oklch, var(--teal) 34%, var(--paper-3));
+  background: color-mix(in oklch, var(--teal) 8%, transparent);
+  color: var(--paper);
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+  font-weight: var(--badge-weight);
+  text-transform: uppercase;
+}
+
+.new-profile-starters button:hover:not(:disabled),
+.new-profile-starters button:focus-visible {
+  border-color: var(--teal);
+  background: color-mix(in oklch, var(--teal) 15%, transparent);
+}
+
 .new-profile-body textarea {
   min-height: 104px;
   font-size: 13px;
@@ -885,6 +925,14 @@
   white-space: nowrap;
 }
 
+.profile-workdays-default {
+  display: block;
+  margin-top: 2px;
+  color: color-mix(in oklch, var(--paper) 70%, var(--muted));
+  font-size: 11px;
+  line-height: 1.35;
+}
+
 .profile-runtime-settings .profile-weekday-toggle input {
   width: 16px;
   min-height: 16px;
@@ -1011,6 +1059,42 @@
   opacity: 1;
 }
 
+.profile-timezone-control {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.profile-detect-timezone {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: max-content;
+  max-width: 100%;
+  min-height: 34px;
+  gap: 6px;
+  padding: 0 9px;
+  border: 1px solid color-mix(in oklch, var(--teal) 42%, var(--ink));
+  background: color-mix(in oklch, var(--teal) 10%, transparent);
+  color: var(--paper);
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+  font-weight: var(--badge-weight);
+  text-transform: uppercase;
+}
+
+.profile-detect-timezone:hover:not(:disabled),
+.profile-detect-timezone:focus-visible {
+  border-color: var(--teal);
+  background: color-mix(in oklch, var(--teal) 18%, transparent);
+}
+
+.profile-detect-timezone:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
 .profile-save-settings {
   justify-content: center;
   width: 100%;
@@ -1046,3 +1130,54 @@
   min-height: 44px;
 }
 
+.profile-delete-zone {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding-top: 2px;
+}
+
+.profile-delete-zone[data-confirming="true"] {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(148px, auto) minmax(96px, auto);
+  padding: 10px;
+  border: 1px solid color-mix(in oklch, var(--signal-danger) 38%, var(--wash-paper-14));
+  background: color-mix(in oklch, var(--signal-danger) 10%, transparent);
+}
+
+.profile-delete-zone > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.profile-delete-zone strong {
+  color: var(--paper);
+  font-size: 13px;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.profile-delete-zone span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.profile-delete-zone > div span {
+  color: color-mix(in oklch, var(--paper) 70%, var(--muted));
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.profile-delete-trigger {
+  min-height: 38px;
+  color: color-mix(in oklch, var(--signal-danger) 68%, var(--paper));
+}
+
+.profile-delete-confirm.danger {
+  border-color: color-mix(in oklch, var(--signal-danger) 58%, var(--paper-3));
+  background: color-mix(in oklch, var(--signal-danger) 18%, var(--ink));
+  color: var(--paper);
+}

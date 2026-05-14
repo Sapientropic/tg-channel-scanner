@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { UserRoundCog } from "lucide-react";
 
 import { InlineEmpty } from "./common";
 import { JourneyStepCard } from "./actions/journey-step-card";
@@ -168,6 +169,17 @@ export function ActionsView({
             <strong>Current repair path first.</strong>
             <span>Completed steps stay available for recovery without crowding the main action.</span>
           </div>
+          <section className="start-profile-guide" aria-label="Create profile guidance">
+            <div>
+              <span className="panel-kicker">Profile builder</span>
+              <strong>Create a monitor in plain language</strong>
+              <p>Tell Signal Desk what to watch for, or start from built-in goals like developer jobs, crypto opportunities, or competitor signals.</p>
+            </div>
+            <button className="journey-button" disabled={!onOpenProfiles} onClick={() => onOpenProfiles?.()} type="button">
+              <UserRoundCog size={15} />
+              <span>Create profile</span>
+            </button>
+          </section>
           <div className="journey-list">
             {steps.map((step, index) => (
               <JourneyStepCard

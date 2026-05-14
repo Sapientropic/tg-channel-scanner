@@ -101,6 +101,11 @@ class DashboardProfilePostRouteTests(unittest.TestCase):
                 {"preferences": "Authorization: Bearer sk-localSecret12345"},
                 "cannot include private fragments",
             ),
+            (
+                "/api/profiles/jobs-fast/delete",
+                {},
+                "Profile deletion requires confirmation",
+            ),
         ]
         for path, body, error_fragment in cases:
             with self.subTest(path=path):
@@ -120,6 +125,7 @@ class DashboardProfilePostRouteTests(unittest.TestCase):
                         profile_draft_note_max_length=3,
                         profile_matching_preferences_allowed_fields={"preferences"},
                         profile_matching_preferences_max_length=4000,
+                        delete_profile=lambda conn, profile_id: {},
                     )
 
 
@@ -174,6 +180,40 @@ class DashboardProfilePostRouteTests(unittest.TestCase):
             dashboard_server.DashboardHandler.do_POST(handler)
 
         create_mock.assert_called_once_with(handler.conn, {"brief": "Senior backend roles."})
+        self.assertTrue(handler.conn.closed)
+        self.assertEqual(handler.status, HTTPStatus.OK)
+        self.assertEqual(handler.payload, {"ok": True, "profile": result})
+
+
+    def test_dashboard_handler_post_handles_profile_delete_with_decoded_profile_id(self):
+        class FakeConnection:
+            closed = False
+
+            def close(self):
+                self.closed = True
+
+        class FakeHandler:
+            path = "/api/profiles/jobs%3Afast/delete"
+            status = None
+            payload = None
+            conn = FakeConnection()
+
+            def _read_json_body(self):
+                return {"confirm": True}
+
+            def _connect(self):
+                return self.conn
+
+            def _json(self, status, payload):
+                self.status = status
+                self.payload = payload
+
+        result = {"schema_version": "desk_profile_delete_result_v1", "profile_id": "jobs:fast", "deleted": True}
+        with unittest.mock.patch.object(dashboard_server, "delete_profile", return_value=result) as delete_mock:
+            handler = FakeHandler()
+            dashboard_server.DashboardHandler.do_POST(handler)
+
+        delete_mock.assert_called_once_with(handler.conn, "jobs:fast")
         self.assertTrue(handler.conn.closed)
         self.assertEqual(handler.status, HTTPStatus.OK)
         self.assertEqual(handler.payload, {"ok": True, "profile": result})

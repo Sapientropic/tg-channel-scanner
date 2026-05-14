@@ -62,8 +62,5 @@ export function ProfileMatchingPanel({ profile }: { profile: Profile }) {
 }
 
 function shouldOpenMatchingByDefault() {
-  if (typeof window === "undefined") {
-    return true;
-  }
-  return window.innerWidth > 680;
+  return false;
 }

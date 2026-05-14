@@ -211,6 +211,7 @@ describe("InboxView", () => {
     );
 
     expect(html).toContain('aria-label="Action proof"');
+    expect(html).toContain("More proof");
     expect(html).toContain("Profile");
     expect(html).toContain("Jobs Report");
     expect(html).toContain("Decision");

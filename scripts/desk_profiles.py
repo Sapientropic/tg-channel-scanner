@@ -122,6 +122,85 @@ def create_profile_from_brief(conn, body: dict) -> dict:
     }
 
 
+def delete_profile(conn, profile_id: str) -> dict:
+    profile_id = str(profile_id or "").strip()
+    if not profile_id:
+        raise ValueError("Profile id is required.")
+    row = conn.execute("SELECT * FROM profiles WHERE profile_id = ?", (profile_id,)).fetchone()
+    if not row:
+        raise monitor_state.MonitorStateError(f"Profile is not registered: {profile_id}")
+    profile_path = Path(str(row["path"] or ""))
+    removed_from_config = _remove_profile_config(profile_id)
+    removed_profile_file = _remove_desk_profile_file(profile_path)
+    result = monitor_state.delete_profile(conn, profile_id=profile_id)
+    return {
+        **result,
+        "removed_from_config": removed_from_config,
+        "removed_profile_file": removed_profile_file,
+        "detail": "Profile deleted from Signal Desk.",
+    }
+
+
+def _remove_profile_config(profile_id: str) -> bool:
+    path = _project_root() / ".tgcs" / "profiles.toml"
+    if not path.exists():
+        return False
+    lines = path.read_text(encoding="utf-8").splitlines(keepends=True)
+    blocks: list[tuple[int, int]] = []
+    index = 0
+    while index < len(lines):
+        if lines[index].strip() != "[[profiles]]":
+            index += 1
+            continue
+        start = index
+        index += 1
+        while index < len(lines) and not lines[index].lstrip().startswith("["):
+            index += 1
+        blocks.append((start, index))
+
+    if not blocks:
+        return False
+
+    remove_ranges: set[tuple[int, int]] = set()
+    for start, end in blocks:
+        block = "".join(lines[start:end])
+        if _profile_block_id(block) == profile_id:
+            remove_ranges.add((start, end))
+
+    if not remove_ranges:
+        return False
+
+    kept: list[str] = []
+    for line_index, line in enumerate(lines):
+        if any(start <= line_index < end for start, end in remove_ranges):
+            continue
+        kept.append(line)
+    path.write_text("".join(kept), encoding="utf-8", newline="")
+    return True
+
+
+def _profile_block_id(block: str) -> str:
+    for line in block.splitlines():
+        match = re.match(r"\s*id\s*=\s*(['\"])(.*?)\1\s*(?:#.*)?$", line)
+        if match:
+            return match.group(2)
+    return ""
+
+
+def _remove_desk_profile_file(path_value: Path) -> bool:
+    project_root = _project_root().resolve()
+    profile_path = path_value if path_value.is_absolute() else project_root / path_value
+    try:
+        resolved = profile_path.resolve()
+        resolved.relative_to(project_root / "profiles" / "desk")
+    except ValueError:
+        return False
+    if not resolved.is_file():
+        return False
+    resolved.unlink()
+    return True
+
+
 def _profile_create_input_text(body: dict) -> str:
     parts: list[str] = []
     brief = str(body.get("brief") or "").strip()

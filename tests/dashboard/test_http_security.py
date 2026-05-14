@@ -58,6 +58,7 @@ class DashboardHttpSecurityTests(unittest.TestCase):
             "/api/profiles/jobs-fast/runtime-settings": "update_profile_runtime_settings",
             "/api/profiles/jobs-fast/alert-mode": "update_profile_alert_mode",
             "/api/profiles/jobs-fast/draft-note": "create_profile_patch_suggestion",
+            "/api/profiles/jobs-fast/delete": "delete_profile",
             "/api/profiles/create": "create_profile_from_brief",
         }
         for path, function_name in endpoint_functions.items():
@@ -108,6 +109,7 @@ class DashboardHttpSecurityTests(unittest.TestCase):
                 dashboard_server.monitor_state,
                 "create_profile_preferences_patch_suggestion",
             ),
+            "/api/profiles/jobs-fast/delete": (dashboard_server, "delete_profile"),
             "/api/profile-patches/patch_123/apply": (dashboard_server.monitor_state, "apply_profile_patch"),
             "/api/profile-patches/patch_123/revert": (dashboard_server.monitor_state, "revert_profile_patch"),
             "/api/profile-patches/patch_123/replay": (dashboard_server.monitor_state, "replay_profile_patch"),

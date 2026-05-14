@@ -116,6 +116,7 @@ function App() {
     createProfileDraftNote,
     createProfileMatchingPreferencesDraft,
     createProfileFromBrief,
+    deleteProfile,
   } = useProfileActions({
     refresh,
     setActiveTab,
@@ -355,6 +356,7 @@ function App() {
                 setAlertMode={setAlertMode}
                 setProfileEnabled={setProfileEnabled}
                 setProfileRuntimeSettings={setProfileRuntimeSettings}
+                deleteProfile={deleteProfile}
                 createProfileDraftNote={createProfileDraftNote}
                 createProfileMatchingPreferencesDraft={createProfileMatchingPreferencesDraft}
                 createProfileFromBrief={createProfileFromBrief}

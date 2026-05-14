@@ -1,10 +1,12 @@
-import { FileDiff, Save } from "lucide-react";
+import { FileDiff, LocateFixed, Save } from "lucide-react";
 import type { Dispatch, SetStateAction } from "react";
 
 import type { ProfileRuntimeSettings } from "../../domain/types";
 import {
   PROFILE_WEEKDAY_OPTIONS,
+  detectedBrowserTimezone,
   normalizeWeekdays,
+  timezoneOptions,
 } from "./runtime-settings-model";
 import { ProfileHelpTip } from "./profile-help-tip";
 
@@ -89,6 +91,8 @@ export function RuntimeWorkHoursFields({
   workdays: string[];
   setWorkdays: Dispatch<SetStateAction<string[]>>;
 }) {
+  const detectedTimezone = detectedBrowserTimezone();
+  const options = timezoneOptions(timezone, detectedTimezone);
   return (
     <fieldset className="profile-runtime-group profile-runtime-work-hours">
       <legend>
@@ -99,13 +103,34 @@ export function RuntimeWorkHoursFields({
       <div className="profile-field-grid three">
         <label>
           <span className="profile-field-title">Timezone</span>
-          <input
-            aria-label={`${profileId} timezone`}
-            disabled={busy}
-            onChange={(event) => setTimezone(event.target.value)}
-            placeholder="Asia/Shanghai"
-            value={timezone}
-          />
+          <div className="profile-timezone-control">
+            <input
+              aria-label={`${profileId} timezone`}
+              disabled={busy}
+              list={`${profileId}-timezone-options`}
+              onChange={(event) => setTimezone(event.target.value)}
+              placeholder={detectedTimezone || "Asia/Shanghai"}
+              value={timezone}
+            />
+            <datalist id={`${profileId}-timezone-options`}>
+              {options.map((option) => (
+                <option key={option} value={option} />
+              ))}
+            </datalist>
+            {detectedTimezone && (
+              <button
+                aria-label={`Use detected timezone ${detectedTimezone}`}
+                className="profile-detect-timezone"
+                disabled={busy}
+                onClick={() => setTimezone(detectedTimezone)}
+                title={`Use detected timezone: ${detectedTimezone}`}
+                type="button"
+              >
+                <LocateFixed size={14} />
+                <span>Use detected</span>
+              </button>
+            )}
+          </div>
         </label>
         <label>
           <span className="profile-field-title">Work starts</span>
@@ -152,6 +177,7 @@ export function RuntimeWorkHoursFields({
             </label>
           ))}
         </div>
+        {!workdays.length && <small className="profile-workdays-default">No days selected means every day.</small>}
       </div>
     </fieldset>
   );
@@ -183,13 +209,13 @@ export function RuntimeAlertFields({
   return (
     <fieldset className="profile-runtime-group profile-runtime-alerts">
       <legend>
-        Scan cadence and alerts
-        <ProfileHelpTip text="Cadence controls practice scans. Alert age prevents stale high-signal items from notifying you later." />
+        Check frequency and alerts
+        <ProfileHelpTip text="These settings control how often this profile checks sources and which fresh cards can notify you." />
       </legend>
-      <p>Leave these blank to use the app defaults.</p>
+      <p>Leave a field blank for the default. Use shorter intervals only for profiles that need fast action.</p>
       <div className="profile-field-grid four">
         <label>
-          <span className="profile-field-title">Work interval</span>
+          <span className="profile-field-title">Work hours check every</span>
           <input
             aria-label={`${profileId} work interval minutes`}
             disabled={busy}
@@ -201,10 +227,10 @@ export function RuntimeAlertFields({
             type="number"
             value={workInterval}
           />
-          <small>minutes</small>
+          <small>minutes during work hours</small>
         </label>
         <label>
-          <span className="profile-field-title">Quiet interval</span>
+          <span className="profile-field-title">After hours check every</span>
           <input
             aria-label={`${profileId} off hours interval minutes`}
             disabled={busy}
@@ -216,10 +242,10 @@ export function RuntimeAlertFields({
             type="number"
             value={offHoursInterval}
           />
-          <small>minutes</small>
+          <small>minutes outside work hours</small>
         </label>
         <label>
-          <span className="profile-field-title">Alert rule</span>
+          <span className="profile-field-title">Notify when</span>
           <select
             aria-label={`${profileId} alert rule`}
             disabled={busy}
@@ -231,7 +257,7 @@ export function RuntimeAlertFields({
           </select>
         </label>
         <label>
-          <span className="profile-field-title">Alert age</span>
+          <span className="profile-field-title">Do not alert items older than</span>
           <input
             aria-label={`${profileId} alert max age minutes`}
             disabled={busy}

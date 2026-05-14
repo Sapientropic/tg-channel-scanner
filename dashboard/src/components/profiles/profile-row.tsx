@@ -1,4 +1,4 @@
-import { Bell, BellOff, CirclePause, CirclePlay, Sun } from "lucide-react";
+import { Bell, BellOff, CirclePause, CirclePlay, Sun, Trash2, X } from "lucide-react";
 import { useState } from "react";
 
 import { alertMode } from "../../domain/display";
@@ -19,6 +19,7 @@ export function ProfileRow({
   setAlertMode,
   setProfileEnabled,
   setProfileRuntimeSettings,
+  deleteProfile,
   createProfileDraftNote,
   createProfileMatchingPreferencesDraft,
   busy,
@@ -27,11 +28,13 @@ export function ProfileRow({
   setAlertMode: (profileId: string, mode: string) => void;
   setProfileEnabled: (profileId: string, enabled: boolean) => void;
   setProfileRuntimeSettings: (profileId: string, settings: ProfileRuntimeSettings) => void;
+  deleteProfile: (profileId: string) => void;
   createProfileDraftNote: (profileId: string, note: string) => Promise<void>;
   createProfileMatchingPreferencesDraft: (profileId: string, preferences: string) => Promise<void>;
   busy: boolean;
 }) {
   const [open, setOpen] = useState(() => shouldOpenProfileByDefault());
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const profileName = profile.display_name || profileDisplayName(profile.profile_id);
   return (
     <details
@@ -82,6 +85,29 @@ export function ProfileRow({
           createProfileMatchingPreferencesDraft={createProfileMatchingPreferencesDraft}
           busy={busy}
         />
+        <div className="profile-delete-zone" data-confirming={confirmDelete ? "true" : "false"}>
+          {confirmDelete ? (
+            <>
+              <div>
+                <strong>Delete {profileName}?</strong>
+                <span>This removes the profile from Signal Desk and clears its current Review cards. Run history stays available.</span>
+              </div>
+              <button className="profile-delete-confirm text-button danger" disabled={busy} onClick={() => deleteProfile(profile.profile_id)} type="button">
+                <Trash2 size={15} />
+                <span>Delete profile</span>
+              </button>
+              <button className="profile-delete-cancel text-button secondary" disabled={busy} onClick={() => setConfirmDelete(false)} type="button">
+                <X size={15} />
+                <span>Cancel</span>
+              </button>
+            </>
+          ) : (
+            <button className="profile-delete-trigger text-button secondary" disabled={busy} onClick={() => setConfirmDelete(true)} type="button">
+              <Trash2 size={15} />
+              <span>Delete profile</span>
+            </button>
+          )}
+        </div>
       </div>
     </details>
   );

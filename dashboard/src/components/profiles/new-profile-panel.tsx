@@ -4,6 +4,24 @@ import { useState } from "react";
 import { InlineEmpty } from "../common";
 import type { ProfileCreateResult } from "../../domain/types";
 
+const PROFILE_STARTERS = [
+  {
+    label: "Developer jobs",
+    brief:
+      "Watch for paid senior remote frontend, full-stack, TypeScript, React, agent, or Telegram Mini Apps opportunities. Prefer clear budget, contact path, and work format. Avoid unpaid internships, vague promos, and on-site-only roles.",
+  },
+  {
+    label: "Crypto opportunities",
+    brief:
+      "Watch for actionable crypto, TON, airdrop, grant, bounty, and builder opportunities. Prefer credible teams, clear eligibility, timelines, and next steps. Avoid pure price chatter, vague alpha calls, and risky wallet-draining prompts.",
+  },
+  {
+    label: "Competitor signals",
+    brief:
+      "Watch for competitor launches, pricing changes, hiring moves, integration announcements, and user complaints. Prefer posts with source links, screenshots, or concrete product details. Skip generic brand mentions.",
+  },
+];
+
 export function NewProfilePanel({
   busy,
   createProfileFromBrief,
@@ -78,6 +96,24 @@ export function NewProfilePanel({
       </button>
       {open && (
         <div className="new-profile-body">
+          <div className="new-profile-starters" aria-label="Profile starter briefs">
+            <span>Start from a goal</span>
+            <div>
+              {PROFILE_STARTERS.map((starter) => (
+                <button
+                  disabled={busy}
+                  key={starter.label}
+                  onClick={() => {
+                    setBrief(starter.brief);
+                    setLocalError("");
+                  }}
+                  type="button"
+                >
+                  {starter.label}
+                </button>
+              ))}
+            </div>
+          </div>
           <label>
             <span>What should Signal Desk watch for?</span>
             <textarea

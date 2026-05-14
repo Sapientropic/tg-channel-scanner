@@ -65,6 +65,7 @@ describe("ProfilesView", () => {
     expect(html).toContain("20 messages");
     expect(html).toContain("1 notification");
     expect(html).toContain("Edit profile");
+    expect(html).toContain("Delete profile");
     expect(html).not.toContain("per run");
     expect(html).not.toContain("WINDOW");
     expect(html).not.toContain("ITEMS");

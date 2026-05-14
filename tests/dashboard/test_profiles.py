@@ -500,6 +500,112 @@ class DashboardProfileTests(unittest.TestCase):
         self.assertEqual(snapshot["profiles"][0]["profile_id"], profile["profile_id"])
 
 
+    def test_profile_delete_endpoint_removes_profile_from_desk(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            db_path = root / "tgcs.db"
+            profile_path = root / "profiles" / "desk" / "custom-monitor.md"
+            profile_path.parent.mkdir(parents=True)
+            profile_path.write_text("# Custom monitor\n", encoding="utf-8")
+            config_path = root / ".tgcs" / "profiles.toml"
+            config_path.parent.mkdir(parents=True)
+            config_path.write_text(
+                "\n".join(
+                    [
+                        'schema_version = "profile_run_config_v1"',
+                        "",
+                        "[[profiles]]",
+                        'id = "custom-monitor"',
+                        'path = "profiles/desk/custom-monitor.md"',
+                        "enabled = true",
+                        "",
+                        "[[profiles]]",
+                        'id = "keep-me"',
+                        'path = "profiles/templates/jobs.md"',
+                        "enabled = true",
+                        "",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            conn = monitor_state.connect(db_path)
+            try:
+                monitor_state.upsert_profile(
+                    conn,
+                    {
+                        "id": "custom-monitor",
+                        "path": str(profile_path),
+                        "enabled": True,
+                    },
+                )
+                conn.execute(
+                    """
+                    INSERT INTO review_cards(
+                        card_id, profile_id, item_key, title, rating, decision_status,
+                        source_refs_json, item_json, status, opportunity_status,
+                        opportunity_updated_at, first_run_id, last_run_id, created_at, updated_at
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        "card-1",
+                        "custom-monitor",
+                        "item-1",
+                        "Old card",
+                        "high",
+                        "new",
+                        "[]",
+                        "{}",
+                        monitor_state.PENDING_STATUS,
+                        "open",
+                        "",
+                        "run-1",
+                        "run-1",
+                        "2026-05-14T00:00:00Z",
+                        "2026-05-14T00:00:00Z",
+                    ),
+                )
+                conn.commit()
+            finally:
+                conn.close()
+
+            class FakeHandler:
+                path = "/api/profiles/custom-monitor/delete"
+                status = None
+                payload = None
+                client_address = ("127.0.0.1", 51000)
+
+                def _connect(self):
+                    return monitor_state.connect(db_path)
+
+                def _read_json_body(self):
+                    return {"confirm": True}
+
+                def _json(self, status, payload):
+                    self.status = status
+                    self.payload = payload
+
+            with patch.object(dashboard_server, "PROJECT_ROOT", root):
+                handler = FakeHandler()
+                dashboard_server.DashboardHandler.do_POST(handler)
+                conn = monitor_state.connect(db_path)
+                try:
+                    snapshot = monitor_state.dashboard_snapshot(conn)
+                finally:
+                    conn.close()
+
+            config_text = config_path.read_text(encoding="utf-8")
+
+        self.assertEqual(handler.status, HTTPStatus.OK)
+        self.assertTrue(handler.payload["profile"]["deleted"])
+        self.assertEqual(handler.payload["profile"]["review_card_count"], 1)
+        self.assertEqual(snapshot["profiles"], [])
+        self.assertEqual(snapshot["inbox"], [])
+        self.assertFalse(profile_path.exists())
+        self.assertNotIn('id = "custom-monitor"', config_text)
+        self.assertIn('id = "keep-me"', config_text)
+
+
     def test_profile_create_endpoint_rejects_invalid_payloads(self):
         with tempfile.TemporaryDirectory() as tmp:
             db_path = Path(tmp) / "tgcs.db"

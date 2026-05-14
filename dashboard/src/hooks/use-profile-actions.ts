@@ -5,6 +5,7 @@ import {
   createProfileDraftNote as createProfileDraftNoteRequest,
   createProfileFromBrief as createProfileFromBriefRequest,
   createProfileMatchingPreferencesDraft as createProfileMatchingPreferencesDraftRequest,
+  deleteProfile as deleteProfileRequest,
   errorMessage,
   replayProfilePatch,
   revertProfilePatch,
@@ -165,6 +166,20 @@ export function useProfileActions({ refresh, setActiveTab, setBusy, setNotice }:
     }
   }
 
+  async function deleteProfile(profileId: string) {
+    setBusy(true);
+    setNotice(null);
+    try {
+      await deleteProfileRequest(profileId);
+      await refresh();
+      setNotice({ tone: "success", text: "Profile deleted" });
+    } catch (error) {
+      setNotice({ tone: "error", text: errorMessage(error) });
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return {
     profileCreateResult,
     applyPatch,
@@ -176,5 +191,6 @@ export function useProfileActions({ refresh, setActiveTab, setBusy, setNotice }:
     createProfileDraftNote,
     createProfileMatchingPreferencesDraft,
     createProfileFromBrief,
+    deleteProfile,
   };
 }

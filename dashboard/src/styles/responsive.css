@@ -352,6 +352,12 @@
     color: color-mix(in oklch, var(--paper) 82%, var(--muted));
   }
 
+  .review-card .action-proof-more summary {
+    border-color: var(--wash-paper-14);
+    background: var(--wash-paper-7);
+    color: color-mix(in oklch, var(--paper) 76%, var(--muted));
+  }
+
   .review-card .source-chip,
   .review-card .report-chip {
     border-color: color-mix(in oklch, var(--teal) 45%, var(--wash-paper-18));
@@ -915,6 +921,11 @@
   }
 
   .profile-runtime-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .profile-delete-zone[data-confirming="true"],
+  .start-profile-guide {
     grid-template-columns: 1fr;
   }
 
