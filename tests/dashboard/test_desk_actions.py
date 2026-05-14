@@ -1,3 +1,4 @@
+import asyncio
 import subprocess
 import tempfile
 import unittest
@@ -6,16 +7,21 @@ from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import patch
 
-from scripts import dashboard_server, desk_actions, desk_sources
+from scripts import dashboard_server, desk_actions, desk_source_access, desk_sources
 
 
 class DashboardDeskActionCatalogTests(unittest.TestCase):
     def test_desk_source_helpers_stay_available_from_dashboard_server_facade(self):
         self.assertIs(dashboard_server.SourceAccessProbeError, desk_sources.SourceAccessProbeError)
+        self.assertIs(desk_sources.SourceAccessProbeError, desk_source_access.SourceAccessProbeError)
         self.assertIs(dashboard_server.desk_sources, desk_sources.desk_sources)
         self.assertIs(dashboard_server.probe_source_access, desk_sources.probe_source_access)
         self.assertIs(dashboard_server.apply_source_access_repair, desk_sources.apply_source_access_repair)
         self.assertIs(dashboard_server.run_source_assistant, desk_sources.run_source_assistant)
+        self.assertEqual(
+            dashboard_server._source_access_reason_label("cannot_resolve_entity"),
+            desk_source_access._source_access_reason_label("cannot_resolve_entity"),
+        )
 
 
     def test_desk_action_helpers_stay_available_from_dashboard_server_facade(self):
@@ -261,6 +267,35 @@ class DashboardDeskActionCatalogTests(unittest.TestCase):
         self.assertIn("2 recently active", check["detail"])
         self.assertEqual(check["source_access"]["quiet_count"], 1)
         self.assertEqual(check["source_access"]["probe_window_hours"], 24)
+
+
+    def test_source_access_async_facade_preserves_cached_health_write(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            health = {
+                "schema_version": dashboard_server.DESK_SOURCE_ACCESS_HEALTH_SCHEMA_VERSION,
+                "checked_at": "2026-05-14T00:00:00Z",
+                "source_count": 1,
+                "checked_count": 1,
+                "truncated_count": 0,
+                "accessible_count": 1,
+                "quiet_count": 0,
+                "inaccessible_count": 0,
+                "reason_counts": {},
+                "sources": [],
+            }
+
+            async def fake_probe(**kwargs):
+                self.assertEqual(kwargs["registry_path"], root / ".tgcs" / "sources.json")
+                return health
+
+            with patch.object(dashboard_server, "PROJECT_ROOT", root):
+                with patch.object(desk_source_access, "_probe_source_access_async", side_effect=fake_probe):
+                    result = asyncio.run(dashboard_server._probe_source_access_async())
+                cached = json.loads((root / ".tgcs" / "source-access-health.json").read_text(encoding="utf-8"))
+
+        self.assertEqual(result, health)
+        self.assertEqual(cached, health)
 
 
     def test_source_access_repair_disables_cached_inaccessible_sources_only_after_confirm(self):

@@ -518,6 +518,38 @@ privacy gates:
   CI-list `py_compile`, `python -m ruff check .`, `python -m pytest -q`, and
   `git diff --check`.
 
+## Progress Update: 2026-05-14 Source Access Split
+
+The Desk source registry module shed the source access health/probe/repair
+boundary without changing cached-health, quiet-source, or Telegram-session
+semantics:
+
+- `scripts/desk_source_access.py` now owns source access health loading/writing,
+  health detail/action-summary projection, per-source probe records, Telethon
+  entity/message probing, bounded probe assembly, and cached-health repair
+  actions.
+- `scripts/desk_sources.py` keeps source registry CRUD/import and the old
+  source-access helper names as compatibility wrappers. It injects
+  `PROJECT_ROOT`, Telegram session path, credential loading, source-id
+  validation, and `_desk_action_result` at call time so dashboard monkeypatch
+  paths still work.
+- The compatibility wrapper for `_probe_source_access_async` deliberately
+  still writes `.tgcs/source-access-health.json`, matching the old helper
+  behavior even though the new lower-level async helper is pure-return until
+  the public `probe_source_access()` wrapper writes the cache.
+- Tests now lock the source-access facade, reason label compatibility,
+  structured source-access contract privacy, cached health projection, cached
+  repair behavior, and direct async-helper cache writes.
+- The CI explicit `py_compile` list now includes
+  `scripts/desk_source_access.py`.
+- Reviewer found no P0. The P1 untracked-module risk is handled by explicitly
+  staging the new module; the P2 async cache-write compatibility finding was
+  fixed with a wrapper write and regression test before commit.
+- Focused and full gates passed: `python -m pytest
+  tests/dashboard/test_desk_actions.py tests/test_desk_source_access_contracts.py
+  -q`, `python -m pytest tests/dashboard -q`, CI-list `py_compile`,
+  `python -m ruff check .`, `python -m pytest -q`, and `git diff --check`.
+
 ## Current Debt Snapshot: 2026-05-14
 
 The debt register below remains the long-form reasoning. This table is the
@@ -527,7 +559,7 @@ current triage view for what is still real after the later splits:
 | --- | --- | --- |
 | D1. WIP and branch hygiene | Cleared for the known backlog. The dirty implementation slices from the handoff are now checkpoint commits. | Keep using staged snapshot or clean worktree gates for future slices; do not use mixed-worktree gates as commit proof. |
 | D2. Contract sprawl | Materially improved. Shared fixtures now cover the high-risk Python/TypeScript contracts, but `docs/agent-cli-contract.md` is still long. | Keep the contract doc as an index and move new guarantees into fixtures first, prose second. |
-| D3. `dashboard_server.py` boundaries | Artifact, git, scheduler, credentials, sources, source assistant, action execution, profile creation, server selection, HTTP security, and profile route mutation helpers are split behind the old facade. The facade is currently `1276` lines and mainly owns route dispatch, state payload assembly, pre-state-access guards, and compatibility re-exports. | Keep remaining route dispatch in the facade until a group has focused tests; next backend leverage is test concentration or state payload routing, not low-value line shaving. |
+| D3. `dashboard_server.py` boundaries | Artifact, git, scheduler, credentials, sources, source access, source assistant, action execution, profile creation, server selection, HTTP security, and profile route mutation helpers are split behind the old facade. The facade is currently `1276` lines and mainly owns route dispatch, state payload assembly, pre-state-access guards, and compatibility re-exports. | Keep remaining route dispatch in the facade until a group has focused tests; next backend leverage is test concentration or state payload routing, not low-value line shaving. |
 | D4. `monitor_state.py` boundaries | Mostly reduced to a `411` line facade. DB/schema, common privacy guards, review cards, alerts, feedback, profile patches, and dashboard projection are split. | Profile runtime/settings helpers are the only meaningful remaining state responsibility; split only with focused tests if that area changes. |
 | D5. `report.py` coupling | Mostly reduced. `report.py` is now `503` lines; report behavior moved into `report_*` modules, and report HTML link/source rendering now lives in a focused helper module. | Treat `report_extraction.py`, `report_html.py`, and `report_sources.py` as review units; next report work should be behavior or visual-output driven, not line-count driven. |
 | D6. Dashboard root/settings state | Actions, Profiles, Inbox, and Runs are now composition entrypoints. `inbox.tsx` is down to `137` lines and `runs.tsx` is down to `76` lines, each backed by focused submodules. Runtime settings remain the next UI concentration point. | Touch runtime settings only when that area changes; otherwise shift to backend facade growth or large backend test concentration. |
@@ -541,7 +573,8 @@ Large current files are still the main maintainability signal:
 | Area | File | Lines | Why It Matters |
 | --- | ---: | ---: | --- |
 | Python server | `scripts/dashboard_server.py` | 1276 | HTTP routing, state payload assembly, route-level validation, and compatibility re-exports remain in the facade after profile creation, server selection, HTTP security, and profile route mutation payloads moved out. |
-| Desk source registry/access | `scripts/desk_sources.py` | 873 | Source registry CRUD, source import, source access health/probe/repair, and facade compatibility remain here after source assistant planning moved out. |
+| Desk source registry | `scripts/desk_sources.py` | 552 | Source registry CRUD/import and facade compatibility remain here after source assistant and source access moved out. |
+| Desk source access | `scripts/desk_source_access.py` | 489 | Focused access module for cached source-health files, source-access summaries, Telethon bounded probes, quiet-source semantics, and cached-health repair actions. |
 | Desk source assistant | `scripts/desk_source_assistant.py` | 451 | Focused source planning module for free-text channel extraction, local add/remove/enable/disable plans, confirmed LLM existing-source planning, and resolved-plan application. |
 | Desk server selection | `scripts/desk_server_selection.py` | 184 | Focused local server selection module for health payloads, loopback host checks, auto-port reuse, listener detection, and URL normalization. |
 | Desk HTTP security | `scripts/desk_http_security.py` | 74 | Focused request-security module for JSON POST integrity, same-port loopback Origin/Referer checks, request port extraction, and sensitive route loopback gates. |
