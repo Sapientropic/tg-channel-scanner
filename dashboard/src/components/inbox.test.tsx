@@ -104,6 +104,36 @@ describe("InboxView", () => {
     expect(nextNonEmptyReviewFilter(filters, "actionable")).toBe("high");
   });
 
+  it("keeps open backlog ahead of handled cards after latest action clears", () => {
+    const filters = inboxFilterOptions(
+      [
+        card({
+          card_id: "just-handled",
+          opportunity_status: "applied",
+          opportunity_updated_at: "2026-05-11T02:00:00Z",
+        }),
+        card({
+          card_id: "old-high",
+          first_run_id: "run-0",
+          last_run_id: "run-0",
+          rating: "high",
+          decision_status: "seen",
+        }),
+        card({
+          card_id: "old-saved",
+          first_run_id: "run-0",
+          last_run_id: "run-0",
+          opportunity_status: "saved",
+        }),
+      ],
+      "run-1",
+    );
+
+    expect(filters.find((item) => item.id === "actionable")?.count).toBe(0);
+    expect(filters.find((item) => item.id === "handled")?.count).toBe(1);
+    expect(nextNonEmptyReviewFilter(filters, "actionable")).toBe("high");
+  });
+
   it("turns an empty latest-action view into a visible backlog jump", () => {
     const html = renderToStaticMarkup(
       <InboxView

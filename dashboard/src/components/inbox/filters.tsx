@@ -63,7 +63,7 @@ export function compactFilterLabel(label: string) {
 export function nextNonEmptyReviewFilter(filters: ReturnType<typeof inboxFilterOptions>, current: InboxFilter): InboxFilter | null {
   const preferred: InboxFilter[] =
     current === "actionable"
-      ? ["handled", "saved", "duplicate", "high", "new_changed", "low_medium", "all"]
+      ? ["high", "new_changed", "low_medium", "saved", "duplicate", "handled", "all"]
       : ["actionable", "high", "new_changed", "low_medium", "saved", "handled", "duplicate", "all"];
   return preferred.find((id) => id !== current && (filters.find((item) => item.id === id)?.count ?? 0) > 0) ?? null;
 }
