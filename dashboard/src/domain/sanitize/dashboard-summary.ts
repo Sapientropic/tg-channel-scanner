@@ -1,4 +1,13 @@
-import type { DashboardState, FeedbackImpact, OpportunitySummary, SetupCheck, SourceInsight, SourceStat, ValidationSummary } from "../types";
+import type {
+  DashboardState,
+  FeedbackCalibrationSummary,
+  FeedbackImpact,
+  OpportunitySummary,
+  SetupCheck,
+  SourceInsight,
+  SourceStat,
+  ValidationSummary,
+} from "../types";
 import {
   assignOptionalNumbers,
   isRecord,
@@ -114,6 +123,10 @@ export function sanitizeFeedbackSummary(value: unknown): DashboardState["feedbac
   if (recentImpacts.length) {
     summary.recent_impacts = recentImpacts;
   }
+  const calibration = sanitizeFeedbackCalibration(value.calibration);
+  if (calibration) {
+    summary.calibration = calibration;
+  }
   const byAction = sanitizeNumberRecord(value.by_action);
   const byRating = sanitizeNumberRecord(value.by_rating);
   const byDecisionStatus = sanitizeNumberRecord(value.by_decision_status);
@@ -127,6 +140,30 @@ export function sanitizeFeedbackSummary(value: unknown): DashboardState["feedbac
     summary.by_decision_status = byDecisionStatus;
   }
   return Object.keys(summary).length ? summary : undefined;
+}
+
+function sanitizeFeedbackCalibration(value: unknown): FeedbackCalibrationSummary | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+  const calibration: FeedbackCalibrationSummary = {};
+  if (value.schema_version === "feedback_calibration_summary_v1") {
+    calibration.schema_version = value.schema_version;
+  }
+  assignOptionalStrings(calibration, value, ["latest_applied_at"]);
+  assignOptionalNumbers(calibration, value, [
+    "runs_after_latest_apply",
+    "cards_after_latest_apply",
+    "high_cards_after_latest_apply",
+    "feedback_after_latest_apply",
+    "false_positive_after_latest_apply",
+    "high_rate_after_latest_apply",
+  ]);
+  const nextAction = sanitizeDashboardNextAction(value.next_action);
+  if (nextAction) {
+    calibration.next_action = nextAction;
+  }
+  return Object.keys(calibration).length ? calibration : undefined;
 }
 
 export function sanitizeOpportunitySummary(value: unknown): OpportunitySummary | undefined {

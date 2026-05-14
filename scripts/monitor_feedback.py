@@ -411,7 +411,7 @@ def feedback_summary(conn: sqlite3.Connection) -> dict[str, Any]:
         )
     else:
         changed_since_last_export = exportable_count > 0
-    return {
+    result = {
         "schema_version": "dashboard_feedback_summary_v2",
         "current_decision_count": exportable_count + follow_up_count,
         "exportable_count": exportable_count,
@@ -431,6 +431,78 @@ def feedback_summary(conn: sqlite3.Connection) -> dict[str, Any]:
         "by_action": by_action,
         "by_rating": by_rating,
         "by_decision_status": by_decision_status,
+    }
+    calibration = feedback_calibration_summary(conn)
+    if calibration:
+        result["calibration"] = calibration
+    return result
+
+
+def feedback_calibration_summary(conn: sqlite3.Connection) -> dict[str, Any] | None:
+    latest_apply = conn.execute(
+        """
+        SELECT applied_at
+        FROM profile_patch_suggestions
+        WHERE status = 'applied' AND applied_at IS NOT NULL AND applied_at != ''
+        ORDER BY applied_at DESC
+        LIMIT 1
+        """
+    ).fetchone()
+    if not latest_apply:
+        return None
+    applied_at = str(latest_apply["applied_at"] or "")
+    runs_after = int(
+        conn.execute("SELECT COUNT(*) FROM runs WHERE started_at > ?", (applied_at,)).fetchone()[0] or 0
+    )
+    card_rows = conn.execute(
+        """
+        SELECT rating, status
+        FROM review_cards
+        WHERE created_at > ?
+        """,
+        (applied_at,),
+    ).fetchall()
+    feedback_rows = conn.execute(
+        """
+        SELECT action
+        FROM feedback_events
+        WHERE created_at > ?
+        """,
+        (applied_at,),
+    ).fetchall()
+    high_cards = len([row for row in card_rows if str(row["rating"] or "").lower() == "high"])
+    false_positives = len([row for row in feedback_rows if str(row["action"] or "") == "false_positive"])
+    card_count = len(card_rows)
+    if runs_after <= 0:
+        next_action = {
+            "label": "Run after tuning",
+            "detail": "A profile diff was applied; run the profile again to collect calibration evidence.",
+        }
+    elif not feedback_rows:
+        next_action = {
+            "label": "Review next run",
+            "detail": "Post-apply runs exist; mark keep/skip/wrong-match outcomes to validate the tuning.",
+        }
+    elif false_positives:
+        next_action = {
+            "label": "Tune remaining false positives",
+            "detail": "Wrong matches still appeared after the latest applied profile diff.",
+        }
+    else:
+        next_action = {
+            "label": "Keep calibration cadence",
+            "detail": "Post-apply evidence exists without new wrong-match feedback in this window.",
+        }
+    return {
+        "schema_version": "feedback_calibration_summary_v1",
+        "latest_applied_at": applied_at,
+        "runs_after_latest_apply": runs_after,
+        "cards_after_latest_apply": card_count,
+        "high_cards_after_latest_apply": high_cards,
+        "feedback_after_latest_apply": len(feedback_rows),
+        "false_positive_after_latest_apply": false_positives,
+        "high_rate_after_latest_apply": (high_cards / card_count) if card_count else 0,
+        "next_action": next_action,
     }
 
 

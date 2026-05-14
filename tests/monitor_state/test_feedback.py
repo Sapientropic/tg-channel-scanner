@@ -490,6 +490,86 @@ class MonitorStateFeedbackTests(unittest.TestCase):
         self.assertNotIn("profile tweak", json.dumps(snapshot["feedback_summary"], ensure_ascii=False))
 
 
+    def test_feedback_summary_reports_post_apply_calibration_window(self):
+        conn = sqlite3.connect(":memory:")
+        conn.row_factory = sqlite3.Row
+        monitor_state.init_db(conn)
+        monitor_state.upsert_profile(
+            conn,
+            {
+                "id": "jobs-fast",
+                "path": "profiles/templates/jobs.md",
+                "enabled": True,
+            },
+        )
+        first_cards = monitor_state.upsert_review_cards(
+            conn,
+            profile_id="jobs-fast",
+            run_id="run-before",
+            items=[
+                {
+                    "topic": "Follow up role",
+                    "rating": "medium",
+                    "source_message_refs": [{"channel": "jobs", "id": 1}],
+                }
+            ],
+        )
+        monitor_state.set_card_action(conn, card_id=first_cards[0]["card_id"], action="follow_up", note="prefer contract budget")
+        conn.execute("UPDATE review_cards SET created_at = ? WHERE card_id = ?", ("2026-05-13T00:00:00Z", first_cards[0]["card_id"]))
+        conn.execute("UPDATE feedback_events SET created_at = ?", ("2026-05-13T00:00:00Z",))
+        conn.execute(
+            "UPDATE profile_patch_suggestions SET status = 'applied', applied_at = ?",
+            ("2026-05-13T01:00:00Z",),
+        )
+        monitor_state.record_run(
+            conn,
+            {
+                "schema_version": "run_manifest_v1",
+                "run_id": "run-after",
+                "profile_id": "jobs-fast",
+                "status": "complete",
+                "started_at": "2026-05-13T02:00:00Z",
+                "completed_at": "2026-05-13T02:01:00Z",
+                "review_card_count": 2,
+                "alert_count": 0,
+            },
+        )
+        after_cards = monitor_state.upsert_review_cards(
+            conn,
+            profile_id="jobs-fast",
+            run_id="run-after",
+            items=[
+                {
+                    "topic": "High signal after tuning",
+                    "rating": "high",
+                    "decision_state": {"status": "new", "semantic_cluster": "after-high"},
+                    "source_message_refs": [{"channel": "jobs", "id": 2}],
+                },
+                {
+                    "topic": "Wrong after tuning",
+                    "rating": "low",
+                    "decision_state": {"status": "new", "semantic_cluster": "after-low"},
+                    "source_message_refs": [{"channel": "jobs", "id": 3}],
+                },
+            ],
+        )
+        conn.execute("UPDATE review_cards SET created_at = ? WHERE last_run_id = ?", ("2026-05-13T02:00:30Z", "run-after"))
+        monitor_state.set_card_action(conn, card_id=after_cards[1]["card_id"], action="false_positive", note="")
+
+        calibration = monitor_state.feedback_summary(conn)["calibration"]
+
+        self.assertEqual(calibration["schema_version"], "feedback_calibration_summary_v1")
+        self.assertEqual(calibration["latest_applied_at"], "2026-05-13T01:00:00Z")
+        self.assertEqual(calibration["runs_after_latest_apply"], 1)
+        self.assertEqual(calibration["cards_after_latest_apply"], 2)
+        self.assertEqual(calibration["high_cards_after_latest_apply"], 1)
+        self.assertEqual(calibration["feedback_after_latest_apply"], 1)
+        self.assertEqual(calibration["false_positive_after_latest_apply"], 1)
+        self.assertEqual(calibration["high_rate_after_latest_apply"], 0.5)
+        self.assertEqual(calibration["next_action"]["label"], "Tune remaining false positives")
+        self.assertNotIn("prefer contract budget", json.dumps(calibration, ensure_ascii=False))
+
+
     def test_dashboard_feedback_export_copy_is_user_facing(self):
         conn = sqlite3.connect(":memory:")
         conn.row_factory = sqlite3.Row

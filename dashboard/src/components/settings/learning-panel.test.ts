@@ -77,6 +77,17 @@ describe("Learning panel copy", () => {
           by_action: { keep: 1, skip: 1, false_positive: 1 },
           by_rating: { high: 2 },
           by_decision_status: { changed: 1 },
+          calibration: {
+            schema_version: "feedback_calibration_summary_v1",
+            latest_applied_at: "2026-05-13T01:00:00Z",
+            runs_after_latest_apply: 1,
+            cards_after_latest_apply: 3,
+            high_cards_after_latest_apply: 2,
+            feedback_after_latest_apply: 1,
+            false_positive_after_latest_apply: 1,
+            high_rate_after_latest_apply: 2 / 3,
+            next_action: { label: "Tune remaining false positives", detail: "Wrong matches still appeared." },
+          },
         },
         suggestionResult: null,
         undoFeedbackDecision: () => undefined,
@@ -90,5 +101,11 @@ describe("Learning panel copy", () => {
     expect(html).toContain("Applied diffs 2");
     expect(html).toContain("Reverted diffs 1");
     expect(html).toContain("reverted");
+    expect(html).toContain('aria-label="Next-run calibration evidence"');
+    expect(html).toContain("After latest applied draft");
+    expect(html).toContain("Tune remaining false positives");
+    expect(html).toContain("Runs 1");
+    expect(html).toContain("Cards 3");
+    expect(html).toContain("High rate 67%");
   });
 });

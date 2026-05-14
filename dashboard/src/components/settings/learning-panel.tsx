@@ -83,6 +83,7 @@ export function LearningPanel({
       <FeedbackBreakdown summary={summary} exportableCount={exportableCount} />
       {summary?.next_action && <FeedbackNextAction action={summary.next_action} />}
       <FeedbackFlow summary={summary} />
+      <FeedbackCalibrationWindow calibration={summary?.calibration} />
       <FeedbackImpactList impacts={summary?.recent_impacts ?? []} undoFeedbackDecision={undoFeedbackDecision} busy={busy} />
       <div className="feedback-export-row feedback-primary-actions">
         <button
@@ -206,6 +207,35 @@ function FeedbackNextAction({ action }: { action: DashboardNextAction }) {
       <span className="panel-kicker">Learning loop</span>
       <strong>{action.label || "Collect feedback"}</strong>
       {action.detail && <small>{action.detail}</small>}
+    </div>
+  );
+}
+
+function FeedbackCalibrationWindow({ calibration }: { calibration?: NonNullable<DashboardState["feedback_summary"]>["calibration"] }) {
+  if (!calibration) {
+    return null;
+  }
+  const highRate = Math.round((calibration.high_rate_after_latest_apply ?? 0) * 100);
+  const items = [
+    { label: "Runs", value: calibration.runs_after_latest_apply ?? 0 },
+    { label: "Cards", value: calibration.cards_after_latest_apply ?? 0 },
+    { label: "High", value: calibration.high_cards_after_latest_apply ?? 0 },
+    { label: "Wrong", value: calibration.false_positive_after_latest_apply ?? 0 },
+    { label: "Feedback", value: calibration.feedback_after_latest_apply ?? 0 },
+  ];
+  return (
+    <div className="feedback-calibration-window" aria-label="Next-run calibration evidence">
+      <span className="panel-kicker">After latest applied draft</span>
+      <strong>{calibration.next_action?.label || "Collect post-apply evidence"}</strong>
+      {calibration.next_action?.detail && <small>{calibration.next_action.detail}</small>}
+      <div className="feedback-breakdown compact">
+        {items.map((item) => (
+          <span key={item.label}>
+            {item.label} {item.value}
+          </span>
+        ))}
+        <span>High rate {highRate}%</span>
+      </div>
     </div>
   );
 }

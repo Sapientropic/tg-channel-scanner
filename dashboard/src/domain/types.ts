@@ -301,6 +301,18 @@ export type FeedbackImpact = {
   patch_id?: string;
 };
 
+export type FeedbackCalibrationSummary = {
+  schema_version?: "feedback_calibration_summary_v1";
+  latest_applied_at?: string;
+  runs_after_latest_apply?: number;
+  cards_after_latest_apply?: number;
+  high_cards_after_latest_apply?: number;
+  feedback_after_latest_apply?: number;
+  false_positive_after_latest_apply?: number;
+  high_rate_after_latest_apply?: number;
+  next_action?: DashboardNextAction;
+};
+
 export type RunArtifact = {
   type?: string;
   path: string;
@@ -429,6 +441,7 @@ export type DashboardState = {
     export_scope_note?: string;
     next_action?: DashboardNextAction;
     recent_impacts?: FeedbackImpact[];
+    calibration?: FeedbackCalibrationSummary;
     by_action?: Record<string, number>;
     by_rating?: Record<string, number>;
     by_decision_status?: Record<string, number>;

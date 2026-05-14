@@ -39,7 +39,8 @@
   color: color-mix(in oklch, var(--muted) 72%, transparent);
 }
 
-.feedback-next-action {
+.feedback-next-action,
+.feedback-calibration-window {
   display: grid;
   gap: 6px;
   min-width: 0;
@@ -49,22 +50,31 @@
 }
 
 .feedback-next-action strong,
-.feedback-next-action small {
+.feedback-next-action small,
+.feedback-calibration-window strong,
+.feedback-calibration-window small {
   min-width: 0;
   overflow-wrap: anywhere;
 }
 
-.feedback-next-action strong {
+.feedback-next-action strong,
+.feedback-calibration-window strong {
   color: var(--paper);
   font-size: 14px;
   line-height: 1.2;
 }
 
-.feedback-next-action small {
+.feedback-next-action small,
+.feedback-calibration-window small {
   color: var(--muted);
   font-size: 12px;
   font-weight: var(--badge-weight);
   line-height: 1.4;
+}
+
+.feedback-calibration-window {
+  border-color: color-mix(in oklch, var(--teal) 28%, transparent);
+  background: color-mix(in oklch, var(--teal) 7%, transparent);
 }
 
 .feedback-scope-note {
@@ -95,7 +105,7 @@
 
 .feedback-flow {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(64px, 1fr));
   gap: 8px;
 }
 
