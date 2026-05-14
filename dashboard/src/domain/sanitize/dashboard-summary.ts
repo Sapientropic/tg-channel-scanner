@@ -212,7 +212,7 @@ export function sanitizeValidationSummary(value: unknown): ValidationSummary | u
   if (value.schema_version === "dashboard_validation_summary_v1") {
     summary.schema_version = value.schema_version;
   }
-  assignOptionalStrings(summary, value, ["since"]);
+  assignOptionalStrings(summary, value, ["since", "first_decision_action"]);
   assignOptionalNumbers(summary, value, [
     "window_days",
     "runs_count",
@@ -223,6 +223,7 @@ export function sanitizeValidationSummary(value: unknown): ValidationSummary | u
     "triage_rate",
     "keep_rate",
     "false_positive_rate",
+    "first_decision_minutes",
   ]);
   const byAction = sanitizeNumberRecord(value.by_action);
   if (byAction) {

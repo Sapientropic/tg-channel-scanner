@@ -245,7 +245,9 @@
       "action_count": 2,
       "triage_rate": 0.5,
       "keep_rate": 0.0,
-      "false_positive_rate": 1.0
+      "false_positive_rate": 1.0,
+      "first_decision_minutes": 9,
+      "first_decision_action": "false_positive"
     }
   },
   "frontend_input": {

@@ -93,6 +93,7 @@ export function ValidationSummaryPanel({ summary }: { summary?: ValidationSummar
     return null;
   }
   const actions = Object.entries(summary.by_action ?? {}).filter(([, count]) => count > 0);
+  const firstDecision = firstDecisionLabel(summary);
   return (
     <details className="validation-brief" aria-label="Local validation summary">
       <summary>
@@ -109,6 +110,7 @@ export function ValidationSummaryPanel({ summary }: { summary?: ValidationSummar
           <StatusLine label="High" value={String(summary.high_card_count ?? 0)} />
           <StatusLine label="Actions" value={String(summary.action_count ?? 0)} />
           <StatusLine label="Pending" value={String(summary.pending_count ?? 0)} />
+          <StatusLine label="First decision" value={firstDecision} />
         </div>
         <div className="validation-gauges" aria-label="Validation behavior rates">
           <ValidationGauge
@@ -134,6 +136,16 @@ export function ValidationSummaryPanel({ summary }: { summary?: ValidationSummar
       </div>
     </details>
   );
+}
+
+function firstDecisionLabel(summary: ValidationSummary) {
+  if (typeof summary.first_decision_minutes !== "number") {
+    return (summary.runs_count ?? 0) > 0 ? "Waiting" : "Not started";
+  }
+  const minutes = Math.max(0, Math.round(summary.first_decision_minutes));
+  const timing = minutes < 1 ? "<1 min" : `${minutes} min`;
+  const action = summary.first_decision_action?.trim().replace(/_/g, " ");
+  return action ? `${timing} (${action})` : timing;
 }
 
 export function CommandStrip({ state, metrics }: { state: DashboardState; metrics: Metric[] }) {

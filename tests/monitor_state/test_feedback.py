@@ -82,6 +82,12 @@ class MonitorStateFeedbackTests(unittest.TestCase):
                 note="private follow-up note",
                 profile_path=profile_path,
             )
+            conn.execute(
+                "UPDATE feedback_events SET created_at = CASE action "
+                "WHEN 'keep' THEN '2026-05-09T03:07:00Z' "
+                "WHEN 'false_positive' THEN '2026-05-09T03:12:00Z' "
+                "ELSE '2026-05-09T03:18:00Z' END"
+            )
 
             summary = monitor_state.validation_summary(
                 conn,
@@ -94,6 +100,8 @@ class MonitorStateFeedbackTests(unittest.TestCase):
         self.assertEqual(summary["action_count"], 3)
         self.assertEqual(summary["by_action"], {"false_positive": 1, "follow_up": 1, "keep": 1})
         self.assertEqual(summary["triage_rate"], 1.0)
+        self.assertEqual(summary["first_decision_minutes"], 7)
+        self.assertEqual(summary["first_decision_action"], "keep")
         self.assertEqual(summary["next_action"]["label"], "Review preference drafts")
         self.assertNotIn("private note", summary_text)
         self.assertNotIn("private follow-up note", summary_text)

@@ -474,6 +474,8 @@ export type ValidationSummary = {
   triage_rate?: number;
   keep_rate?: number;
   false_positive_rate?: number;
+  first_decision_minutes?: number;
+  first_decision_action?: string;
   next_action?: {
     label?: string;
     detail?: string;

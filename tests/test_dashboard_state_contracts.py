@@ -175,6 +175,8 @@ def pick_dashboard_state(snapshot: dict) -> dict:
                 "triage_rate",
                 "keep_rate",
                 "false_positive_rate",
+                "first_decision_minutes",
+                "first_decision_action",
             )
         },
     }
@@ -297,6 +299,9 @@ def build_dashboard_snapshot(root: Path) -> dict:
     )
     monitor_state.set_card_action(conn, card_id=cards[2]["card_id"], action="false_positive")
     monitor_state.set_card_action(conn, card_id=cards[3]["card_id"], action="false_positive")
+    conn.execute(
+        "UPDATE feedback_events SET created_at = '2026-05-13T00:09:00Z' WHERE action = 'false_positive'"
+    )
     return monitor_state.dashboard_snapshot(conn)
 
 

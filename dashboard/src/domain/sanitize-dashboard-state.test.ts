@@ -320,7 +320,12 @@ describe("dashboard state sanitizers", () => {
         next_action: { label: "Fix sources", command: 12, target: "inbox" },
         top_items: [{ card_id: "card-1", title: "Role", rating: "high", decision_status: "new", status: "pending", source_refs: ["bad"] }],
       },
-      validation_summary: { by_action: { keep: 1, skip: "bad", bad_nan: Number.NaN }, next_action: { detail: "Review outcomes" } },
+      validation_summary: {
+        by_action: { keep: 1, skip: "bad", bad_nan: Number.NaN },
+        first_decision_minutes: 7,
+        first_decision_action: "keep",
+        next_action: { detail: "Review outcomes" },
+      },
       feedback_summary: {
         recent_impacts: ["bad", {}, { item_title: "Kept role", impact_status: 3 }],
         by_rating: { high: 1, low: null },
@@ -342,7 +347,12 @@ describe("dashboard state sanitizers", () => {
       next_action: { label: "Fix sources", target: "inbox" },
       top_items: [{ card_id: "card-1", title: "Role", rating: "high", decision_status: "new", status: "pending", source_refs: [] }],
     });
-    expect(state.validation_summary).toEqual({ by_action: { keep: 1 }, next_action: { detail: "Review outcomes" } });
+    expect(state.validation_summary).toEqual({
+      by_action: { keep: 1 },
+      first_decision_minutes: 7,
+      first_decision_action: "keep",
+      next_action: { detail: "Review outcomes" },
+    });
     expect(state.feedback_summary).toEqual({
       recent_impacts: [{ item_title: "Kept role" }],
       by_rating: { high: 1 },

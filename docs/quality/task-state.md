@@ -424,11 +424,12 @@ operator_checks:
   - "Live Windows Task Scheduler dry-run task with random name -> install exit 0, status installed, remove exit 0, final status not_installed."
   - "Live Windows Credential Manager smoke -> random secret write/read/delete passed; post-delete read returned empty."
   - "Live LLM structured call -> provider=deepseek, model=deepseek-v4-flash, JSON response status=TGCS_LIVE_LLM_OK, total_tokens=58."
-next_action: "Commit the refreshed competitor/user-pain SPEC and ROADMAP checkpoint, then continue with another high-impact v0.5 activation or decision-loop slice until the 14:00 stop condition."
+  - "First useful decision metric slice -> validation_summary now reports first_decision_minutes/action; dashboard proof loop renders First decision; targeted Python/Vitest, monitor_state contract tests, full dashboard Vitest, dashboard build, git diff --check, and Playwright crop smoke passed."
+next_action: "Commit the first useful decision checkpoint, then continue with another high-impact v0.5 activation or decision-loop slice until the 14:00 stop condition."
 candidate_slices:
-  - "Use the refreshed competitor/user-pain notes to pick the next product slice: first useful decision timing, Bot Gateway command/status loop, or feedback calibration visibility."
+  - "Use the refreshed competitor/user-pain notes to pick the next product slice: Bot Gateway command/status loop, feedback calibration visibility, or first-run benchmark polish."
   - "Tighten remaining Bot Gateway setup guidance only if it removes a real setup dead-end; do not add broad free-form bot actions."
   - "Inspect scripts/desk_sources.py only for compatibility-facade cleanup if downstream callers can move off old helper names; do not delete facade names while dashboard_server.py still re-exports them."
   - "Inspect scripts/desk_credentials.py only for compatibility-facade cleanup if downstream callers can move off old helper names; do not delete facade names while dashboard_server.py still re-exports them."
-last_update: "2026-05-14T13:28:00+08:00"
+last_update: "2026-05-14T13:38:00+08:00"
 checkpoint_ready: true

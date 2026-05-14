@@ -545,15 +545,31 @@ def validation_summary(
 
     recent_cards = [row for row in card_rows if in_window(row["created_at"])]
     recent_feedback = [row for row in feedback_rows if in_window(row["created_at"])]
+    recent_run_times = [
+        parsed for row in run_rows if (parsed := parse_iso_datetime(row["started_at"])) and parsed >= since
+    ]
+    recent_feedback_times = [
+        (parsed, str(row["action"] or "unknown"))
+        for row in recent_feedback
+        if (parsed := parse_iso_datetime(row["created_at"]))
+    ]
     by_action: dict[str, int] = {}
     for row in recent_feedback:
         action = str(row["action"] or "unknown")
         by_action[action] = by_action.get(action, 0) + 1
     by_action = {key: by_action[key] for key in sorted(by_action)}
     action_count = sum(by_action.values())
-    runs_count = len([row for row in run_rows if in_window(row["started_at"])])
+    runs_count = len(recent_run_times)
     high_card_count = len([row for row in recent_cards if str(row["rating"] or "").lower() == "high"])
     pending_count = len([row for row in recent_cards if str(row["status"] or "").lower() == PENDING_STATUS])
+    first_decision_minutes: int | None = None
+    first_decision_action = ""
+    if recent_run_times and recent_feedback_times:
+        first_run = min(recent_run_times)
+        eligible_feedback_times = [item for item in recent_feedback_times if item[0] >= first_run]
+        if eligible_feedback_times:
+            first_decision_at, first_decision_action = min(eligible_feedback_times, key=lambda item: item[0])
+            first_decision_minutes = max(0, round((first_decision_at - first_run).total_seconds() / 60))
     if runs_count == 0:
         next_action = {
             "label": "Start validation",
@@ -597,5 +613,7 @@ def validation_summary(
         "triage_rate": (action_count / len(recent_cards)) if recent_cards else 0,
         "keep_rate": (by_action.get("keep", 0) / action_count) if action_count else 0,
         "false_positive_rate": (by_action.get("false_positive", 0) / action_count) if action_count else 0,
+        "first_decision_minutes": first_decision_minutes,
+        "first_decision_action": first_decision_action,
         "next_action": next_action,
     }
