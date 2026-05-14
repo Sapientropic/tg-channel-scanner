@@ -45,6 +45,7 @@ try:
         desk_scheduler,
         desk_server_selection,
         desk_settings_routes,
+        desk_source_routes,
         desk_state_payload,
         desk_sources as _desk_sources_module,
         local_credentials as local_credentials,
@@ -78,6 +79,7 @@ except ModuleNotFoundError:
         desk_scheduler,
         desk_server_selection,
         desk_settings_routes,
+        desk_source_routes,
         desk_state_payload,
         desk_sources as _desk_sources_module,
         local_credentials as local_credentials,
@@ -872,36 +874,19 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 detect_desk_delivery_chat_id=detect_desk_delivery_chat_id,
             ):
                 return
-            if parsed.path == "/api/desk/sources/preview":
-                DashboardHandler._require_loopback_access(self, "Source import")
-                self._json(HTTPStatus.OK, {"ok": True, "result": preview_desk_source_import(body)})
-                return
-            if parsed.path == "/api/desk/sources/import":
-                DashboardHandler._require_loopback_access(self, "Source import")
-                self._json(HTTPStatus.OK, {"ok": True, "result": import_desk_sources(body)})
-                return
-            if parsed.path == "/api/desk/sources/starter":
-                DashboardHandler._require_loopback_access(self, "Starter source import")
-                self._json(HTTPStatus.OK, {"ok": True, "result": import_starter_sources(body)})
-                return
-            if parsed.path == "/api/desk/sources/assistant":
-                DashboardHandler._require_loopback_access(self, "Source assistant")
-                self._json(HTTPStatus.OK, {"ok": True, "result": run_source_assistant(body)})
-                return
-            if parsed.path.startswith("/api/desk/sources/") and parsed.path.endswith("/enabled"):
-                DashboardHandler._require_loopback_access(self, "Source library")
-                source_id = unquote(parsed.path.removeprefix("/api/desk/sources/").removesuffix("/enabled").strip("/"))
-                self._json(HTTPStatus.OK, {"ok": True, "sources": set_desk_source_enabled(source_id, body)})
-                return
-            if parsed.path.startswith("/api/desk/sources/") and parsed.path.endswith("/topics"):
-                DashboardHandler._require_loopback_access(self, "Source library")
-                source_id = unquote(parsed.path.removeprefix("/api/desk/sources/").removesuffix("/topics").strip("/"))
-                self._json(HTTPStatus.OK, {"ok": True, "sources": set_desk_source_topics(source_id, body)})
-                return
-            if parsed.path.startswith("/api/desk/sources/") and parsed.path.endswith("/remove"):
-                DashboardHandler._require_loopback_access(self, "Source library")
-                source_id = unquote(parsed.path.removeprefix("/api/desk/sources/").removesuffix("/remove").strip("/"))
-                self._json(HTTPStatus.OK, {"ok": True, "sources": remove_desk_source(source_id, body)})
+            if desk_source_routes.handle_source_post_route(
+                self,
+                parsed.path,
+                body,
+                require_loopback_access=DashboardHandler._require_loopback_access,
+                preview_desk_source_import=preview_desk_source_import,
+                import_desk_sources=import_desk_sources,
+                import_starter_sources=import_starter_sources,
+                run_source_assistant=run_source_assistant,
+                set_desk_source_enabled=set_desk_source_enabled,
+                set_desk_source_topics=set_desk_source_topics,
+                remove_desk_source=remove_desk_source,
+            ):
                 return
             if parsed.path == "/api/git/check-updates":
                 DashboardHandler._require_loopback_access(self, "Git update")
