@@ -11,7 +11,7 @@ from typing import Any
 
 try:
     from scripts import bot_actions, dashboard_server, monitor_state
-    from scripts.bot_api import TelegramBotApi, load_bot_token
+    from scripts.bot_api import BotGatewayError, TelegramBotApi, load_bot_token
     from scripts.bot_replies import (
         BotIntent,
         apply_source_plan,
@@ -46,7 +46,7 @@ except ModuleNotFoundError:
     if str(PROJECT_ROOT) not in sys.path:
         sys.path.insert(0, str(PROJECT_ROOT))
     from scripts import bot_actions, dashboard_server, monitor_state
-    from scripts.bot_api import TelegramBotApi, load_bot_token
+    from scripts.bot_api import BotGatewayError, TelegramBotApi, load_bot_token
     from scripts.bot_replies import (
         BotIntent,
         apply_source_plan,
@@ -79,6 +79,18 @@ except ModuleNotFoundError:
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 PENDING_SOURCE_PLAN_TTL_SECONDS = 15 * 60
+
+
+def _runtime_error_text(exc: BaseException) -> str:
+    return bot_actions.redact_telegram_reply(str(exc))[:500]
+
+
+def _poll_error_sleep_seconds(poll_timeout: int) -> int:
+    try:
+        timeout = int(poll_timeout)
+    except (TypeError, ValueError):
+        timeout = 1
+    return max(1, min(10, timeout or 1))
 
 
 
@@ -287,9 +299,18 @@ def run_loop(args: argparse.Namespace) -> int:
         token = load_bot_token()
         api = TelegramBotApi(token)
         commands_installed = False
+        last_error = ""
         if not args.skip_menu:
-            api.set_my_commands()
-            commands_installed = True
+            try:
+                api.set_my_commands()
+            except BotGatewayError as exc:
+                # Command menu setup is useful discovery chrome, not the
+                # message pump itself. A transient Bot API failure here should
+                # not leave the local-first bot silent until the next login.
+                last_error = _runtime_error_text(exc)
+                print(f"Bot Gateway setup warning: {last_error}", file=sys.stderr, flush=True)
+            else:
+                commands_installed = True
         extra_allowed = args.allow_chat_id or []
         gateway = BotGateway(api, db_path=Path(args.db), use_llm=bool(args.llm) and not args.no_llm, extra_allowed=extra_allowed)
         state_path = Path(args.state)
@@ -302,23 +323,46 @@ def run_loop(args: argparse.Namespace) -> int:
             started_at=started_at,
             authorized_chat_count=len(gateway.allowed),
             commands_installed=commands_installed,
+            last_error=last_error,
         )
         print("T-Sense bot gateway is running. Press Ctrl+C to stop.", flush=True)
         print(f"Authorized chats: {len(gateway.allowed)}", flush=True)
         while True:
-            updates = api.get_updates(offset=offset, timeout_seconds=args.poll_timeout)
+            try:
+                updates = api.get_updates(offset=offset, timeout_seconds=args.poll_timeout)
+            except BotGatewayError as exc:
+                last_error = _runtime_error_text(exc)
+                write_gateway_state(
+                    state_path,
+                    offset=offset,
+                    started_at=started_at,
+                    authorized_chat_count=len(gateway.allowed),
+                    commands_installed=commands_installed,
+                    last_error=last_error,
+                )
+                print(f"Bot Gateway polling warning: {last_error}", file=sys.stderr, flush=True)
+                time.sleep(_poll_error_sleep_seconds(args.poll_timeout))
+                continue
             gateway.refresh_allowed()
+            update_errors: list[str] = []
             for update in updates:
                 update_id = update.get("update_id")
                 if isinstance(update_id, int):
                     offset = update_id + 1
-                gateway.handle_update(update)
+                try:
+                    gateway.handle_update(update)
+                except Exception as exc:
+                    update_errors.append(_runtime_error_text(exc))
+            last_error = update_errors[-1] if update_errors else ""
+            if last_error:
+                print(f"Bot Gateway update warning: {last_error}", file=sys.stderr, flush=True)
             write_gateway_state(
                 state_path,
                 offset=offset,
                 started_at=started_at,
                 authorized_chat_count=len(gateway.allowed),
                 commands_installed=commands_installed,
+                last_error=last_error,
             )
 
 

@@ -8,22 +8,29 @@ export function ConsoleHeader({
   busy,
   onOpenUpdates,
   onRefresh,
+  updateAvailableCount = 0,
 }: {
   busy: boolean;
   onOpenUpdates: () => void;
   onRefresh: () => void;
+  updateAvailableCount?: number;
 }) {
+  const hasUpdate = updateAvailableCount > 0;
+  const updateLabel = hasUpdate
+    ? `${updateAvailableCount} Signal Desk update${updateAvailableCount === 1 ? "" : "s"} available`
+    : "Open updates";
   return (
     <header className="console-header">
       <div className="brand-station">
         <button
           className="pixel-mark"
-          aria-label="Open updates"
+          aria-label={updateLabel}
           onClick={onOpenUpdates}
-          title="Open updates"
+          title={updateLabel}
           type="button"
         >
           <img src={signalIcon} alt="" />
+          {hasUpdate && <span className="pixel-update-badge">{updateAvailableCount > 9 ? "9+" : updateAvailableCount}</span>}
         </button>
         <div className="brand-copy">
           <p className="eyebrow">T-Sense</p>

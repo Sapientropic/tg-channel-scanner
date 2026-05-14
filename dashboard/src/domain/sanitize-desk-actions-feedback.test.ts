@@ -32,6 +32,11 @@ describe("Desk action and feedback sanitizers", () => {
         dirty: true,
         dirty_count: -3,
         pull_allowed: false,
+        fetched: true,
+        pull_output: "  Fast-forward  ",
+        desk_build_status: "success",
+        desk_build_message: "  Desk rebuilt  ",
+        desk_reload_recommended: true,
         checked_at: " 2026-05-10T09:00:00+08:00 ",
       }),
     ).toEqual({
@@ -48,6 +53,11 @@ describe("Desk action and feedback sanitizers", () => {
       dirty: true,
       dirty_count: 0,
       pull_allowed: false,
+      fetched: true,
+      pull_output: "Fast-forward",
+      desk_build_status: "success",
+      desk_build_message: "Desk rebuilt",
+      desk_reload_recommended: true,
       checked_at: "2026-05-10T09:00:00+08:00",
     });
     expect(

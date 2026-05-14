@@ -317,5 +317,5 @@ function settingsUpdateCount(status: GitUpdateStatus | null) {
   if (!status) {
     return 0;
   }
-  return Math.max(0, status.behind) + Math.max(0, status.ahead) + (status.dirty ? Math.max(0, status.dirty_count) : 0);
+  return Math.max(0, status.behind);
 }

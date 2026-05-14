@@ -132,11 +132,74 @@ class DashboardGitTests(unittest.TestCase):
                 "_run_git",
                 return_value=subprocess.CompletedProcess(["pull"], 0, stdout="Fast-forward\n"),
             ) as run_mock:
-                result = dashboard_server._git_pull_latest()
+                with patch.object(
+                    dashboard_server,
+                    "_refresh_dashboard_build",
+                    return_value={
+                        "desk_build_status": "success",
+                        "desk_build_message": "Desk was rebuilt locally.",
+                        "desk_reload_recommended": True,
+                    },
+                ) as build_mock:
+                    result = dashboard_server._git_pull_latest()
 
         run_mock.assert_called_once_with(["pull", "--ff-only"], timeout=60)
+        build_mock.assert_called_once_with()
         self.assertEqual(result["status"], "up_to_date")
         self.assertEqual(result["pull_output"], "Fast-forward")
+        self.assertEqual(result["desk_build_status"], "success")
+        self.assertTrue(result["desk_reload_recommended"])
+
+
+    def test_pull_latest_returns_build_failure_after_successful_pull(self):
+        before = {
+            "dirty": False,
+            "status": "behind",
+            "pull_allowed": True,
+            "message": "1 upstream commit available.",
+        }
+        after = {
+            "dirty": False,
+            "status": "up_to_date",
+            "pull_allowed": False,
+            "message": "Local branch is up to date with upstream.",
+        }
+
+        result = desk_git.git_pull_latest(
+            git_update_status_fn=lambda *, fetch: before if fetch else after,
+            run_git_fn=lambda args, *, timeout=dashboard_server.GIT_TIMEOUT_SECONDS: subprocess.CompletedProcess(
+                args,
+                0,
+                stdout="Fast-forward\n",
+            ),
+            refresh_desk_build_fn=lambda: (_ for _ in ()).throw(desk_git.DashboardGitError("Desk rebuild failed.")),
+        )
+
+        self.assertEqual(result["status"], "up_to_date")
+        self.assertEqual(result["desk_build_status"], "failed")
+        self.assertEqual(result["desk_build_message"], "Desk rebuild failed.")
+        self.assertFalse(result["desk_reload_recommended"])
+
+
+    def test_refresh_dashboard_build_runs_dependency_sync_before_build(self):
+        calls: list[list[str]] = []
+
+        def fake_run(args, *, cwd, check, capture_output, text, timeout):
+            calls.append(args)
+            self.assertEqual(cwd, dashboard_server.PROJECT_ROOT / "dashboard")
+            self.assertFalse(check)
+            self.assertTrue(capture_output)
+            self.assertTrue(text)
+            self.assertEqual(timeout, dashboard_server.DESK_DASHBOARD_BUILD_TIMEOUT_SECONDS)
+            return subprocess.CompletedProcess(args, 0, stdout="ok\n")
+
+        with patch.object(dashboard_server.shutil, "which", return_value="npm"):
+            with patch.object(dashboard_server.subprocess, "run", side_effect=fake_run):
+                result = dashboard_server._refresh_dashboard_build()
+
+        self.assertEqual(calls, [["npm", "install", "--no-audit", "--no-fund"], ["npm", "run", "build"]])
+        self.assertEqual(result["desk_build_status"], "success")
+        self.assertTrue(result["desk_reload_recommended"])
 
 
 

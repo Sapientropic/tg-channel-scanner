@@ -1,36 +1,67 @@
-import { Download, GitBranch } from "lucide-react";
+import { Download, GitBranch, RefreshCw } from "lucide-react";
 
 import type { GitUpdateStatus } from "../domain/types";
 import { PanelHeader, StatusLine } from "./common";
 
-function localChangeLabel(count: number) {
-  return `${count} local ${count === 1 ? "change" : "changes"}`;
+function countLabel(count: number, singular: string, plural: string) {
+  return `${count} ${count === 1 ? singular : plural}`;
 }
 
-function repositorySummary(status: GitUpdateStatus | null) {
-  if (!status) return "Workspace saved locally";
-  if (status.dirty) return "Changes ready to save";
-  if (status.status === "fetch_failed") return "Update check failed";
-  if (status.behind > 0 && status.ahead > 0) return "Manual sync needed";
-  if (status.behind > 0) return "Updates available";
-  if (status.ahead > 0) return "Local commits ready";
-  return "Up to date";
-}
-
-function repositoryDelta(status: GitUpdateStatus | null) {
-  if (!status) return "Check when needed";
-  if (status.dirty) return localChangeLabel(status.dirty_count);
-  if (status.ahead > 0 || status.behind > 0) {
-    return `${status.ahead} local / ${status.behind} remote`;
+function updateHeadline(status: GitUpdateStatus | null) {
+  if (!status) {
+    return {
+      tone: "unchecked",
+      title: "Automatic checks are on",
+      detail: "Desk checks while this page is open.",
+    };
   }
-  if (status.status === "fetch_failed") return "Try again later";
-  return "No remote changes";
+  if (status.status === "fetch_failed") {
+    return { tone: "blocked", title: "Could not check updates", detail: "Try again when the connection is back." };
+  }
+  if (status.behind > 0 && status.ahead > 0) {
+    return { tone: "blocked", title: "Manual update needed", detail: "Local and remote changes both exist." };
+  }
+  if (status.behind > 0 && status.dirty) {
+    return { tone: "blocked", title: "Save local edits first", detail: countLabel(status.dirty_count, "edit is", "edits are") + " in this workspace." };
+  }
+  if (status.behind > 0) {
+    return {
+      tone: "ready",
+      title: "New version ready",
+      detail: countLabel(status.behind, "app update", "app updates") + " available.",
+    };
+  }
+  if (status.ahead > 0) {
+    return { tone: "local", title: "Local version has edits", detail: countLabel(status.ahead, "local commit", "local commits") + " not uploaded." };
+  }
+  return { tone: "current", title: "Signal Desk is current", detail: "No app update found." };
+}
+
+function versionLabel(value: string | null | undefined) {
+  return value || "Not checked";
+}
+
+function localEditsLabel(status: GitUpdateStatus | null) {
+  if (!status) {
+    return "Unknown";
+  }
+  if (status.dirty) {
+    return countLabel(status.dirty_count, "edit", "edits");
+  }
+  if (status.ahead > 0) {
+    return countLabel(status.ahead, "local commit", "local commits");
+  }
+  return "None";
 }
 
 function repositoryMessage(status: GitUpdateStatus | null) {
-  if (!status) return "Local workspace is saved here. Check updates only when you want to sync.";
-  if (status.message) return status.message;
-  return repositorySummary(status);
+  if (!status) return "Checks run every 15 minutes while Desk is open.";
+  if (status.desk_build_status === "success") return "Update installed. Desk will refresh this page.";
+  if (status.desk_build_status === "failed") return status.desk_build_message || "Update downloaded, but Desk could not rebuild.";
+  if (status.status === "fetch_failed") return "Update source could not be reached.";
+  if (status.dirty && status.behind > 0) return "Save or discard local edits before updating the app.";
+  if (status.behind > 0) return "Use Update app to install and refresh Desk.";
+  return "Automatic checks stay on while this page is open.";
 }
 
 export function StatusRail({
@@ -44,33 +75,36 @@ export function StatusRail({
   onCheckUpdates: () => void;
   onPullLatest: () => void;
 }) {
+  const headline = updateHeadline(gitStatus);
   return (
-    <section className="table-section repository-panel" aria-label="App update controls">
-      <PanelHeader icon={<GitBranch size={18} />} title="Updates" />
-      <details className="repository-details">
-        <summary>
-          <span>{repositorySummary(gitStatus)}</span>
-          <strong>{repositoryDelta(gitStatus)}</strong>
-        </summary>
-        <div className="repository-toolbar">
-          <StatusLine label="Branch" value={gitStatus?.branch || "Local workspace"} />
-          <StatusLine label="Remote" value={repositorySummary(gitStatus)} />
-          <StatusLine label="Delta" value={repositoryDelta(gitStatus)} />
-          <div className="git-actions">
-            <button type="button" onClick={onCheckUpdates} disabled={gitBusy}>
-              <GitBranch size={15} />
-              <span>{gitBusy ? "Checking" : "Check updates"}</span>
-            </button>
-            <button className="danger-action" type="button" onClick={onPullLatest} disabled={gitBusy || !gitStatus?.pull_allowed}>
-              <Download size={15} />
-              <span>Pull latest</span>
-            </button>
-          </div>
-          <p className={`git-message ${gitStatus?.status || "unchecked"}`}>
-            {repositoryMessage(gitStatus)}
-          </p>
+    <section className="table-section repository-panel" data-update-tone={headline.tone} aria-label="App update controls">
+      <PanelHeader icon={<GitBranch size={18} />} title="App updates" />
+      <div className="repository-health">
+        <span className="repository-status-dot" aria-hidden="true" />
+        <div className="repository-health-copy">
+          <strong>{headline.title}</strong>
+          <span>{headline.detail}</span>
         </div>
-      </details>
+        <span className="repository-auto-chip">Auto check</span>
+      </div>
+      <div className="repository-toolbar">
+        <StatusLine label="Current" value={versionLabel(gitStatus?.head)} />
+        <StatusLine label="Available" value={versionLabel(gitStatus?.remote_head)} />
+        <StatusLine label="Local edits" value={localEditsLabel(gitStatus)} />
+        <div className="git-actions">
+          <button type="button" onClick={onCheckUpdates} disabled={gitBusy}>
+            <RefreshCw size={15} className={gitBusy ? "spin" : undefined} />
+            <span>{gitBusy ? "Checking" : "Check now"}</span>
+          </button>
+          <button className="primary-action" type="button" onClick={onPullLatest} disabled={gitBusy || !gitStatus?.pull_allowed}>
+            <Download size={15} />
+            <span>Update app</span>
+          </button>
+        </div>
+        <p className={`git-message ${gitStatus?.status || "unchecked"}`}>
+          {repositoryMessage(gitStatus)}
+        </p>
+      </div>
     </section>
   );
 }

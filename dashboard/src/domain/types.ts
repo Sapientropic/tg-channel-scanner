@@ -636,6 +636,11 @@ export type GitUpdateStatus = {
   dirty_count: number;
   pull_allowed: boolean;
   checked_at: string;
+  fetched?: boolean;
+  pull_output?: string;
+  desk_build_status?: "success" | "failed" | "skipped";
+  desk_build_message?: string;
+  desk_reload_recommended?: boolean;
 };
 
 export type FeedbackExportResult = {

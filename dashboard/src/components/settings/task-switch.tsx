@@ -30,7 +30,7 @@ export function SettingsTaskSwitch({
       detail: feedbackCount > 0 ? "Profile tuning" : "Review cards to teach preferences",
     },
     { id: "evidence", label: "Yield", count: evidenceCount, detail: "Which sources found posts" },
-    { id: "updates", label: "Updates", count: updateCount, detail: "App and local changes" },
+    { id: "updates", label: "Updates", count: updateCount, detail: updateCount > 0 ? "New app version" : "App version" },
   ];
   return (
     <div className="settings-task-switch" aria-label="Settings task switcher">

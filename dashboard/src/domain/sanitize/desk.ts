@@ -41,7 +41,7 @@ export function sanitizeGitUpdateStatus(value: unknown): GitUpdateStatus | null 
   if (!status || !branch) {
     return null;
   }
-  return {
+  const result: GitUpdateStatus = {
     schema_version: "git_update_status_v1",
     status,
     message: typeof value.message === "string" ? value.message.trim() : "",
@@ -57,6 +57,24 @@ export function sanitizeGitUpdateStatus(value: unknown): GitUpdateStatus | null 
     pull_allowed: typeof value.pull_allowed === "boolean" ? value.pull_allowed : false,
     checked_at: optionalString(value.checked_at) ?? "",
   };
+  if (typeof value.fetched === "boolean") {
+    result.fetched = value.fetched;
+  }
+  const pullOutput = optionalString(value.pull_output);
+  if (pullOutput) {
+    result.pull_output = pullOutput;
+  }
+  if (value.desk_build_status === "success" || value.desk_build_status === "failed" || value.desk_build_status === "skipped") {
+    result.desk_build_status = value.desk_build_status;
+  }
+  const deskBuildMessage = optionalString(value.desk_build_message);
+  if (deskBuildMessage) {
+    result.desk_build_message = deskBuildMessage;
+  }
+  if (typeof value.desk_reload_recommended === "boolean") {
+    result.desk_reload_recommended = value.desk_reload_recommended;
+  }
+  return result;
 }
 
 export function sanitizeFeedbackExportResult(value: unknown): FeedbackExportResult | null {

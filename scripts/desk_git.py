@@ -17,6 +17,7 @@ class DashboardGitError(Exception):
 
 RunGit = Callable[..., subprocess.CompletedProcess[str]]
 GitValue = Callable[[list[str]], str | None]
+RefreshDeskBuild = Callable[[], dict]
 
 
 def run_git(
@@ -143,7 +144,25 @@ def git_update_status(
     }
 
 
-def git_pull_latest(*, git_update_status_fn: Callable[..., dict], run_git_fn: RunGit) -> dict:
+def _desk_build_result(
+    *,
+    status: str,
+    message: str,
+    reload_recommended: bool = False,
+) -> dict:
+    return {
+        "desk_build_status": status,
+        "desk_build_message": message,
+        "desk_reload_recommended": reload_recommended,
+    }
+
+
+def git_pull_latest(
+    *,
+    git_update_status_fn: Callable[..., dict],
+    run_git_fn: RunGit,
+    refresh_desk_build_fn: RefreshDeskBuild | None = None,
+) -> dict:
     before = git_update_status_fn(fetch=True)
     if before["dirty"]:
         raise DashboardGitError("Working tree has local changes. Commit or stash them before pulling.")
@@ -154,4 +173,19 @@ def git_pull_latest(*, git_update_status_fn: Callable[..., dict], run_git_fn: Ru
         raise DashboardGitError((completed.stderr or completed.stdout or "git pull --ff-only failed").strip())
     after = git_update_status_fn(fetch=False)
     after["pull_output"] = (completed.stdout or "").strip()
+    if refresh_desk_build_fn is None:
+        after.update(
+            _desk_build_result(
+                status="skipped",
+                message="Desk build refresh was not configured.",
+            )
+        )
+        return after
+    try:
+        build_result = refresh_desk_build_fn()
+    except DashboardGitError as exc:
+        build_result = _desk_build_result(status="failed", message=str(exc))
+    except Exception:
+        build_result = _desk_build_result(status="failed", message="Desk build refresh failed.")
+    after.update(build_result)
     return after

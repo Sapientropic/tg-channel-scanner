@@ -107,6 +107,7 @@ DESK_APP_ID = desk_server_selection.DESK_APP_ID
 DESK_VERSION = desk_server_selection.DESK_VERSION
 DESK_AUTO_PORT_END = desk_server_selection.DESK_AUTO_PORT_END
 GIT_TIMEOUT_SECONDS = 25
+DESK_DASHBOARD_BUILD_TIMEOUT_SECONDS = 180
 DESK_ACTION_TIMEOUT_SECONDS = 180
 DESK_SOURCE_ACCESS_HEALTH_SCHEMA_VERSION = "desk_source_access_health_v1"
 DESK_SOURCE_ACCESS_PROBE_MAX_SOURCES = _positive_int_env("TGCS_SOURCE_ACCESS_PROBE_MAX_SOURCES", 80)
@@ -327,8 +328,52 @@ def _git_update_status(*, fetch: bool) -> dict:
     )
 
 
+def _run_dashboard_npm(args: list[str], *, timeout: int = DESK_DASHBOARD_BUILD_TIMEOUT_SECONDS) -> subprocess.CompletedProcess[str]:
+    npm = shutil.which("npm")
+    if not npm:
+        raise DashboardGitError("npm was not found. Install Node.js, then reopen Signal Desk.")
+    try:
+        return subprocess.run(
+            [npm, *args],
+            cwd=PROJECT_ROOT / "dashboard",
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired as exc:
+        command = " ".join(["npm", *args])
+        raise DashboardGitError(f"{command} timed out after {timeout} second(s).") from exc
+    except OSError as exc:
+        raise DashboardGitError(f"Unable to rebuild Desk: {exc}") from exc
+
+
+def _dashboard_build_failure(phase: str, completed: subprocess.CompletedProcess[str]) -> DashboardGitError:
+    detail = _desk_safe_result_text(completed.stderr, completed.stdout) or f"{phase} failed."
+    return DashboardGitError(f"{phase} failed: {detail}")
+
+
+def _refresh_dashboard_build() -> dict:
+    install = _run_dashboard_npm(["install", "--no-audit", "--no-fund"])
+    if install.returncode != 0:
+        raise _dashboard_build_failure("Desk dependency update", install)
+    build = _run_dashboard_npm(["run", "build"])
+    if build.returncode != 0:
+        raise _dashboard_build_failure("Desk rebuild", build)
+    return {
+        "desk_build_status": "success",
+        "desk_build_message": "Desk was rebuilt locally.",
+        "desk_reload_recommended": True,
+    }
+
+
 def _git_pull_latest() -> dict:
-    return desk_git.git_pull_latest(git_update_status_fn=_git_update_status, run_git_fn=_run_git)
+    return desk_git.git_pull_latest(
+        git_update_status_fn=_git_update_status,
+        run_git_fn=_run_git,
+        refresh_desk_build_fn=_refresh_dashboard_build,
+    )
+
 
 
 def resolve_run_artifact_path(requested_path: str, *, artifact_root: Path | None = None) -> Path:

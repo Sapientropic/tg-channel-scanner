@@ -789,7 +789,15 @@ class BotGatewayTests(unittest.TestCase):
                     if process.poll() is not None:
                         break
                     time.sleep(0.1)
-                process.wait(timeout=10)
+                deadline = time.time() + 10
+                while time.time() < deadline:
+                    if process.poll() is not None:
+                        break
+                    if state.exists():
+                        payload = json.loads(state.read_text(encoding="utf-8"))
+                        if payload.get("last_error"):
+                            break
+                    time.sleep(0.1)
             finally:
                 if process.poll() is None:
                     process.terminate()
@@ -803,6 +811,9 @@ class BotGatewayTests(unittest.TestCase):
             self.assertEqual(payload["schema_version"], "bot_gateway_state_v1")
             self.assertTrue(payload["commands_installed"])
             self.assertEqual(payload["authorized_chat_count"], 1)
+            self.assertIn("Telegram Bot API rejected getUpdates", payload.get("last_error", ""))
+            with bot_gateway.BotGatewayLock(lock):
+                pass
             self.assertFalse(lock.exists())
 
     def test_tgcs_bot_run_delegates_to_fixed_gateway_script(self):

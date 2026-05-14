@@ -2,65 +2,93 @@
 
 .repository-toolbar {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  grid-template-columns: repeat(3, minmax(160px, 1fr));
   gap: 8px;
   align-items: start;
 }
 
 .repository-panel {
   margin-top: 14px;
-  border-color: color-mix(in oklch, var(--signal-danger) 30%, var(--line));
+  border-color: color-mix(in oklch, var(--signal-high) 28%, var(--line));
   background:
-    linear-gradient(135deg, color-mix(in oklch, var(--signal-danger) 5%, transparent) 0 12px, transparent 12px 24px),
+    linear-gradient(135deg, color-mix(in oklch, var(--signal-high) 4%, transparent) 0 12px, transparent 12px 24px),
     color-mix(in oklch, var(--ink) 94%, transparent);
   background-size: 24px 24px, auto;
 }
 
 .repository-panel .panel-title {
-  color: color-mix(in oklch, var(--signal-danger) 32%, var(--paper));
+  color: color-mix(in oklch, var(--signal-high) 32%, var(--paper));
 }
 
-.repository-details {
-  min-width: 0;
-}
-
-.repository-details summary {
+.repository-health {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 10px;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 12px;
   align-items: center;
-  min-height: 44px;
-  padding: 0 10px;
+  min-height: 68px;
+  margin-bottom: 10px;
+  padding: 12px 14px;
   border: 1px solid var(--wash-paper-14);
   background: var(--wash-paper-5);
-  color: var(--paper);
-  cursor: pointer;
-  list-style: none;
 }
 
-.repository-details summary::-webkit-details-marker {
-  display: none;
+.repository-status-dot {
+  width: 14px;
+  aspect-ratio: 1;
+  border: 2px solid currentColor;
+  background: currentColor;
+  box-shadow: 0 0 0 4px color-mix(in oklch, currentColor 15%, transparent);
 }
 
-.repository-details summary span,
-.repository-details summary strong {
-  min-width: 0;
-  overflow-wrap: anywhere;
-  font-size: 11px;
-  font-weight: var(--badge-weight);
-  line-height: 1.2;
-}
-
-.repository-details summary span {
-  color: var(--muted);
-}
-
-.repository-details summary strong {
+.repository-panel[data-update-tone="ready"] .repository-status-dot,
+.repository-panel[data-update-tone="ready"] .repository-health-copy strong {
   color: var(--amber);
 }
 
-.repository-details .repository-toolbar {
-  margin-top: 8px;
+.repository-panel[data-update-tone="current"] .repository-status-dot,
+.repository-panel[data-update-tone="current"] .repository-health-copy strong {
+  color: var(--teal);
+}
+
+.repository-panel[data-update-tone="blocked"] .repository-status-dot,
+.repository-panel[data-update-tone="blocked"] .repository-health-copy strong {
+  color: var(--rust);
+}
+
+.repository-panel[data-update-tone="local"] .repository-status-dot,
+.repository-panel[data-update-tone="local"] .repository-health-copy strong {
+  color: var(--blue);
+}
+
+.repository-health-copy {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.repository-health-copy strong {
+  font-size: 19px;
+  line-height: 1.1;
+}
+
+.repository-health-copy span {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.repository-auto-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--teal);
+  color: var(--teal);
+  background: color-mix(in oklch, var(--signal-high) 8%, transparent);
+  font-size: 11px;
+  font-weight: var(--badge-weight);
+  text-transform: uppercase;
 }
 
 .status-line {
@@ -93,6 +121,7 @@
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
   margin-top: 0;
+  grid-column: 1 / -1;
 }
 
 .git-actions button {
@@ -125,10 +154,10 @@
   opacity: 0.48;
 }
 
-.git-actions .danger-action {
-  border-color: color-mix(in oklch, var(--signal-danger) 42%, var(--line));
-  background: var(--tone-danger-bg);
-  color: var(--tone-danger-text);
+.git-actions .primary-action {
+  border-color: color-mix(in oklch, var(--signal-high) 42%, var(--line));
+  background: color-mix(in oklch, var(--signal-high) 78%, var(--paper));
+  color: var(--ink);
 }
 
 .git-message {

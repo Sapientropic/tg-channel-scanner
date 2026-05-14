@@ -69,6 +69,7 @@ function App() {
   const [settingsFocusTarget, setSettingsFocusTarget] = useState<SettingsTask | null>(null);
   const [notice, setNotice] = useState<{ tone: "success" | "error"; text: string } | null>(null);
   const { gitBusy, gitStatus, checkUpdates, pullLatest } = useGitActions({ setNotice });
+  const updateAvailableCount = Math.max(0, gitStatus?.behind ?? 0);
   const {
     aiSettingsStatus,
     aiSettingsError,
@@ -288,6 +289,7 @@ function App() {
         busy={busy || Boolean(busyActionId) || Boolean(deskTelegram.busy)}
         onOpenUpdates={() => openSettings("updates")}
         onRefresh={refreshNow}
+        updateAvailableCount={updateAvailableCount}
       />
 
       {(notice || loadError) && (

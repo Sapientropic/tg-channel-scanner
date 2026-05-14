@@ -143,6 +143,7 @@ def write_gateway_state(
     authorized_chat_count: int,
     commands_installed: bool,
     last_poll_at: str | None = None,
+    last_error: str = "",
     pid: int | None = None,
 ) -> None:
     payload = {
@@ -154,6 +155,8 @@ def write_gateway_state(
         "commands_installed": bool(commands_installed),
         "offset": offset,
     }
+    if last_error:
+        payload["last_error"] = str(last_error)[:500]
     save_state(payload, path)
 
 
