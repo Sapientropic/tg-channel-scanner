@@ -29,6 +29,7 @@ import type {
 export type { SettingsTask } from "./settings/task-switch";
 export {
   botGatewayBackgroundLine,
+  botGatewayCanInstallBackground,
   botGatewayStatusLine,
   botIdentityResultLine,
 } from "./settings/bot-gateway-panel";

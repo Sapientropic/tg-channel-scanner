@@ -6,6 +6,7 @@ import {
   SOURCE_LIBRARY_PAGE_SIZE,
   botIdentityResultLine,
   botGatewayBackgroundLine,
+  botGatewayCanInstallBackground,
   botGatewayStatusLine,
   filterDeskSourcesByQuery,
   paginatedDeskSources,
@@ -151,9 +152,26 @@ describe("Settings source topic editor", () => {
     );
     expect(botGatewayBackgroundLine(status)).toBe("Background on · Windows Task Scheduler");
     expect(botGatewayBackgroundLine({ ...status, token_configured: false })).toBe("Save token before background mode");
+    expect(botGatewayBackgroundLine({ ...status, authorized_chat_count: 0, background: { ...status.background, installed: false } })).toBe(
+      "Add chat before background mode",
+    );
     expect(botGatewayBackgroundLine({ ...status, background: { ...status.background, installed: false } })).toBe(
       "Background off · Windows Task Scheduler",
     );
+    expect(botGatewayCanInstallBackground({
+      ...status,
+      background: { ...status.background, installed: false, can_install: true },
+    })).toBe(true);
+    expect(botGatewayCanInstallBackground({
+      ...status,
+      token_configured: false,
+      background: { ...status.background, installed: false, can_install: true },
+    })).toBe(false);
+    expect(botGatewayCanInstallBackground({
+      ...status,
+      authorized_chat_count: 0,
+      background: { ...status.background, installed: false, can_install: true },
+    })).toBe(false);
   });
 
   it("summarizes bot identity apply result with photo boundary", () => {

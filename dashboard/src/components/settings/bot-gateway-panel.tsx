@@ -38,6 +38,9 @@ export function botGatewayBackgroundLine(status: DeskBotGatewayStatus | null) {
   if (!status.token_configured) {
     return "Save token before background mode";
   }
+  if (status.authorized_chat_count <= 0) {
+    return "Add chat before background mode";
+  }
   const backendLabel = botGatewayBackendLabel(status.background?.backend);
   if (status.background?.installed) {
     return `Background on · ${backendLabel}`;
@@ -94,6 +97,9 @@ function botGatewayBackgroundUserLabel(status: DeskBotGatewayStatus | null) {
   if (!status.token_configured) {
     return "Needs token";
   }
+  if (status.authorized_chat_count <= 0) {
+    return "Needs chat";
+  }
   if (status.background?.installed) {
     return "On";
   }
@@ -101,6 +107,15 @@ function botGatewayBackgroundUserLabel(status: DeskBotGatewayStatus | null) {
     return "Off";
   }
   return "Manual";
+}
+
+export function botGatewayCanInstallBackground(status: DeskBotGatewayStatus | null) {
+  return Boolean(
+    status?.token_configured === true &&
+    status.authorized_chat_count > 0 &&
+    status.background?.can_install === true &&
+    !status.background.installed,
+  );
 }
 
 export function BotGatewayPanel({
@@ -122,7 +137,7 @@ export function BotGatewayPanel({
 }) {
   const gatewayTone = status?.gateway_status === "running" ? "enabled" : status?.gateway_status === "stale" ? "pending" : "disabled";
   const canApplyIdentity = status?.token_configured === true;
-  const canInstallBackground = status?.background?.can_install === true && !status.background.installed;
+  const canInstallBackground = botGatewayCanInstallBackground(status);
   const canRemoveBackground = status?.background?.can_remove === true;
   const identityLine = botIdentityResultLine(identityResult);
   return (
