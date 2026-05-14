@@ -1,19 +1,17 @@
 import { useState, type Dispatch, type SetStateAction } from "react";
 
 import {
-  applyProfilePatch,
   clearFeedbackDecisions as clearFeedbackDecisionsRequest,
   errorMessage,
   exportFeedback as exportFeedbackRequest,
   generateFeedbackProfileSuggestions as generateFeedbackProfileSuggestionsRequest,
   undoReviewCardAction,
 } from "../api/client";
-import type { DashboardState, FeedbackExportResult, FeedbackProfileSuggestionsResult, Tab } from "../domain/types";
+import type { FeedbackExportResult, FeedbackProfileSuggestionsResult, Tab } from "../domain/types";
 
 type Notice = { tone: "success" | "error"; text: string };
 
 type UseFeedbackActionsOptions = {
-  profilePatchSuggestions: DashboardState["profile_patch_suggestions"];
   refresh: () => Promise<void>;
   setActiveTab: Dispatch<SetStateAction<Tab>>;
   setBusy: Dispatch<SetStateAction<boolean>>;
@@ -21,7 +19,6 @@ type UseFeedbackActionsOptions = {
 };
 
 export function useFeedbackActions({
-  profilePatchSuggestions,
   refresh,
   setActiveTab,
   setBusy,
@@ -56,30 +53,6 @@ export function useFeedbackActions({
         setActiveTab("profiles");
       }
       setNotice({ tone: "success", text: result.detail || "Profile suggestions updated" });
-    } catch (error) {
-      setNotice({ tone: "error", text: errorMessage(error) });
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function applyPendingProfileDrafts() {
-    const pendingPatches = profilePatchSuggestions.filter((patch) => patch.status === "pending");
-    if (!pendingPatches.length) {
-      setActiveTab("profiles");
-      return;
-    }
-    setBusy(true);
-    setNotice(null);
-    try {
-      for (const patch of pendingPatches) {
-        await applyProfilePatch(patch.patch_id);
-      }
-      await refresh();
-      setNotice({
-        tone: "success",
-        text: `${pendingPatches.length} profile draft${pendingPatches.length === 1 ? "" : "s"} applied`,
-      });
     } catch (error) {
       setNotice({ tone: "error", text: errorMessage(error) });
     } finally {
@@ -128,7 +101,6 @@ export function useFeedbackActions({
     feedbackProfileSuggestions,
     exportFeedback,
     generateFeedbackProfileSuggestions,
-    applyPendingProfileDrafts,
     clearFeedback,
     undoFeedbackDecision,
   };

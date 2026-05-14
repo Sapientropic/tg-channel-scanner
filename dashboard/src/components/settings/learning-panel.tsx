@@ -1,4 +1,4 @@
-import { Check, Copy, Download, FileDiff, Play, RotateCcw, Trash2, UserRoundCog } from "lucide-react";
+import { Copy, Download, FileDiff, Play, RotateCcw, Trash2, UserRoundCog } from "lucide-react";
 
 import { InlineEmpty, PanelHeader } from "../common";
 import { feedbackImpactKey, formatActionLabel, toneClass } from "../../domain/display";
@@ -14,7 +14,7 @@ const FEEDBACK_IMPACT_LIMIT = 4;
 
 export function learningActionLabel(count: number, pendingDraftCount = 0) {
   if (pendingDraftCount > 0) {
-    return "Apply profile drafts";
+    return "Review profile drafts";
   }
   return count > 0 ? "Generate drafts" : "Collect review decisions";
 }
@@ -45,7 +45,6 @@ export function LearningPanel({
   suggestionResult,
   exportFeedback,
   generateProfileSuggestions,
-  applyPendingProfileDrafts,
   openProfileDrafts,
   clearFeedback,
   undoFeedbackDecision,
@@ -57,7 +56,6 @@ export function LearningPanel({
   suggestionResult: FeedbackProfileSuggestionsResult | null;
   exportFeedback: () => void;
   generateProfileSuggestions: () => void;
-  applyPendingProfileDrafts: () => void;
   openProfileDrafts: () => void;
   clearFeedback: () => void;
   undoFeedbackDecision: (cardId: string) => void;
@@ -89,18 +87,12 @@ export function LearningPanel({
         <button
           className="text-button"
           type="button"
-          onClick={pendingDraftCount > 0 ? applyPendingProfileDrafts : generateProfileSuggestions}
+          onClick={pendingDraftCount > 0 ? openProfileDrafts : generateProfileSuggestions}
           disabled={primaryDisabled}
         >
-          {pendingDraftCount > 0 ? <Check size={15} /> : <FileDiff size={15} />}
+          {pendingDraftCount > 0 ? <UserRoundCog size={15} /> : <FileDiff size={15} />}
           <span>{busy ? "Working" : learningActionLabel(exportableCount, pendingDraftCount)}</span>
         </button>
-        {pendingDraftCount > 0 && (
-          <button className="text-button secondary" type="button" onClick={openProfileDrafts} disabled={busy}>
-            <UserRoundCog size={15} />
-            <span>Review drafts</span>
-          </button>
-        )}
         <button className="text-button secondary" type="button" onClick={clearFeedback} disabled={busy}>
           <Trash2 size={15} />
           <span>Clear learning decisions</span>

@@ -426,11 +426,12 @@ operator_checks:
   - "Live LLM structured call -> provider=deepseek, model=deepseek-v4-flash, JSON response status=TGCS_LIVE_LLM_OK, total_tokens=58."
   - "First useful decision metric slice -> validation_summary now reports first_decision_minutes/action; dashboard proof loop renders First decision; targeted Python/Vitest, monitor_state contract tests, full dashboard Vitest, dashboard build, git diff --check, and Playwright crop smoke passed."
   - "Bot Gateway status loop slice -> /status now reports private bot delivery readiness and proof-loop first-decision state without rendering chat ids; tests/test_bot_gateway.py, test_bot_gateway_contracts.py, py_compile, ruff, and git diff --check passed."
-next_action: "Commit the Bot Gateway status loop checkpoint, then continue with another high-impact v0.5 activation or decision-loop slice until the 14:00 stop condition."
+  - "Learning review-path slice -> Settings Learning no longer bulk-applies pending profile drafts from the primary button; it routes to Profiles review first. Targeted/full dashboard Vitest, build, git diff --check, and Playwright text smoke passed."
+next_action: "Commit the Learning review-path checkpoint, then continue with another high-impact v0.5 activation or decision-loop slice until the 14:00 stop condition."
 candidate_slices:
-  - "Use the refreshed competitor/user-pain notes to pick the next product slice: feedback calibration visibility, first-run benchmark polish, or another setup dead-end with measurable user impact."
+  - "Use the refreshed competitor/user-pain notes to pick the next product slice: first-run benchmark polish, feedback calibration clarity, or another setup dead-end with measurable user impact."
   - "Tighten remaining Bot Gateway setup guidance only if it removes a real setup dead-end; do not add broad free-form bot actions."
   - "Inspect scripts/desk_sources.py only for compatibility-facade cleanup if downstream callers can move off old helper names; do not delete facade names while dashboard_server.py still re-exports them."
   - "Inspect scripts/desk_credentials.py only for compatibility-facade cleanup if downstream callers can move off old helper names; do not delete facade names while dashboard_server.py still re-exports them."
-last_update: "2026-05-14T13:41:00+08:00"
+last_update: "2026-05-14T13:48:00+08:00"
 checkpoint_ready: true

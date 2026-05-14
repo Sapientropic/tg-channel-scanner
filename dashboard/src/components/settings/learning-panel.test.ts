@@ -33,7 +33,7 @@ describe("Learning panel copy", () => {
   it("uses app-first wording for the primary learning action", () => {
     expect(learningActionLabel(0)).toBe("Collect review decisions");
     expect(learningActionLabel(2)).toBe("Generate drafts");
-    expect(learningActionLabel(2, 1)).toBe("Apply profile drafts");
+    expect(learningActionLabel(2, 1)).toBe("Review profile drafts");
   });
 
   it("keeps clear action clickable even when there are no current decisions", () => {
@@ -41,7 +41,6 @@ describe("Learning panel copy", () => {
       createElement(LearningPanel, {
         busy: false,
         clearFeedback: () => undefined,
-        applyPendingProfileDrafts: () => undefined,
         exportFeedback: () => undefined,
         exportResult: null,
         generateProfileSuggestions: () => undefined,
@@ -62,7 +61,6 @@ describe("Learning panel copy", () => {
       createElement(LearningPanel, {
         busy: false,
         clearFeedback: () => undefined,
-        applyPendingProfileDrafts: () => undefined,
         exportFeedback: () => undefined,
         exportResult: null,
         generateProfileSuggestions: () => undefined,
@@ -104,6 +102,7 @@ describe("Learning panel copy", () => {
     expect(html).toContain('aria-label="Next-run calibration evidence"');
     expect(html).toContain("After latest applied draft");
     expect(html).toContain("Tune remaining false positives");
+    expect(html).toContain("Review profile drafts");
     expect(html).toContain("Runs 1");
     expect(html).toContain("Cards 3");
     expect(html).toContain("High rate 67%");

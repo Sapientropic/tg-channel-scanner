@@ -95,7 +95,6 @@ export type SettingsLearningController = {
   feedbackProfileSuggestions: FeedbackProfileSuggestionsResult | null;
   exportFeedback: () => void;
   generateFeedbackProfileSuggestions: () => void;
-  applyPendingProfileDrafts: () => void;
   openProfileDrafts: () => void;
   clearFeedback: () => void;
   undoFeedbackDecision: (cardId: string) => void;
@@ -168,7 +167,6 @@ export function SettingsView({
     feedbackProfileSuggestions,
     exportFeedback,
     generateFeedbackProfileSuggestions,
-    applyPendingProfileDrafts,
     openProfileDrafts,
     clearFeedback,
     undoFeedbackDecision,
@@ -286,7 +284,6 @@ export function SettingsView({
         <LearningPanel
           busy={busy}
           clearFeedback={clearFeedback}
-          applyPendingProfileDrafts={applyPendingProfileDrafts}
           exportFeedback={exportFeedback}
           exportResult={feedbackExport}
           generateProfileSuggestions={generateFeedbackProfileSuggestions}
