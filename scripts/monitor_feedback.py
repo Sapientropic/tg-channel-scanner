@@ -250,8 +250,8 @@ def feedback_next_action(exportable_count: int, follow_up_count: int, patch_coun
     applied_diffs = patch_counts.get("applied", 0)
     if pending_diffs:
         return {
-            "label": "Apply profile drafts",
-            "detail": "Profile drafts are ready; review or apply them before the next tuning pass.",
+            "label": "Review profile drafts",
+            "detail": "Profile drafts are ready; review and apply the right ones before the next tuning pass.",
             "target_tab": "profiles",
             "action_id": "review_preference_drafts",
         }

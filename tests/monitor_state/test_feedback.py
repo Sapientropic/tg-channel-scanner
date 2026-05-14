@@ -263,7 +263,7 @@ class MonitorStateFeedbackTests(unittest.TestCase):
         self.assertNotIn("Skipped internship", patch_row["note"])
         self.assertNotIn("Wrong crypto promo", patch_row["note"])
         self.assertIn("## Follow-up Preferences", patch_row["proposed_profile_text"])
-        self.assertEqual(summary["next_action"]["label"], "Apply profile drafts")
+        self.assertEqual(summary["next_action"]["label"], "Review profile drafts")
         self.assertEqual(summary["next_action"]["target_tab"], "profiles")
 
 
@@ -487,7 +487,7 @@ class MonitorStateFeedbackTests(unittest.TestCase):
         self.assertEqual(snapshot["feedback_summary"]["by_action"], {"false_positive": 1, "keep": 1, "skip": 1})
         self.assertEqual(snapshot["feedback_summary"]["by_rating"], {"high": 1, "low": 1, "medium": 1})
         self.assertEqual(snapshot["feedback_summary"]["by_decision_status"], {"unknown": 3})
-        self.assertEqual(snapshot["feedback_summary"]["next_action"]["label"], "Apply profile drafts")
+        self.assertEqual(snapshot["feedback_summary"]["next_action"]["label"], "Review profile drafts")
         impacts = {item["item_title"]: item for item in snapshot["feedback_summary"]["recent_impacts"]}
         self.assertEqual(impacts["Kept role"]["impact_type"], "profile_tuning_source")
         self.assertEqual(impacts["Kept role"]["impact_status"], "ready")

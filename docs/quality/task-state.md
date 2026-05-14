@@ -428,11 +428,12 @@ operator_checks:
   - "Bot Gateway status loop slice -> /status now reports private bot delivery readiness and proof-loop first-decision state without rendering chat ids; tests/test_bot_gateway.py, test_bot_gateway_contracts.py, py_compile, ruff, and git diff --check passed."
   - "Learning review-path slice -> Settings Learning no longer bulk-applies pending profile drafts from the primary button; it routes to Profiles review first. Targeted/full dashboard Vitest, build, git diff --check, and Playwright text smoke passed."
   - "Wide regression gate after the 13:48 checkpoint -> python -m pytest -q passed with 559 passed, 2 skipped, 224 subtests; dashboard npm test -- --run passed with 26 files / 159 tests; dashboard npm run build passed."
+  - "Learning next_action copy alignment -> feedback_summary now says Review profile drafts instead of Apply profile drafts; tests/monitor_state/test_feedback.py, no-match rg for old copy, and git diff --check passed."
 next_action: "Continue until the 14:00 stop condition; if no larger slice fits safely, preserve the clean checkpoint and do final closeout only when the deadline is reached."
 candidate_slices:
   - "Use the refreshed competitor/user-pain notes to pick the next product slice: first-run benchmark polish, feedback calibration clarity, or another setup dead-end with measurable user impact."
   - "Tighten remaining Bot Gateway setup guidance only if it removes a real setup dead-end; do not add broad free-form bot actions."
   - "Inspect scripts/desk_sources.py only for compatibility-facade cleanup if downstream callers can move off old helper names; do not delete facade names while dashboard_server.py still re-exports them."
   - "Inspect scripts/desk_credentials.py only for compatibility-facade cleanup if downstream callers can move off old helper names; do not delete facade names while dashboard_server.py still re-exports them."
-last_update: "2026-05-14T13:51:00+08:00"
+last_update: "2026-05-14T13:53:00+08:00"
 checkpoint_ready: true
