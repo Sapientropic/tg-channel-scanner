@@ -478,6 +478,64 @@ class MonitorStateReviewCardsAlertsTests(unittest.TestCase):
         self.assertEqual(candidates, [])
 
 
+    def test_dashboard_snapshot_projects_safe_alert_summary_per_card(self):
+        conn = sqlite3.connect(":memory:")
+        conn.row_factory = sqlite3.Row
+        monitor_state.init_db(conn)
+        cards = monitor_state.upsert_review_cards(
+            conn,
+            profile_id="jobs-fast",
+            run_id="run-1",
+            items=[
+                {
+                    "topic": "Fast role",
+                    "rating": "high",
+                    "decision_state": {"status": "new", "semantic_cluster": "alert-summary"},
+                    "source_message_refs": [{"channel": "jobs", "id": 1}],
+                }
+            ],
+        )
+        monitor_state.record_alert_event(
+            conn,
+            run_id="run-1",
+            card_id=cards[0]["card_id"],
+            profile_id="jobs-fast",
+            target_id="telegram-bot-default",
+            status="sent",
+            payload={"text": "SECRET_ALERT_PAYLOAD", "decision_status": "new"},
+            delivery_attempt={
+                "target_id": "telegram-bot-default",
+                "target_type": "telegram_bot",
+                "mode": "live",
+                "ok": True,
+                "status": "sent",
+                "error": "SECRET_TOKEN_ERROR",
+            },
+        )
+
+        snapshot = monitor_state.dashboard_snapshot(conn)
+        alert_summary = snapshot["inbox"][0]["alert_summary"]
+
+        self.assertEqual(
+            alert_summary,
+            {
+                "schema_version": "review_card_alert_summary_v1",
+                "alert_count": 1,
+                "latest_status": "sent",
+                "latest_run_id": "run-1",
+                "latest_target_id": "telegram-bot-default",
+                "latest_target_type": "telegram_bot",
+                "latest_delivery_mode": "live",
+                "latest_delivery_status": "sent",
+                "latest_delivery_ok": True,
+                "latest_alerted_at": alert_summary["latest_alerted_at"],
+            },
+        )
+        surfaced = json.dumps(snapshot["inbox"][0], ensure_ascii=False)
+        self.assertNotIn("SECRET_ALERT_PAYLOAD", surfaced)
+        self.assertNotIn("SECRET_TOKEN_ERROR", surfaced)
+
+
     def test_high_new_only_alert_rule_excludes_changed_cards(self):
         now = datetime(2026, 5, 13, 12, 0, tzinfo=UTC)
         cards = [

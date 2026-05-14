@@ -32,9 +32,23 @@ export type ReviewCard = {
   duplicate_of_card_id?: string | null;
   first_run_id?: string;
   last_run_id?: string;
+  alert_summary?: ReviewCardAlertSummary;
   report_path?: string;
   dashboard_url?: string;
   updated_at: string;
+};
+
+export type ReviewCardAlertSummary = {
+  schema_version?: "review_card_alert_summary_v1";
+  alert_count: number;
+  latest_status?: string;
+  latest_run_id?: string;
+  latest_target_id?: string;
+  latest_target_type?: string;
+  latest_delivery_mode?: string;
+  latest_delivery_status?: string;
+  latest_delivery_ok?: boolean;
+  latest_alerted_at?: string;
 };
 
 export type Profile = {

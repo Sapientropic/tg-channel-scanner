@@ -154,6 +154,14 @@ describe("InboxView", () => {
         cards={[
           card({
             status: "false_positive",
+            alert_summary: {
+              schema_version: "review_card_alert_summary_v1",
+              alert_count: 1,
+              latest_delivery_mode: "live",
+              latest_delivery_ok: true,
+              latest_delivery_status: "sent",
+              latest_target_type: "telegram_bot",
+            },
             item: {
               why: "Matches the target profile.",
               decision_state: {
@@ -182,6 +190,8 @@ describe("InboxView", () => {
     expect(html).toContain("1 source ref");
     expect(html).toContain("Run");
     expect(html).toContain("Latest + report");
+    expect(html).toContain("Alert");
+    expect(html).toContain("Sent");
     expect(html).toContain("Salary Range");
     expect(html).toContain("Compensation");
   });

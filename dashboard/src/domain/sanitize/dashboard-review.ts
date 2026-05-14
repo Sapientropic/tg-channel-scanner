@@ -1,5 +1,13 @@
 import type { ReviewCard } from "../types";
-import { assignOptionalNumbers, isRecord, optionalString, optionalStringOrNull, sanitizeStringRecord, stringArray } from "./shared";
+import {
+  assignOptionalNumbers,
+  isRecord,
+  nonNegativeIntegerOrDefault,
+  optionalString,
+  optionalStringOrNull,
+  sanitizeStringRecord,
+  stringArray,
+} from "./shared";
 import { assignOptionalStrings, requiredString, sanitizeSourceRefs, stringOrDefault } from "./dashboard-common";
 
 export function sanitizeInboxCards(value: unknown): ReviewCard[] {
@@ -50,6 +58,7 @@ function sanitizeInboxCard(record: Record<string, unknown>, index: number): Revi
   const reportPath = optionalString(record.report_path);
   const dashboardUrl = optionalString(record.dashboard_url);
   const duplicateOfCardId = optionalStringOrNull(record.duplicate_of_card_id);
+  const alertSummary = sanitizeAlertSummary(record.alert_summary);
   if (firstRunId) {
     sanitized.first_run_id = firstRunId;
   }
@@ -65,7 +74,33 @@ function sanitizeInboxCard(record: Record<string, unknown>, index: number): Revi
   if (duplicateOfCardId !== undefined) {
     sanitized.duplicate_of_card_id = duplicateOfCardId;
   }
+  if (alertSummary) {
+    sanitized.alert_summary = alertSummary;
+  }
   return sanitized;
+}
+
+function sanitizeAlertSummary(value: unknown): ReviewCard["alert_summary"] {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+  const summary: NonNullable<ReviewCard["alert_summary"]> = {
+    schema_version: value.schema_version === "review_card_alert_summary_v1" ? "review_card_alert_summary_v1" : undefined,
+    alert_count: nonNegativeIntegerOrDefault(value.alert_count, 0),
+  };
+  assignOptionalStrings(summary, value, [
+    "latest_status",
+    "latest_run_id",
+    "latest_target_id",
+    "latest_target_type",
+    "latest_delivery_mode",
+    "latest_delivery_status",
+    "latest_alerted_at",
+  ]);
+  if (typeof value.latest_delivery_ok === "boolean") {
+    summary.latest_delivery_ok = value.latest_delivery_ok;
+  }
+  return summary;
 }
 
 

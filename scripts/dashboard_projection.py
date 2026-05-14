@@ -27,6 +27,9 @@ from scripts.monitor_feedback import feedback_summary, validation_summary
 from scripts.review_cards import _card_from_row, source_link_lookup_from_runs
 
 
+ALERT_SUMMARY_SCHEMA_VERSION = "review_card_alert_summary_v1"
+
+
 def _project_root() -> Path:
     facade = sys.modules.get("scripts.monitor_state")
     root = getattr(facade, "PROJECT_ROOT", PROJECT_ROOT) if facade is not None else PROJECT_ROOT
@@ -91,6 +94,56 @@ def _profile_from_row(row: sqlite3.Row) -> dict[str, Any]:
     }
 
 
+def _safe_alert_token(value: object, *, fallback: str = "unknown", max_len: int = 80) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return fallback
+    if not re.fullmatch(r"[A-Za-z0-9_.:-]+", text):
+        return fallback
+    return text[:max_len]
+
+
+def alert_summary_by_card(conn: sqlite3.Connection) -> dict[str, dict[str, Any]]:
+    """Return safe per-card alert/delivery health for the dashboard.
+
+    Alert payloads may carry rendered notification text, and delivery attempts
+    may carry redacted free-form errors. Review cards only need operational
+    proof that an alert was attempted, so keep this projection to enum-like
+    fields and counts. Do not add payload text, chat ids, tokens, or errors here
+    as a convenience.
+    """
+
+    summaries: dict[str, dict[str, Any]] = {}
+    rows = conn.execute(
+        """
+        SELECT card_id, run_id, target_id, status, delivery_attempt_json, created_at
+        FROM alert_events
+        ORDER BY created_at ASC, alert_id ASC
+        """
+    ).fetchall()
+    for row in rows:
+        card_id = str(row["card_id"] or "")
+        if not card_id:
+            continue
+        attempt = parse_json(row["delivery_attempt_json"], {})
+        if not isinstance(attempt, dict):
+            attempt = {}
+        previous = summaries.get(card_id, {})
+        summaries[card_id] = {
+            "schema_version": ALERT_SUMMARY_SCHEMA_VERSION,
+            "alert_count": int(previous.get("alert_count") or 0) + 1,
+            "latest_status": _safe_alert_token(row["status"]),
+            "latest_run_id": _safe_alert_token(row["run_id"], fallback=""),
+            "latest_target_id": _safe_alert_token(row["target_id"], fallback=""),
+            "latest_target_type": _safe_alert_token(attempt.get("target_type")),
+            "latest_delivery_mode": _safe_alert_token(attempt.get("mode")),
+            "latest_delivery_status": _safe_alert_token(attempt.get("status")),
+            "latest_delivery_ok": bool(attempt.get("ok")) if isinstance(attempt.get("ok"), bool) else False,
+            "latest_alerted_at": str(row["created_at"] or ""),
+        }
+    return summaries
+
+
 
 def dashboard_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
     internal_profiles = [
@@ -113,8 +166,18 @@ def dashboard_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
         for row in conn.execute("SELECT * FROM runs ORDER BY started_at DESC LIMIT 100").fetchall()
     ]
     source_link_lookup = source_link_lookup_from_runs(internal_runs)
+    alert_summaries = alert_summary_by_card(conn)
     inbox = [
-        _card_from_row(row, source_link_lookup)
+        {
+            **_card_from_row(row, source_link_lookup),
+            "alert_summary": alert_summaries.get(
+                str(row["card_id"] or ""),
+                {
+                    "schema_version": ALERT_SUMMARY_SCHEMA_VERSION,
+                    "alert_count": 0,
+                },
+            ),
+        }
         for row in conn.execute(
             "SELECT * FROM review_cards WHERE status = ? ORDER BY updated_at DESC LIMIT 200",
             (PENDING_STATUS,),

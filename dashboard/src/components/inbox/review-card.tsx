@@ -98,6 +98,11 @@ function ActionProofStrip({
       value: runProofLabel(card, latestRunId),
       title: runProofTitle(card, latestRunId),
     },
+    {
+      label: "Alert",
+      value: alertProofLabel(card),
+      title: alertProofTitle(card),
+    },
   ];
   const signals = (decisionState.signals ?? []).slice(0, 2);
   signals.forEach((signal) => {
@@ -182,6 +187,35 @@ function runProofTitle(card: ReviewCard, latestRunId?: string) {
   }
   const relation = latestRunId && card.last_run_id === latestRunId ? "latest dashboard run" : "earlier run";
   return `From ${relation}: ${card.last_run_id}${card.report_path ? " with report artifact" : ""}`;
+}
+
+function alertProofLabel(card: ReviewCard) {
+  const summary = card.alert_summary;
+  if (!summary?.alert_count) {
+    return "Not sent";
+  }
+  const deliveryStatus = String(summary.latest_delivery_status || summary.latest_status || "").toLowerCase();
+  if (summary.latest_delivery_ok && deliveryStatus === "sent") {
+    return "Sent";
+  }
+  if (summary.latest_delivery_ok && deliveryStatus === "dry_run") {
+    return "Dry run";
+  }
+  if (summary.latest_delivery_ok) {
+    return titleCaseLabel(deliveryStatus || "Delivered");
+  }
+  return titleCaseLabel(deliveryStatus || "Failed");
+}
+
+function alertProofTitle(card: ReviewCard) {
+  const summary = card.alert_summary;
+  if (!summary?.alert_count) {
+    return "No alert event has been recorded for this card";
+  }
+  const mode = summary.latest_delivery_mode ? `/${summary.latest_delivery_mode}` : "";
+  const target = summary.latest_target_type || summary.latest_target_id || "delivery target";
+  const when = summary.latest_alerted_at ? ` at ${formatDate(summary.latest_alerted_at)}` : "";
+  return `${summary.alert_count} alert event${summary.alert_count === 1 ? "" : "s"} via ${target}${mode}${when}`;
 }
 
 function opportunityStatusLabel(status: string) {

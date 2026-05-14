@@ -446,12 +446,25 @@ describe("dashboard state sanitizers", () => {
       extra: "ignored",
       item: { why: "Strong match", decision_state: { status: "new" } },
       source_refs: [{ channel: "jobs", id: 1 }, { channel: "bad" }, "bad"],
+      alert_summary: {
+        schema_version: "review_card_alert_summary_v1",
+        alert_count: 1,
+        latest_delivery_status: "sent",
+        latest_delivery_ok: true,
+        latest_error: "should not surface",
+      },
     };
     expect(sanitizeInboxCards([card])).toEqual([
       {
         ...validCard,
         item: { why: "Strong match", decision_state: { status: "new" } },
         source_refs: [{ channel: "jobs", id: 1 }],
+        alert_summary: {
+          schema_version: "review_card_alert_summary_v1",
+          alert_count: 1,
+          latest_delivery_status: "sent",
+          latest_delivery_ok: true,
+        },
       },
     ]);
   });
