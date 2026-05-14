@@ -37,6 +37,7 @@ try:
         delivery as delivery,
         desk_artifacts,
         desk_credentials,
+        desk_get_routes,
         desk_git,
         desk_http_security,
         desk_profiles,
@@ -68,6 +69,7 @@ except ModuleNotFoundError:
         delivery as delivery,
         desk_artifacts,
         desk_credentials,
+        desk_get_routes,
         desk_git,
         desk_http_security,
         desk_profiles,
@@ -814,47 +816,21 @@ class DashboardHandler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:  # noqa: N802
         parsed = urlparse(self.path)
         try:
-            if parsed.path == "/api/desk/health":
-                DashboardHandler._require_loopback_access(self, "Signal Desk health")
-                server_host, server_port = self.server.server_address[:2]
-                self._json(HTTPStatus.OK, desk_health(host=str(server_host), port=int(server_port)))
-                return
-            if parsed.path == "/api/desk/actions":
-                self._json(HTTPStatus.OK, desk_actions())
-                return
-            if parsed.path == "/api/desk/telegram-status":
-                DashboardHandler._require_loopback_access(self, "Telegram setup")
-                self._json(HTTPStatus.OK, {"ok": True, "telegram": telegram_status()})
-                return
-            if parsed.path == "/api/desk/sources":
-                DashboardHandler._require_loopback_access(self, "Source library")
-                self._json(HTTPStatus.OK, {"ok": True, "sources": desk_sources()})
-                return
-            if parsed.path == "/api/desk/scheduler-status":
-                DashboardHandler._require_loopback_access(self, "Scheduler status")
-                self._json(HTTPStatus.OK, {"ok": True, "scheduler": desk_scheduler_status()})
-                return
-            if parsed.path == "/api/desk/notification-token/status":
-                DashboardHandler._require_loopback_access(self, "Notification token status")
-                self._json(HTTPStatus.OK, {"ok": True, "token": desk_notification_token_status()})
-                return
-            if parsed.path == "/api/desk/bot-gateway-status":
-                DashboardHandler._require_loopback_access(self, "Bot gateway status")
-                with close_after_use(self._connect()) as conn:
-                    self._json(HTTPStatus.OK, {"ok": True, "bot_gateway": desk_bot_gateway_status(conn)})
-                return
-            if parsed.path == "/api/desk/ai-settings/status":
-                DashboardHandler._require_loopback_access(self, "AI API settings status")
-                self._json(HTTPStatus.OK, {"ok": True, "ai": desk_ai_settings_status()})
-                return
-            if parsed.path == "/api/state":
-                DashboardHandler._require_loopback_access(self, "Dashboard state")
-                with close_after_use(self._connect()) as conn:
-                    self._json(HTTPStatus.OK, dashboard_state_payload(conn))
-                return
-            if parsed.path.startswith("/artifacts/"):
-                DashboardHandler._require_loopback_access(self, "Report artifacts")
-                self._serve_artifact(parsed.path.removeprefix("/artifacts/"))
+            if desk_get_routes.handle_get_route(
+                self,
+                parsed.path,
+                require_loopback_access=DashboardHandler._require_loopback_access,
+                close_after_use=close_after_use,
+                desk_health=desk_health,
+                desk_actions=desk_actions,
+                telegram_status=telegram_status,
+                desk_sources=desk_sources,
+                desk_scheduler_status=desk_scheduler_status,
+                desk_notification_token_status=desk_notification_token_status,
+                desk_bot_gateway_status=desk_bot_gateway_status,
+                desk_ai_settings_status=desk_ai_settings_status,
+                dashboard_state_payload=dashboard_state_payload,
+            ):
                 return
             self._serve_static(parsed.path)
         except (ValueError, json.JSONDecodeError, monitor_state.MonitorStateError) as exc:
