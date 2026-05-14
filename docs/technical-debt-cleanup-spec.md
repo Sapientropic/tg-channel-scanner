@@ -853,6 +853,39 @@ changing source registry, source assistant, or source access behavior:
   body/error-mapping, source-id decoding, or import-cycle blocker. Its staging
   risk for the new module/test is handled by explicit staging before commit.
 
+### 2026-05-14 Profile POST Route Dispatch Split
+
+The dashboard server facade shed the profile POST route dispatch group without
+changing route names, response envelopes, loopback gates, or profile privacy
+guards:
+
+- `scripts/desk_profile_post_routes.py` now owns POST dispatch for profile
+  creation, profile alert-mode/enabled/runtime-settings/draft-note/matching-
+  preferences, and profile patch apply/revert/replay actions.
+- `scripts/desk_profile_routes.py` remains the payload/validation helper owner.
+  The POST route owner keeps enabled/runtime/draft/matching request-shape and
+  private-fragment validation before `_connect()` so invalid profile input does
+  not touch dashboard state.
+- `scripts/dashboard_server.py` still owns `DashboardHandler.do_POST`, JSON
+  POST integrity, body parsing, exception mapping, and downstream route
+  fallback. It injects the current dashboard-server globals into the profile
+  route owner at call time, preserving old monkeypatch paths for
+  `monitor_state`, `desk_profile_routes`, `create_profile_from_brief`, and the
+  `PROFILE_*` allow-list/length constants.
+- Regression tests now cover direct owner routing, pre-state-access rejection,
+  non-profile fallback, dashboard-server facade injection for profile creation,
+  and alert-mode success with decoded profile ids.
+- The CI explicit `py_compile` list now includes
+  `scripts/desk_profile_post_routes.py`.
+- Gates passed: targeted `ruff`, targeted `py_compile`, focused
+  profile/security tests, the full dashboard Python test directory,
+  Desk/settings/Bot contract fixtures, full Python tests, full ruff, CI-list
+  `py_compile`, and `git diff --check`.
+- Post-diff review found no P0/P1 behavior, facade, loopback, pre-state-access
+  validation, or import blocker. Its P2 alert-mode success coverage feedback was
+  addressed before final gates; staging risk for the new module/test is handled
+  by explicit staging before commit.
+
 ## Current Debt Snapshot: 2026-05-14
 
 The debt register below remains the long-form reasoning. This table is the
@@ -862,7 +895,7 @@ current triage view for what is still real after the later splits:
 | --- | --- | --- |
 | D1. WIP and branch hygiene | Cleared for the known backlog. The dirty implementation slices from the handoff are now checkpoint commits. | Keep using staged snapshot or clean worktree gates for future slices; do not use mixed-worktree gates as commit proof. |
 | D2. Contract sprawl | Materially improved. Shared fixtures now cover the high-risk Python/TypeScript contracts, but `docs/agent-cli-contract.md` is still long. | Keep the contract doc as an index and move new guarantees into fixtures first, prose second. |
-| D3. `dashboard_server.py` boundaries | Artifact, git, fixed dry-run scheduler, Bot Gateway background, credentials facade, Telegram login, delivery settings, secret settings, source registry, source access, source assistant, action execution, profile creation, server selection, HTTP security, profile route mutation helpers, state payload assembly, GET route dispatch, settings POST routes, and source POST routes are split behind the old facade. The facade is currently `1032` lines and mainly owns the remaining POST route groups, pre-state-access guards, static serving, exception mapping, and compatibility re-exports. | Only split POST route groups when they have coherent focused tests and can preserve old monkeypatch paths; avoid low-value line shaving. |
+| D3. `dashboard_server.py` boundaries | Artifact, git, fixed dry-run scheduler, Bot Gateway background, credentials facade, Telegram login, delivery settings, secret settings, source registry, source access, source assistant, action execution, profile creation, server selection, HTTP security, profile route mutation helpers, state payload assembly, GET route dispatch, settings POST routes, source POST routes, and profile POST routes are split behind the old facade. The facade is currently `932` lines and mainly owns the remaining Desk action/git/feedback/review-card POST groups, static serving, exception mapping, and compatibility re-exports. | Only split POST route groups when they have coherent focused tests and can preserve old monkeypatch paths; avoid low-value line shaving. |
 | D4. `monitor_state.py` boundaries | Mostly reduced to a `411` line facade. DB/schema, common privacy guards, review cards, alerts, feedback, profile patches, and dashboard projection are split. | Profile runtime/settings helpers are the only meaningful remaining state responsibility; split only with focused tests if that area changes. |
 | D5. `report.py` coupling | Mostly reduced. `report.py` is now `503` lines; report behavior moved into `report_*` modules, and report HTML link/source rendering now lives in a focused helper module. | Treat `report_extraction.py`, `report_html.py`, and `report_sources.py` as review units; next report work should be behavior or visual-output driven, not line-count driven. |
 | D6. Dashboard root/settings state | Actions, Profiles, Inbox, Runs, the Settings source library, and the profile runtime settings editor are now composition entrypoints. `inbox.tsx` is down to `137` lines, `runs.tsx` to `76` lines, `source-library-panel.tsx` to `204` lines, and `runtime-settings-control.tsx` to `200` lines, each backed by focused submodules. | The next UI slice should be driven by a real UX/test gap rather than more line-count cleanup. |
@@ -875,7 +908,7 @@ Large current files are still the main maintainability signal:
 
 | Area | File | Lines | Why It Matters |
 | --- | ---: | ---: | --- |
-| Python server | `scripts/dashboard_server.py` | 1032 | Remaining POST routing, static serving, route-level validation, pre-state-access guards, exception mapping, and compatibility re-exports remain in the facade after GET dispatch, state payload assembly, settings POST dispatch, and source POST dispatch moved out. |
+| Python server | `scripts/dashboard_server.py` | 932 | Remaining Desk action/git/feedback/review-card POST routing, static serving, exception mapping, and compatibility re-exports remain in the facade after GET dispatch, state payload assembly, settings POST dispatch, source POST dispatch, and profile POST dispatch moved out. |
 | Desk state payload | `scripts/desk_state_payload.py` | 54 | Focused `/api/state` payload owner for active action injection and source-access setup-check health overlay, with dependencies injected by the old dashboard_server facade. |
 | Desk GET routes | `scripts/desk_get_routes.py` | 64 | Focused GET route dispatcher for Desk health/status endpoints, `/api/state`, and artifact routing, with all mutable helpers injected by dashboard_server. |
 | Desk settings POST routes | `scripts/desk_settings_routes.py` | 74 | Focused settings route dispatcher for Telegram credentials/login, notification token, Bot identity, AI settings, and delivery target actions, with all mutable helpers injected by dashboard_server. |
@@ -892,7 +925,8 @@ Large current files are still the main maintainability signal:
 | Desk source assistant | `scripts/desk_source_assistant.py` | 451 | Focused source planning module for free-text channel extraction, local add/remove/enable/disable plans, confirmed LLM existing-source planning, and resolved-plan application. |
 | Desk server selection | `scripts/desk_server_selection.py` | 184 | Focused local server selection module for health payloads, loopback host checks, auto-port reuse, listener detection, and URL normalization. |
 | Desk HTTP security | `scripts/desk_http_security.py` | 74 | Focused request-security module for JSON POST integrity, same-port loopback Origin/Referer checks, request port extraction, and sensitive route loopback gates. |
-| Desk profile routes | `scripts/desk_profile_routes.py` | 170 | Focused route helper module for profile settings, draft/preference patches, pre-state-access validation helpers, and profile patch actions. |
+| Desk profile routes | `scripts/desk_profile_routes.py` | 142 | Focused route helper module for profile settings, draft/preference patches, pre-state-access validation helpers, and profile patch actions. |
+| Desk profile POST routes | `scripts/desk_profile_post_routes.py` | 121 | Focused profile POST dispatcher for profile create/settings/draft/preference and profile patch actions, with dashboard_server injecting facade globals and constants. |
 | Dashboard projection | `scripts/dashboard_projection.py` | 486 | Focused projection module for dashboard snapshots, run/report artifacts, delivery target projection, and profile patches after profile, opportunity, and setup projection moved out. |
 | Dashboard profile projection | `scripts/dashboard_profiles.py` | 212 | Focused profile projection module for profile labels, matching summaries, report titles, and display paths. |
 | Dashboard opportunity projection | `scripts/dashboard_opportunities.py` | 210 | Focused opportunity summary module for action-signal ranking, decision counts, replay totals, and next actions. |

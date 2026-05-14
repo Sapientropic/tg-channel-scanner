@@ -41,6 +41,7 @@ try:
         desk_git,
         desk_http_security,
         desk_profiles,
+        desk_profile_post_routes,
         desk_profile_routes,
         desk_scheduler,
         desk_server_selection,
@@ -75,6 +76,7 @@ except ModuleNotFoundError:
         desk_git,
         desk_http_security,
         desk_profiles,
+        desk_profile_post_routes,
         desk_profile_routes,
         desk_scheduler,
         desk_server_selection,
@@ -916,12 +918,6 @@ class DashboardHandler(BaseHTTPRequestHandler):
                     result = monitor_state.create_feedback_profile_patch_suggestions(conn)
                 self._json(HTTPStatus.OK, {"ok": True, "suggestions": result})
                 return
-            if parsed.path == "/api/profiles/create":
-                DashboardHandler._require_loopback_access(self, "Profile creation")
-                with close_after_use(self._connect()) as conn:
-                    result = create_profile_from_brief(conn, body)
-                self._json(HTTPStatus.OK, {"ok": True, "profile": result})
-                return
             if parsed.path.startswith("/api/review-cards/") and parsed.path.endswith("/undo"):
                 DashboardHandler._require_loopback_access(self, "Review card actions")
                 card_id = unquote(parsed.path.split("/")[3])
@@ -941,118 +937,22 @@ class DashboardHandler(BaseHTTPRequestHandler):
                     )
                 self._json(HTTPStatus.OK, {"ok": True, "card": card})
                 return
-            if parsed.path.startswith("/api/profiles/") and parsed.path.endswith("/alert-mode"):
-                DashboardHandler._require_loopback_access(self, "Profile settings")
-                with close_after_use(self._connect()) as conn:
-                    payload = desk_profile_routes.profile_alert_mode_payload(
-                        conn,
-                        path=parsed.path,
-                        body=body,
-                        monitor_state_module=monitor_state,
-                    )
-                self._json(HTTPStatus.OK, payload)
-                return
-            if parsed.path.startswith("/api/profiles/") and parsed.path.endswith("/enabled"):
-                DashboardHandler._require_loopback_access(self, "Profile settings")
-                # Keep request-shape rejection before DB access; tests rely on
-                # this to prevent unsafe profile text/fields from touching state.
-                desk_profile_routes.validate_profile_enabled_body(body, allowed_fields=PROFILE_ENABLED_ALLOWED_FIELDS)
-                with close_after_use(self._connect()) as conn:
-                    payload = desk_profile_routes.profile_enabled_payload(
-                        conn,
-                        path=parsed.path,
-                        body=body,
-                        monitor_state_module=monitor_state,
-                        allowed_fields=PROFILE_ENABLED_ALLOWED_FIELDS,
-                    )
-                self._json(HTTPStatus.OK, payload)
-                return
-            if parsed.path.startswith("/api/profiles/") and parsed.path.endswith("/runtime-settings"):
-                DashboardHandler._require_loopback_access(self, "Profile settings")
-                desk_profile_routes.validate_profile_runtime_settings_body(
-                    body,
-                    allowed_fields=PROFILE_RUNTIME_SETTINGS_ALLOWED_FIELDS,
-                )
-                with close_after_use(self._connect()) as conn:
-                    payload = desk_profile_routes.profile_runtime_settings_payload(
-                        conn,
-                        path=parsed.path,
-                        body=body,
-                        monitor_state_module=monitor_state,
-                        allowed_fields=PROFILE_RUNTIME_SETTINGS_ALLOWED_FIELDS,
-                    )
-                self._json(HTTPStatus.OK, payload)
-                return
-            if parsed.path.startswith("/api/profiles/") and parsed.path.endswith("/draft-note"):
-                DashboardHandler._require_loopback_access(self, "Profile draft note")
-                desk_profile_routes.validate_profile_draft_note_text(
-                    body,
-                    monitor_state_module=monitor_state,
-                    allowed_fields=PROFILE_DRAFT_NOTE_ALLOWED_FIELDS,
-                    max_length=PROFILE_DRAFT_NOTE_MAX_LENGTH,
-                )
-                with close_after_use(self._connect()) as conn:
-                    payload = desk_profile_routes.profile_draft_note_payload(
-                        conn,
-                        path=parsed.path,
-                        body=body,
-                        monitor_state_module=monitor_state,
-                        allowed_fields=PROFILE_DRAFT_NOTE_ALLOWED_FIELDS,
-                        max_length=PROFILE_DRAFT_NOTE_MAX_LENGTH,
-                    )
-                self._json(HTTPStatus.OK, payload)
-                return
-            if parsed.path.startswith("/api/profiles/") and parsed.path.endswith("/matching-preferences"):
-                DashboardHandler._require_loopback_access(self, "Profile matching preferences")
-                desk_profile_routes.validate_profile_matching_preferences_text(
-                    body,
-                    monitor_state_module=monitor_state,
-                    allowed_fields=PROFILE_MATCHING_PREFERENCES_ALLOWED_FIELDS,
-                    max_length=PROFILE_MATCHING_PREFERENCES_MAX_LENGTH,
-                )
-                with close_after_use(self._connect()) as conn:
-                    payload = desk_profile_routes.profile_matching_preferences_payload(
-                        conn,
-                        path=parsed.path,
-                        body=body,
-                        monitor_state_module=monitor_state,
-                        allowed_fields=PROFILE_MATCHING_PREFERENCES_ALLOWED_FIELDS,
-                        max_length=PROFILE_MATCHING_PREFERENCES_MAX_LENGTH,
-                    )
-                self._json(HTTPStatus.OK, payload)
-                return
-            if parsed.path.startswith("/api/profile-patches/") and parsed.path.endswith("/apply"):
-                DashboardHandler._require_loopback_access(self, "Profile patch actions")
-                with close_after_use(self._connect()) as conn:
-                    payload = desk_profile_routes.profile_patch_action_payload(
-                        conn,
-                        path=parsed.path,
-                        action="apply",
-                        monitor_state_module=monitor_state,
-                    )
-                self._json(HTTPStatus.OK, payload)
-                return
-            if parsed.path.startswith("/api/profile-patches/") and parsed.path.endswith("/revert"):
-                DashboardHandler._require_loopback_access(self, "Profile patch actions")
-                with close_after_use(self._connect()) as conn:
-                    payload = desk_profile_routes.profile_patch_action_payload(
-                        conn,
-                        path=parsed.path,
-                        action="revert",
-                        monitor_state_module=monitor_state,
-                    )
-                self._json(HTTPStatus.OK, payload)
-                return
-            if parsed.path.startswith("/api/profile-patches/") and parsed.path.endswith("/replay"):
-                DashboardHandler._require_loopback_access(self, "Profile patch actions")
-                with close_after_use(self._connect()) as conn:
-                    payload = desk_profile_routes.profile_patch_action_payload(
-                        conn,
-                        path=parsed.path,
-                        action="replay",
-                        monitor_state_module=monitor_state,
-                    )
-                self._json(HTTPStatus.OK, payload)
+            if desk_profile_post_routes.handle_profile_post_route(
+                self,
+                parsed.path,
+                body,
+                require_loopback_access=DashboardHandler._require_loopback_access,
+                close_after_use=close_after_use,
+                monitor_state_module=monitor_state,
+                profile_routes_module=desk_profile_routes,
+                create_profile_from_brief=create_profile_from_brief,
+                profile_enabled_allowed_fields=PROFILE_ENABLED_ALLOWED_FIELDS,
+                profile_runtime_settings_allowed_fields=PROFILE_RUNTIME_SETTINGS_ALLOWED_FIELDS,
+                profile_draft_note_allowed_fields=PROFILE_DRAFT_NOTE_ALLOWED_FIELDS,
+                profile_draft_note_max_length=PROFILE_DRAFT_NOTE_MAX_LENGTH,
+                profile_matching_preferences_allowed_fields=PROFILE_MATCHING_PREFERENCES_ALLOWED_FIELDS,
+                profile_matching_preferences_max_length=PROFILE_MATCHING_PREFERENCES_MAX_LENGTH,
+            ):
                 return
             self._json(HTTPStatus.NOT_FOUND, {"ok": False, "error": "not_found"})
         except (
