@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from scripts import monitor_state
+from scripts import dashboard_projection, monitor_state
 
 
 FIXTURE_PATH = Path(__file__).parent / "fixtures" / "contracts" / "dashboard_state_v1.projection.json"
@@ -310,7 +310,13 @@ class DashboardStateContractTests(unittest.TestCase):
         fixture = load_fixture()
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            with patch.object(monitor_state, "PROJECT_ROOT", root):
+            # This contract fixture describes an AI-ready dashboard snapshot.
+            # Keep it independent from whichever API keys happen to exist on
+            # the developer machine or the GitHub Actions runner.
+            with (
+                patch.object(monitor_state, "PROJECT_ROOT", root),
+                patch.object(dashboard_projection.report, "llm_key_available", return_value=True),
+            ):
                 snapshot = build_dashboard_snapshot(root)
 
         normalized = pick_dashboard_state(snapshot)
