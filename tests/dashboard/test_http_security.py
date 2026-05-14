@@ -2,10 +2,27 @@ import unittest
 from http import HTTPStatus
 from unittest.mock import patch
 
-from scripts import dashboard_server
+from scripts import dashboard_server, desk_http_security
 
 
 class DashboardHttpSecurityTests(unittest.TestCase):
+    def test_handler_security_helpers_delegate_to_security_module(self):
+        self.assertIsNotNone(desk_http_security.require_post_request_integrity)
+        self.assertIsNotNone(desk_http_security.require_loopback_access)
+
+        class FakeHandler:
+            headers = {"Content-Type": "application/json", "Host": "127.0.0.1:8765"}
+            client_address = ("127.0.0.1", 51000)
+            server = type("Server", (), {"server_address": ("127.0.0.1", 8765)})()
+
+        handler = FakeHandler()
+
+        self.assertEqual(dashboard_server.DashboardHandler._request_host_port(handler), 8765)
+        self.assertTrue(dashboard_server.DashboardHandler._is_loopback_same_port_url(handler, "http://localhost:8765"))
+        dashboard_server.DashboardHandler._require_post_request_integrity(handler)
+        dashboard_server.DashboardHandler._require_loopback_access(handler, "Dashboard state")
+
+
     def test_telegram_post_endpoints_require_loopback_client(self):
         class FakeHandler:
             status = None
@@ -219,6 +236,34 @@ class DashboardHttpSecurityTests(unittest.TestCase):
 
             def _read_json_body(self):
                 raise AssertionError("cross-origin POST should be rejected before body parsing")
+
+            def _json(self, status, payload):
+                self.status = status
+                self.payload = payload
+
+        with patch.object(dashboard_server, "run_desk_action") as run_mock:
+            handler = FakeHandler()
+            dashboard_server.DashboardHandler.do_POST(handler)
+
+        run_mock.assert_not_called()
+        self.assertEqual(handler.status, HTTPStatus.BAD_REQUEST)
+        self.assertIn("local dashboard", handler.payload["error"])
+
+
+    def test_post_mutations_reject_referer_with_different_loopback_port_before_action(self):
+        class FakeHandler:
+            path = "/api/desk/actions/monitor_jobs_dry_run/run"
+            client_address = ("127.0.0.1", 51000)
+            headers = {
+                "Content-Type": "application/json",
+                "Host": "127.0.0.1:8765",
+                "Referer": "http://localhost:8766/dashboard",
+            }
+            status = None
+            payload = None
+
+            def _read_json_body(self):
+                raise AssertionError("wrong-port Referer should be rejected before body parsing")
 
             def _json(self, status, payload):
                 self.status = status

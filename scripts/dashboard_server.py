@@ -38,6 +38,7 @@ try:
         desk_artifacts,
         desk_credentials,
         desk_git,
+        desk_http_security,
         desk_profiles,
         desk_scheduler,
         desk_server_selection,
@@ -66,6 +67,7 @@ except ModuleNotFoundError:
         desk_artifacts,
         desk_credentials,
         desk_git,
+        desk_http_security,
         desk_profiles,
         desk_scheduler,
         desk_server_selection,
@@ -784,53 +786,34 @@ class DashboardHandler(BaseHTTPRequestHandler):
         return payload
 
     def _require_post_request_integrity(self) -> None:
-        if not hasattr(self, "headers"):
-            return
-        content_type = str(self.headers.get("Content-Type") or "").split(";", 1)[0].strip().lower()
-        if content_type != "application/json":
-            raise ValueError("Signal Desk POST requests require application/json.")
-        for header_name in ("Origin", "Referer"):
-            header_value = str(self.headers.get(header_name) or "").strip()
-            if header_value and not DashboardHandler._is_loopback_same_port_url(self, header_value):
-                raise ValueError("Signal Desk POST requests must originate from the local dashboard.")
+        desk_http_security.require_post_request_integrity(
+            headers=getattr(self, "headers", None),
+            server=getattr(self, "server", None),
+            is_loopback_address_fn=is_loopback_address,
+        )
 
     def _is_loopback_same_port_url(self, value: str) -> bool:
-        try:
-            parsed = urlparse(value)
-            source_port = parsed.port or (80 if parsed.scheme == "http" else 443 if parsed.scheme == "https" else None)
-        except ValueError:
-            return False
-        if parsed.scheme != "http" or not parsed.hostname or not is_loopback_address(parsed.hostname):
-            return False
-        request_port = DashboardHandler._request_host_port(self)
-        return request_port is None or source_port == request_port
+        return desk_http_security.is_loopback_same_port_url(
+            value,
+            request_port=DashboardHandler._request_host_port(self),
+            is_loopback_address_fn=is_loopback_address,
+        )
 
     def _request_host_port(self) -> int | None:
-        host = str(self.headers.get("Host") or "").strip() if hasattr(self, "headers") else ""
-        if host:
-            try:
-                parsed = urlparse(f"//{host}")
-                if parsed.port is not None:
-                    return parsed.port
-            except ValueError:
-                return None
-        server = getattr(self, "server", None)
-        address = getattr(server, "server_address", None)
-        if isinstance(address, tuple) and len(address) >= 2:
-            try:
-                return int(address[1])
-            except (TypeError, ValueError):
-                return None
-        return None
+        return desk_http_security.request_host_port(
+            headers=getattr(self, "headers", None),
+            server=getattr(self, "server", None),
+        )
 
     def _connect(self):
         return monitor_state.connect(self.db_path)
 
     def _require_loopback_access(self, feature: str) -> None:
-        client_host = getattr(self, "client_address", ("127.0.0.1", 0))[0]
-        if is_loopback_address(client_host):
-            return
-        raise ValueError(f"{feature} requires opening Signal Desk from localhost.")
+        desk_http_security.require_loopback_access(
+            client_address=getattr(self, "client_address", ("127.0.0.1", 0)),
+            feature=feature,
+            is_loopback_address_fn=is_loopback_address,
+        )
 
     def do_GET(self) -> None:  # noqa: N802
         parsed = urlparse(self.path)
