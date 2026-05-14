@@ -205,6 +205,14 @@ class BotGateway:
             self.api.answer_callback_query(callback_query_id)
             self.dispatch_intent(chat_id, BotIntent(action="sources_summary"))
             return
+        if data == "profiles":
+            self.api.answer_callback_query(callback_query_id)
+            self.dispatch_intent(chat_id, BotIntent(action="profiles"))
+            return
+        if data == "settings":
+            self.api.answer_callback_query(callback_query_id)
+            self.dispatch_intent(chat_id, BotIntent(action="settings"))
+            return
         if data.startswith("scan:"):
             self.api.answer_callback_query(callback_query_id, "Starting dry scan")
             self.dispatch_intent(

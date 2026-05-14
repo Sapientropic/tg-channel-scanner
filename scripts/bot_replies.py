@@ -34,6 +34,10 @@ def main_menu_keyboard() -> dict[str, Any]:
                 {"text": "Dry scan", "callback_data": "scan:jobs-fast"},
                 {"text": "Sources", "callback_data": "sources"},
             ],
+            [
+                {"text": "Profiles", "callback_data": "profiles"},
+                {"text": "Settings", "callback_data": "settings"},
+            ],
         ]
     }
 
@@ -120,17 +124,42 @@ def status_summary(snapshot: dict[str, Any]) -> str:
 
 def latest_summary(snapshot: dict[str, Any]) -> str:
     opportunity = snapshot.get("opportunity_summary") if isinstance(snapshot.get("opportunity_summary"), dict) else {}
-    title = str(opportunity.get("title") or "Latest results")
-    detail = str(opportunity.get("detail") or opportunity.get("status") or "No latest summary yet.")
+    display_name = str(opportunity.get("display_name") or "").strip()
+    title = str(opportunity.get("title") or "").strip()
+    if not title:
+        title = f"{display_name} latest" if display_name else "Latest results"
+    next_action = opportunity.get("next_action") if isinstance(opportunity.get("next_action"), dict) else {}
+    detail = str(
+        opportunity.get("detail")
+        or next_action.get("detail")
+        or opportunity.get("status")
+        or "No latest summary yet."
+    )
     lines = [title, detail]
-    items = opportunity.get("items")
+    count_line = latest_count_line(opportunity)
+    if count_line:
+        lines.append(count_line)
+    # Current dashboard snapshots use `top_items`; older tests and local state
+    # may still pass `items`, so keep the fallback until the bot contract is
+    # explicitly versioned.
+    items = opportunity.get("top_items")
+    if not isinstance(items, list):
+        items = opportunity.get("items")
     if isinstance(items, list):
+        if items:
+            lines.append("Top signals:")
         for item in items[:5]:
             if not isinstance(item, dict):
                 continue
             label = str(item.get("title") or item.get("label") or item.get("card_title") or "Item")
-            rating = str(item.get("rating") or item.get("status") or "").strip()
-            lines.append(f"- {label}" + (f" ({rating})" if rating else ""))
+            proof = latest_item_proof(item)
+            lines.append(f"- {label}" + (f" ({proof})" if proof else ""))
+    action_label = str(next_action.get("label") or "").strip()
+    if action_label:
+        lines.append(f"Next: {action_label}")
+        command = str(next_action.get("command") or "").strip()
+        if command:
+            lines.append(f"Command: {command}")
     runs = [item for item in snapshot.get("runs") or [] if isinstance(item, dict)]
     if runs:
         artifact = runs[0].get("report_artifact") if isinstance(runs[0].get("report_artifact"), dict) else {}
@@ -139,6 +168,34 @@ def latest_summary(snapshot: dict[str, Any]) -> str:
             lines.append(f"Report: {display_path}")
     return "\n".join(lines)
 
+
+
+def latest_count_line(opportunity: dict[str, Any]) -> str:
+    keys = ("scanned_count", "matched_count", "review_card_count", "high_actionable_count", "alert_count")
+    if not any(key in opportunity for key in keys):
+        return ""
+    return (
+        f"Scanned: {safe_int(opportunity.get('scanned_count'))} | "
+        f"Matched: {safe_int(opportunity.get('matched_count'))} | "
+        f"Cards: {safe_int(opportunity.get('review_card_count'))} | "
+        f"High: {safe_int(opportunity.get('high_actionable_count'))} | "
+        f"Alerts: {safe_int(opportunity.get('alert_count'))}"
+    )
+
+
+def latest_item_proof(item: dict[str, Any]) -> str:
+    parts = [
+        str(item.get("rating") or "").strip(),
+        str(item.get("decision_status") or item.get("status") or "").strip(),
+    ]
+    return "/".join(part for part in parts if part)
+
+
+def safe_int(value: object) -> int:
+    try:
+        return int(value or 0)
+    except (TypeError, ValueError):
+        return 0
 
 
 def latest_actionable_card(snapshot: dict[str, Any]) -> dict[str, Any] | None:

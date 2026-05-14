@@ -112,6 +112,17 @@ class BotGatewayTests(unittest.TestCase):
         self.assertIn("scan", commands)
         self.assertIn("sources", commands)
         self.assertIn("latest", commands)
+        self.assertIn("profiles", commands)
+        self.assertIn("settings", commands)
+
+    def test_main_menu_exposes_all_safe_status_surfaces(self):
+        encoded = json.dumps(bot_gateway.main_menu_keyboard(), ensure_ascii=False)
+
+        self.assertIn('"callback_data": "status"', encoded)
+        self.assertIn('"callback_data": "latest"', encoded)
+        self.assertIn('"callback_data": "sources"', encoded)
+        self.assertIn('"callback_data": "profiles"', encoded)
+        self.assertIn('"callback_data": "settings"', encoded)
 
     def test_apply_identity_sets_brand_text_commands_menu_and_profile_photo(self):
         api = FakeBotApi()
@@ -278,7 +289,23 @@ class BotGatewayTests(unittest.TestCase):
         encoded = json.dumps(keyboard, ensure_ascii=False)
         self.assertIn("status", encoded)
         self.assertIn("sources", encoded)
+        self.assertIn("profiles", encoded)
+        self.assertIn("settings", encoded)
         self.assertNotIn("12345", encoded)
+
+    def test_menu_callbacks_route_profiles_and_settings(self):
+        api = FakeBotApi()
+        gateway = bot_gateway.BotGateway(api, allowed={"12345"}, use_llm=False)
+        snapshot = {"profiles": [{"profile_id": "jobs-fast", "display_name": "Jobs Fast", "enabled": True}]}
+
+        with patch.object(bot_gateway, "dashboard_snapshot", return_value=snapshot):
+            gateway.handle_callback("12345", "cb-profiles", "profiles")
+        gateway.handle_callback("12345", "cb-settings", "settings")
+
+        self.assertEqual(api.callbacks[0]["callback_query_id"], "cb-profiles")
+        self.assertEqual(api.callbacks[1]["callback_query_id"], "cb-settings")
+        self.assertIn("Jobs Fast", api.messages[0]["text"])
+        self.assertIn("Settings", api.messages[1]["text"])
 
     def test_llm_topic_inference_accepts_valid_topic_and_marks_invalid_fallback(self):
         from scripts import bot_intents
@@ -608,7 +635,24 @@ class BotGatewayTests(unittest.TestCase):
         api = FakeBotApi()
         gateway = bot_gateway.BotGateway(api, allowed={"12345"})
         snapshot = {
-            "opportunity_summary": {"title": "Latest results", "detail": "1 card ready"},
+            "opportunity_summary": {
+                "display_name": "Developer Opportunity",
+                "status": "complete",
+                "scanned_count": 120,
+                "matched_count": 9,
+                "review_card_count": 3,
+                "high_actionable_count": 1,
+                "alert_count": 1,
+                "top_items": [
+                    {
+                        "title": "Frontend role",
+                        "rating": "high",
+                        "decision_status": "new",
+                        "why": "raw Telegram body must not be needed here",
+                    }
+                ],
+                "next_action": {"label": "Review action signals", "detail": "1 card ready", "command": ""},
+            },
             "inbox": [
                 {
                     "card_id": "card_abc123",
@@ -626,9 +670,27 @@ class BotGatewayTests(unittest.TestCase):
 
         keyboard = api.messages[-1]["reply_markup"]["inline_keyboard"]
         encoded = json.dumps(keyboard)
+        message = api.messages[-1]["text"]
+        self.assertIn("Developer Opportunity latest", message)
+        self.assertIn("Scanned: 120 | Matched: 9 | Cards: 3 | High: 1 | Alerts: 1", message)
+        self.assertIn("- Frontend role (high/new)", message)
+        self.assertIn("Next: Review action signals", message)
         self.assertIn("card:applied:card_abc123", encoded)
         self.assertIn("card:saved:card_abc123", encoded)
         self.assertNotIn("12345", encoded)
+
+    def test_latest_summary_keeps_legacy_items_fallback(self):
+        message = bot_gateway.latest_summary(
+            {
+                "opportunity_summary": {
+                    "title": "Latest results",
+                    "detail": "1 legacy item ready",
+                    "items": [{"label": "Legacy card", "rating": "medium"}],
+                }
+            }
+        )
+
+        self.assertIn("- Legacy card (medium)", message)
 
     def test_gateway_state_writes_health_without_chat_ids_or_token(self):
         with tempfile.TemporaryDirectory() as tmp:

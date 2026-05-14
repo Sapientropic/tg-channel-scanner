@@ -40,6 +40,10 @@ KNOWLEDGE_REPLY_MARKUP = {
         [
             {"text": "Sources", "callback_data": "sources"},
         ],
+        [
+            {"text": "Profiles", "callback_data": "profiles"},
+            {"text": "Settings", "callback_data": "settings"},
+        ],
     ]
 }
 
