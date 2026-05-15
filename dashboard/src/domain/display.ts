@@ -88,6 +88,9 @@ export function formatGitRemoteState(status: GitUpdateStatus | null) {
     return "unchecked";
   }
   if (status.dirty) {
+    if (status.repairable_dirty) {
+      return "generated metadata";
+    }
     return `dirty ${status.dirty_count}`;
   }
   return status.status.replace(/_/g, " ");

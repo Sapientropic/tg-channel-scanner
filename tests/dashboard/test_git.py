@@ -74,6 +74,34 @@ class DashboardGitTests(unittest.TestCase):
         self.assertIn("Commit or stash", status["message"])
 
 
+    def test_update_status_allows_repairable_dashboard_lockfile_churn(self):
+        outputs = {
+            ("rev-parse", "--abbrev-ref", "HEAD"): "main\n",
+            ("rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"): "origin/main\n",
+            ("config", "--get", "remote.origin.url"): "git@github.com:Sapientropic/T-Sense.git\n",
+            ("status", "--porcelain"): " M dashboard/package-lock.json\n",
+            ("fetch", "--prune", "origin"): "",
+            ("rev-parse", "--short", "HEAD"): "abc123\n",
+            ("rev-parse", "--short", "origin/main"): "def456\n",
+            ("rev-list", "--left-right", "--count", "HEAD...origin/main"): "0\t2\n",
+        }
+
+        def fake_run(args, *, timeout=dashboard_server.GIT_TIMEOUT_SECONDS):
+            return subprocess.CompletedProcess(args, 0, stdout=outputs[tuple(args)])
+
+        with patch.object(dashboard_server, "_run_git", side_effect=fake_run):
+            status = dashboard_server._git_update_status(fetch=True)
+
+        self.assertEqual(status["status"], "behind")
+        self.assertTrue(status["dirty"])
+        self.assertTrue(status["repairable_dirty"])
+        self.assertEqual(status["repairable_dirty_count"], 1)
+        self.assertEqual(status["dirty_paths"], ["dashboard/package-lock.json"])
+        self.assertTrue(status["pull_allowed"])
+        self.assertIn("Generated Desk dependency metadata", status["message"])
+        self.assertNotIn("Commit or stash", status["message"])
+
+
     def test_git_update_status_redacts_remote_and_fetch_error(self):
         secret_token = "123456:ABCDEF_secret"
         outputs = {
@@ -151,6 +179,58 @@ class DashboardGitTests(unittest.TestCase):
         self.assertTrue(result["desk_reload_recommended"])
 
 
+    def test_pull_latest_restores_repairable_dashboard_lockfile_before_pull(self):
+        before = {
+            "dirty": True,
+            "repairable_dirty": True,
+            "dirty_paths": ["dashboard/package-lock.json"],
+            "status": "behind",
+            "pull_allowed": True,
+            "message": "2 upstream commits available. Generated Desk dependency metadata will be repaired during update.",
+        }
+        after_repair = {
+            "dirty": False,
+            "repairable_dirty": False,
+            "dirty_paths": [],
+            "status": "behind",
+            "pull_allowed": True,
+            "message": "2 upstream commits available.",
+        }
+        after_pull = {
+            "dirty": False,
+            "repairable_dirty": False,
+            "dirty_paths": [],
+            "status": "up_to_date",
+            "pull_allowed": False,
+            "message": "Local branch is up to date with upstream.",
+        }
+        statuses = [before, after_repair, after_pull]
+        calls: list[list[str]] = []
+
+        def fake_status(*, fetch):
+            self.assertEqual(fetch, len(statuses) == 3)
+            return statuses.pop(0)
+
+        def fake_run(args, *, timeout=dashboard_server.GIT_TIMEOUT_SECONDS):
+            calls.append(args)
+            return subprocess.CompletedProcess(args, 0, stdout="Fast-forward\n")
+
+        result = desk_git.git_pull_latest(
+            git_update_status_fn=fake_status,
+            run_git_fn=fake_run,
+            refresh_desk_build_fn=lambda: {
+                "desk_build_status": "success",
+                "desk_build_message": "Desk was rebuilt locally.",
+                "desk_reload_recommended": True,
+            },
+        )
+
+        self.assertEqual(calls[0], ["restore", "--worktree", "--", "dashboard/package-lock.json"])
+        self.assertEqual(calls[1], ["pull", "--ff-only"])
+        self.assertTrue(result["dirty_repair_applied"])
+        self.assertEqual(result["status"], "up_to_date")
+
+
     def test_pull_latest_returns_build_failure_after_successful_pull(self):
         before = {
             "dirty": False,
@@ -197,7 +277,7 @@ class DashboardGitTests(unittest.TestCase):
             with patch.object(dashboard_server.subprocess, "run", side_effect=fake_run):
                 result = dashboard_server._refresh_dashboard_build()
 
-        self.assertEqual(calls, [["npm", "install", "--no-audit", "--no-fund"], ["npm", "run", "build"]])
+        self.assertEqual(calls, [["npm", "ci", "--no-audit", "--no-fund"], ["npm", "run", "build"]])
         self.assertEqual(result["desk_build_status"], "success")
         self.assertTrue(result["desk_reload_recommended"])
 

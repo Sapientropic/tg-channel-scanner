@@ -86,8 +86,9 @@ preview source changes. It installs its Telegram command menu on start, and
 source changes still require an Apply confirmation.
 
 Background mode only means the local scheduler is allowed to start the gateway.
-If Settings shows the gateway as stale or not detected, turn background mode off
-and on again, or run `./tgcs bot run` manually.
+If Settings shows the gateway as stale or not detected, use
+`Restart / repair bot` from Settings > Alerts. It restarts the installed local
+background task when one exists; `./tgcs bot run` remains the manual fallback.
 
 ## Quick Start
 

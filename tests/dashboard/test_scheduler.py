@@ -259,7 +259,8 @@ class DashboardSchedulerTests(unittest.TestCase):
         self.assertIn("run --poll-timeout", trigger)
         self.assertNotIn("123456", trigger)
         self.assertNotIn("token", trigger.lower())
-        self.assertEqual(calls[1], ["schtasks.exe", "/Run", "/TN", dashboard_server.DESK_BOT_GATEWAY_TASK_NAME])
+        self.assertEqual(calls[1], ["schtasks.exe", "/End", "/TN", dashboard_server.DESK_BOT_GATEWAY_TASK_NAME])
+        self.assertEqual(calls[2], ["schtasks.exe", "/Run", "/TN", dashboard_server.DESK_BOT_GATEWAY_TASK_NAME])
         self.assertEqual(result["status"], "success")
         self.assertNotIn(str(project_root), result["detail"])
 
@@ -316,6 +317,7 @@ class DashboardSchedulerTests(unittest.TestCase):
         self.assertTrue(status["background"]["installed"])
         self.assertEqual(status["background"]["status"], "installed")
         self.assertTrue(status["background"]["can_remove"])
+        self.assertIn("Restart / repair bot", status["safe_next_action"])
         self.assertNotIn(str(root), rendered)
 
 
@@ -357,6 +359,7 @@ class DashboardSchedulerTests(unittest.TestCase):
         self.assertEqual(plist["Label"], "com.sapientropic.tsense.bot-gateway")
         self.assertEqual(plist["ProgramArguments"], [str(python), str(bot_script), "run", "--poll-timeout", "8"])
         self.assertEqual(plist["KeepAlive"], {"Crashed": True})
+        self.assertIn(["launchctl", "unload", "-w", str(plist_path)], calls)
         self.assertIn(["launchctl", "load", "-w", str(plist_path)], calls)
 
 
@@ -409,6 +412,7 @@ class DashboardSchedulerTests(unittest.TestCase):
         self.assertIn("Restart=on-failure", service_text)
         self.assertIn(["systemctl", "--user", "daemon-reload"], calls)
         self.assertIn(["systemctl", "--user", "enable", "--now", "tsense-bot-gateway.service"], calls)
+        self.assertIn(["systemctl", "--user", "restart", "tsense-bot-gateway.service"], calls)
 
 
     def test_desk_scheduler_status_uses_manual_preview_on_non_systemd_linux_without_subprocess(self):

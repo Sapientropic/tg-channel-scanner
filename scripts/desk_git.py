@@ -9,6 +9,7 @@ from urllib.parse import urlparse
 
 
 GIT_TIMEOUT_SECONDS = 25
+REPAIRABLE_UPDATE_METADATA_PATHS = {"dashboard/package-lock.json"}
 
 
 class DashboardGitError(Exception):
@@ -69,6 +70,54 @@ def repo_web_url(remote_url: str | None) -> str | None:
     return remote_url if "@" not in remote_url and ":" not in remote_url else None
 
 
+def dirty_entries_from_porcelain(dirty_output: str) -> list[tuple[str, str]]:
+    entries: list[tuple[str, str]] = []
+    for raw in dirty_output.splitlines():
+        if len(raw) < 4:
+            continue
+        status = raw[:2]
+        path = raw[3:].strip()
+        if " -> " in path:
+            path = path.split(" -> ", 1)[1].strip()
+        normalized = path.replace("\\", "/")
+        if normalized:
+            entries.append((status, normalized))
+    return entries
+
+
+def dirty_paths_from_entries(entries: list[tuple[str, str]]) -> list[str]:
+    paths: list[str] = []
+    seen: set[str] = set()
+    for _, path in entries:
+        if path in seen:
+            continue
+        seen.add(path)
+        paths.append(path)
+    return paths
+
+
+def repairable_update_metadata_paths(entries: list[tuple[str, str]]) -> list[str]:
+    if not entries:
+        return []
+    for status, path in entries:
+        # Only unstaged working-tree modifications from dependency tooling are
+        # safe to repair during the explicit update action. Staged edits,
+        # deletes, renames, and unrelated files still belong to the user.
+        if status != " M" or path not in REPAIRABLE_UPDATE_METADATA_PATHS:
+            return []
+    return dirty_paths_from_entries(entries)
+
+
+def restore_repairable_update_metadata(*, paths: list[str], run_git_fn: RunGit) -> None:
+    safe_paths = [path for path in paths if path in REPAIRABLE_UPDATE_METADATA_PATHS]
+    if not safe_paths:
+        raise DashboardGitError("Generated Desk dependency metadata could not be identified for repair.")
+    completed = run_git_fn(["restore", "--worktree", "--", *safe_paths], timeout=30)
+    if completed.returncode != 0:
+        detail = (completed.stderr or completed.stdout or "git restore failed").strip()
+        raise DashboardGitError(f"Could not repair generated Desk dependency metadata: {detail}")
+
+
 def git_update_status(
     *,
     fetch: bool,
@@ -80,8 +129,13 @@ def git_update_status(
     branch = git_value_fn(["rev-parse", "--abbrev-ref", "HEAD"]) or "unknown"
     upstream = git_value_fn(["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"])
     remote_url = git_value_fn(["config", "--get", "remote.origin.url"])
-    dirty_output = git_value_fn(["status", "--porcelain"]) or ""
-    dirty_count = len([line for line in dirty_output.splitlines() if line.strip()])
+    dirty_completed = run_git_fn(["status", "--porcelain"])
+    dirty_output = dirty_completed.stdout if dirty_completed.returncode == 0 else ""
+    dirty_entries = dirty_entries_from_porcelain(dirty_output)
+    dirty_paths = dirty_paths_from_entries(dirty_entries)
+    dirty_count = len(dirty_entries)
+    repairable_dirty_paths = repairable_update_metadata_paths(dirty_entries)
+    repairable_dirty = dirty_count > 0 and len(repairable_dirty_paths) == dirty_count
     fetch_error = ""
 
     if fetch:
@@ -112,7 +166,7 @@ def git_update_status(
         elif ahead == 0 and behind > 0:
             status = "behind"
             message = f"{behind} upstream commit(s) available."
-            pull_allowed = dirty_count == 0
+            pull_allowed = dirty_count == 0 or repairable_dirty
         elif ahead > 0 and behind == 0:
             status = "ahead"
             message = f"Local branch is ahead of upstream by {ahead} commit(s)."
@@ -121,9 +175,13 @@ def git_update_status(
             message = f"Local branch diverged: {ahead} ahead, {behind} behind."
 
     if dirty_count:
-        pull_allowed = False
-        if status == "behind":
-            message = f"{message} Commit or stash {dirty_count} local change(s) before pulling."
+        if repairable_dirty:
+            if status == "behind":
+                message = f"{message} Generated Desk dependency metadata will be repaired during update."
+        else:
+            pull_allowed = False
+            if status == "behind":
+                message = f"{message} Commit or stash {dirty_count} local change(s) before pulling."
 
     return {
         "schema_version": "git_update_status_v1",
@@ -138,6 +196,9 @@ def git_update_status(
         "behind": behind,
         "dirty": dirty_count > 0,
         "dirty_count": dirty_count,
+        "dirty_paths": dirty_paths,
+        "repairable_dirty": repairable_dirty,
+        "repairable_dirty_count": len(repairable_dirty_paths),
         "pull_allowed": pull_allowed,
         "fetched": fetch and not fetch_error,
         "checked_at": utc_now_fn(),
@@ -164,6 +225,14 @@ def git_pull_latest(
     refresh_desk_build_fn: RefreshDeskBuild | None = None,
 ) -> dict:
     before = git_update_status_fn(fetch=True)
+    dirty_repair_applied = False
+    if before["dirty"] and before.get("repairable_dirty"):
+        restore_repairable_update_metadata(
+            paths=[str(path) for path in before.get("dirty_paths", []) if str(path).strip()],
+            run_git_fn=run_git_fn,
+        )
+        dirty_repair_applied = True
+        before = git_update_status_fn(fetch=False)
     if before["dirty"]:
         raise DashboardGitError("Working tree has local changes. Commit or stash them before pulling.")
     if before["status"] != "behind" or not before["pull_allowed"]:
@@ -173,6 +242,8 @@ def git_pull_latest(
         raise DashboardGitError((completed.stderr or completed.stdout or "git pull --ff-only failed").strip())
     after = git_update_status_fn(fetch=False)
     after["pull_output"] = (completed.stdout or "").strip()
+    if dirty_repair_applied:
+        after["dirty_repair_applied"] = True
     if refresh_desk_build_fn is None:
         after.update(
             _desk_build_result(

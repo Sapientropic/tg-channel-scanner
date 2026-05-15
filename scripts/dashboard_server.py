@@ -354,7 +354,7 @@ def _dashboard_build_failure(phase: str, completed: subprocess.CompletedProcess[
 
 
 def _refresh_dashboard_build() -> dict:
-    install = _run_dashboard_npm(["install", "--no-audit", "--no-fund"])
+    install = _run_dashboard_npm(["ci", "--no-audit", "--no-fund"])
     if install.returncode != 0:
         raise _dashboard_build_failure("Desk dependency update", install)
     build = _run_dashboard_npm(["run", "build"])
@@ -992,7 +992,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 {
                     "ok": False,
                     "error": "dashboard_not_built",
-                    "next_step": "Run npm install and npm run build in dashboard/.",
+                    "next_step": "Run npm ci and npm run build in dashboard/.",
                 },
             )
             return

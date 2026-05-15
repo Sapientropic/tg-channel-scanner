@@ -85,8 +85,10 @@ process is offline.
 Background mode and gateway liveness are separate checks. A login task can be
 installed while the gateway is still `not_detected` or `stale`; Signal Desk
 marks the gateway stale when its local heartbeat is older than 120 seconds. In
-that state, refresh after login, turn background mode off and on again from
-Settings, or run `./tgcs bot run` manually.
+that state, use `Restart / repair bot` from Settings > Alerts. The repair
+action restarts the installed Windows task, reloads the macOS LaunchAgent, or
+restarts the Linux `systemd --user` service. If no scheduler backend is
+available, run `./tgcs bot run` manually.
 
 ## Signal Desk Restart and Ports
 

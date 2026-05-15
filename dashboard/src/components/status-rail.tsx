@@ -21,14 +21,16 @@ function updateHeadline(status: GitUpdateStatus | null) {
   if (status.behind > 0 && status.ahead > 0) {
     return { tone: "blocked", title: "Manual update needed", detail: "Local and remote changes both exist." };
   }
-  if (status.behind > 0 && status.dirty) {
+  if (status.behind > 0 && status.dirty && !status.repairable_dirty) {
     return { tone: "blocked", title: "Save local edits first", detail: countLabel(status.dirty_count, "edit is", "edits are") + " in this workspace." };
   }
   if (status.behind > 0) {
     return {
       tone: "ready",
       title: "New version ready",
-      detail: countLabel(status.behind, "app update", "app updates") + " available.",
+      detail: status.repairable_dirty
+        ? "Generated Desk metadata will be repaired during update."
+        : countLabel(status.behind, "app update", "app updates") + " available.",
     };
   }
   if (status.ahead > 0) {
@@ -46,6 +48,9 @@ function localEditsLabel(status: GitUpdateStatus | null) {
     return "Unknown";
   }
   if (status.dirty) {
+    if (status.repairable_dirty) {
+      return "Generated Desk metadata";
+    }
     return countLabel(status.dirty_count, "edit", "edits");
   }
   if (status.ahead > 0) {
@@ -59,6 +64,7 @@ function repositoryMessage(status: GitUpdateStatus | null) {
   if (status.desk_build_status === "success") return "Update installed. Desk will refresh this page.";
   if (status.desk_build_status === "failed") return status.desk_build_message || "Update downloaded, but Desk could not rebuild.";
   if (status.status === "fetch_failed") return "Update source could not be reached.";
+  if (status.dirty && status.behind > 0 && status.repairable_dirty) return "Update app will repair generated Desk metadata, then install the new version.";
   if (status.dirty && status.behind > 0) return "Save or discard local edits before updating the app.";
   if (status.behind > 0) return "Use Update app to install and refresh Desk.";
   return "Automatic checks stay on while this page is open.";

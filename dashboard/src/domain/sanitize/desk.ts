@@ -54,6 +54,10 @@ export function sanitizeGitUpdateStatus(value: unknown): GitUpdateStatus | null 
     behind: nonNegativeIntegerOrDefault(value.behind, 0),
     dirty: typeof value.dirty === "boolean" ? value.dirty : false,
     dirty_count: nonNegativeIntegerOrDefault(value.dirty_count, 0),
+    dirty_paths: stringArray(value.dirty_paths).flatMap((path) => sanitizeLocalRelativePath(path) ?? []),
+    repairable_dirty: value.repairable_dirty === true,
+    repairable_dirty_count: nonNegativeIntegerOrDefault(value.repairable_dirty_count, 0),
+    dirty_repair_applied: value.dirty_repair_applied === true,
     pull_allowed: typeof value.pull_allowed === "boolean" ? value.pull_allowed : false,
     checked_at: optionalString(value.checked_at) ?? "",
   };

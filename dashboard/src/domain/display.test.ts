@@ -114,6 +114,15 @@ describe("dashboard display helpers", () => {
         dirty_count: 2,
       }),
     ).toBe("dirty 2");
+    expect(
+      formatGitRemoteState({
+        ...gitStatus,
+        schema_version: "git_update_status_v1",
+        dirty: true,
+        dirty_count: 1,
+        repairable_dirty: true,
+      }),
+    ).toBe("generated metadata");
   });
 
   it("formats opportunity and run diagnostic display state", () => {

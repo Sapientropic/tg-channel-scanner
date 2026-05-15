@@ -69,8 +69,11 @@ export function useGitActions({ setNotice }: { setNotice: (notice: Notice) => vo
     if (!gitStatus?.pull_allowed) {
       return;
     }
+    const repairNote = gitStatus.repairable_dirty
+      ? " Signal Desk will repair generated dependency metadata first; real local edits still block updates."
+      : "";
     const confirmed = window.confirm(
-      "Update Signal Desk now? This downloads the app update, rebuilds Desk locally, then refreshes this page. Local edits must be saved first.",
+      `Update Signal Desk now? This downloads the app update, rebuilds Desk locally, then refreshes this page.${repairNote} Local edits must be saved first.`,
     );
     if (!confirmed) {
       return;

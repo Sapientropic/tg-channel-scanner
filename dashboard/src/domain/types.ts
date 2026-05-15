@@ -639,6 +639,10 @@ export type GitUpdateStatus = {
   behind: number;
   dirty: boolean;
   dirty_count: number;
+  dirty_paths?: string[];
+  repairable_dirty?: boolean;
+  repairable_dirty_count?: number;
+  dirty_repair_applied?: boolean;
   pull_allowed: boolean;
   checked_at: string;
   fetched?: boolean;

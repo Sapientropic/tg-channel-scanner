@@ -90,6 +90,8 @@ class MonitorConfigHelperTests(unittest.TestCase):
         self.assertIn("ton", jobs["prefilter_keywords"])
         self.assertIn("外包", jobs["prefilter_keywords"])
         self.assertIn("预算", jobs["prefilter_keywords"])
+        self.assertNotIn("backend", jobs["prefilter_keywords"])
+        self.assertNotIn("fullstack", jobs["prefilter_keywords"])
         self.assertNotIn("简历", jobs["prefilter_keywords"])
         self.assertNotIn("接活", jobs["prefilter_keywords"])
         self.assertEqual(jobs["semantic_max_messages"], 40)

@@ -371,7 +371,7 @@ class MonitorStateProjectionTests(unittest.TestCase):
         self.assertNotIn("manifest", run)
         self.assertEqual(run["review_card_count"], 4)
         self.assertEqual(run["alert_count"], 2)
-        self.assertEqual(report["display_name"], "Developer Opportunity Signal Report")
+        self.assertEqual(report["display_name"], "Frontend Opportunity Signal Report")
         self.assertEqual(report["display_path"], "Reports/jobs-fast-signal-report-2026-05-09-0300.html")
         self.assertEqual(report["format"], "HTML")
         self.assertNotIn("sha256", report)

@@ -134,7 +134,7 @@ def desk_bot_gateway_status(conn, *, now: datetime | None = None) -> dict:
     elif gateway_status == "running":
         safe_next_action = "Bot Gateway is running."
     elif bool(background.get("installed")):
-        safe_next_action = "Refresh after login, or restart background mode from Settings."
+        safe_next_action = "Use Restart / repair bot in Settings to restart the background gateway."
     else:
         safe_next_action = "Run tgcs bot run locally, or turn on background mode from Settings."
 
@@ -434,6 +434,10 @@ def run_bot_gateway_autostart_action(action_id: str, *, body: dict | None = None
         if completed.returncode == 0:
             if action_id == "bot_gateway_install_autostart":
                 try:
+                    _run_scheduler_command(["schtasks.exe", "/End", "/TN", DESK_BOT_GATEWAY_TASK_NAME])
+                except (OSError, subprocess.TimeoutExpired):
+                    pass
+                try:
                     start_result = _run_scheduler_command(["schtasks.exe", "/Run", "/TN", DESK_BOT_GATEWAY_TASK_NAME])
                 except (OSError, subprocess.TimeoutExpired):
                     start_result = subprocess.CompletedProcess(["schtasks.exe"], 1, stdout="", stderr="could not start task")
@@ -469,9 +473,13 @@ def run_bot_gateway_autostart_action(action_id: str, *, body: dict | None = None
         plist_path = bot_gateway_launchd_plist_path()
         if action_id == "bot_gateway_install_autostart":
             write_bot_gateway_launchd_plist(plist_path, python_entry)
+            try:
+                _run_scheduler_command(["launchctl", "unload", "-w", str(plist_path)])
+            except (OSError, subprocess.TimeoutExpired):
+                pass
             args = ["launchctl", "load", "-w", str(plist_path)]
             success_title = "Bot background mode is on"
-            success_detail = "launchd will start the local Bot Gateway at login."
+            success_detail = "launchd will start or restart the local Bot Gateway at login."
             success_next = "You can close Signal Desk; bot actions resume when this user logs in."
         else:
             args = ["launchctl", "unload", "-w", str(plist_path)]
@@ -537,6 +545,21 @@ def run_bot_gateway_autostart_action(action_id: str, *, body: dict | None = None
             pass
 
     if completed.returncode == 0:
+        if backend == "linux_systemd_user" and action_id == "bot_gateway_install_autostart":
+            try:
+                restart_result = _run_scheduler_command(["systemctl", "--user", "restart", f"{DESK_BOT_GATEWAY_SYSTEMD_NAME}.service"])
+            except (OSError, subprocess.TimeoutExpired):
+                restart_result = subprocess.CompletedProcess(["systemctl"], 1, stdout="", stderr="systemd restart failed")
+            if restart_result.returncode != 0:
+                failure = _desk_safe_result_text(restart_result.stderr, restart_result.stdout) or "The service was enabled, but could not restart."
+                return bot_gateway_action_result(
+                    action_id,
+                    status="failed",
+                    title="Bot background mode installed but not restarted",
+                    detail=failure,
+                    next_action="Check systemd --user status, then retry Restart / repair bot from Settings.",
+                    exit_code=restart_result.returncode,
+                )
         return bot_gateway_action_result(
             action_id,
             status="success",

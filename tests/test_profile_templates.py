@@ -50,6 +50,8 @@ class ProfileTemplateTests(unittest.TestCase):
         self.assertIn("budget", normalized_text)
         self.assertIn("candidate cv", normalized_text)
         self.assertIn("not an employer/recruiter/client opening", normalized_text)
+        self.assertIn("frontend-focused", normalized_text)
+        self.assertIn("backend-only", normalized_text)
         self.assertIn("at most 8 items", normalized_text)
         self.assertIn("do not copy full job descriptions", normalized_text)
 
