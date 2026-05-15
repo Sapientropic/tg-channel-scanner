@@ -1,0 +1,41 @@
+# Keep the project graph focused on source, docs, tests, and stable config.
+# Runtime state, generated review artifacts, media renders, and local env files
+# make the graph noisy and can contain private operational context.
+graphify-out/
+.venv/
+.pytest_cache/
+.ruff_cache/
+.tgcs/
+output/
+dist/
+build/
+dashboard/dist/
+tg_channel_scanner.egg-info/
+docs/demo/
+docs/report-design-context.md
+docs/v0.5-alpha-alert-review-inbox.md
+docs/quality-iteration.md
+docs/quality-task-state.md
+docs/quality/*-iteration-log.md
+docs/graphify-maintenance/
+docs/archive/quality-iteration-*.md
+docs/internal/
+docs/pixel-ui-library-evaluation-report.md
+docs/signal-desk-ux-redesign.md
+docs/research/
+*.log
+*.mp4
+*.mov
+*.webm
+*.mkv
+*.avi
+*.m4v
+*.mp3
+*.wav
+*.m4a
+*.ogg
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.webp

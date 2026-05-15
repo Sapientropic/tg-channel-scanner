@@ -22,15 +22,15 @@ and contract tests that prevent silent product regressions.
 
 ## Current Baseline
 
-Observed from the 2026-05-14 local workspace:
+Observed from the 2026-05-15 local workspace:
 
-- Current branch: `sapientropic/quality-iteration-spec-20260514`.
+- Current branch: `master`; the worktree was clean before this doc/graph cleanup
+  slice and local `HEAD` was one commit ahead of `origin/master`.
 - The dirty checkpoint backlog from the documentation handoff has been split,
   verified, and committed through packaging, report, scan, monitor, Bot Gateway,
   dashboard server tests, and dashboard settings UI slices.
-- The worktree was clean after the implementation checkpoint commits. Future
-  cleanup should start from a fresh focused slice instead of treating the old
-  dirty handoff as still active.
+- Future cleanup should start from a fresh focused slice instead of treating the
+  old dirty handoff as still active.
 - Each implementation checkpoint used focused mixed-tree verification first and
   staged snapshot verification before commit. Docker packaging smoke was later
   verified locally after Docker Desktop became reachable.
@@ -64,33 +64,26 @@ Guardrails for future splits and refactors:
   feedback changes a later scan, matters more than the polish of the generated
   digest.
 
-## Current Product Debt From Issue #7
+## Recently Resolved Product Debt From Issue #7
 
-GitHub issue #7 and its 2026-05-14 comments are the current authority for the
-personal developer-opportunity monitor friction slice. The actionable debt is:
+GitHub issue #7 was closed on 2026-05-15 after commit `c94de3e` resolved the
+personal developer-opportunity monitor friction slice. Its 2026-05-14 comments
+remain useful evidence, but they are no longer the current open debt register.
 
-- Profile binding: manual Desk scans, schedule previews, and installed dry-run
-  scheduler commands should follow the user's current `profiles/desk/*` profile
-  before falling back to the packaged `jobs-fast` template. The OS task name
-  stays stable so reinstalling updates the existing task instead of creating
-  per-profile orphan tasks.
-- Report vs Review: report-only output must not be mistaken for Desk inbox
-  ingestion. The artifact contract lives in `docs/output-artifacts.md`; use
-  `tgcs monitor run --scan-input ...` when historical/manual scans should
-  upsert Review cards.
-- Evidence paths: Review cards should only expose dashboard-openable report
-  artifacts, so original-source preview does not depend on private absolute
-  paths or stale top-level report links.
-- Non-vacancy filtering: developer-opportunity matching must gate on real
-  employer/recruiter/client openings before scoring stack fit. Candidate CV,
-  resume, portfolio, self-promotion, and "looking for work" posts are not high
-  or medium opportunities.
-- Bot Gateway recovery: background installation only means the local scheduler
-  can start the gateway. A stale or not-detected gateway still needs Settings
-  recovery or a manual `tgcs bot run`.
-- Signal Desk restart: the launcher should reuse a compatible running Desk,
-  skip unrelated local services in auto-port mode, and keep explicit `--port`
-  strict.
+Resolved behaviors to preserve:
+
+- The default jobs workflow is frontend-focused and treats backend-only,
+  generic full-stack, CV/resume, and self-promotion posts as non-vacancy or
+  low-signal boundary cases.
+- Manual/full report output is explicitly documented as report-only unless it
+  goes through the monitor card-ingestion path.
+- Dashboard-openable report artifact paths and canonical source evidence are
+  covered by existing review-card/report-path behavior and tests.
+- Settings > Alerts exposes a Bot Gateway repair action that can restart or
+  kick an installed stale background gateway.
+
+Future work should open a new issue or a new spec section only for a verified
+regression or a new product slice; do not keep treating all of #7 as open work.
 
 ## Progress Update: 2026-05-13 Hardening Iteration
 
@@ -631,16 +624,13 @@ boundaries without changing API payload shape or source-management behavior:
 
 ## Progress Update: 2026-05-14 Runtime Settings UI Split
 
-The Dashboard Profiles runtime settings editor shed its fieldset/action
-rendering boundary while keeping state, save-state calculation, reset, and
-submit behavior in the control component:
+The Dashboard Profiles runtime settings editor was later folded into the
+focused profile row boundary while preserving the pure save-state model:
 
-- `dashboard/src/components/profiles/runtime-settings-sections.tsx` now owns
-  scan scope fields, work-hours fields, alert cadence fields, matching-rule
-  text area, and action buttons.
-- `dashboard/src/components/profiles/runtime-settings-control.tsx` remains the
-  state owner for current-profile values, draft values, `runtimeSettingsSaveState`,
-  editor open/close, preference draft eligibility, and reset-to-current logic.
+- `dashboard/src/components/profiles/profile-row.tsx` owns rendered profile
+  monitoring controls, notification details, and runtime-setting form state.
+- `dashboard/src/components/profiles/runtime-settings-model.ts` owns the pure
+  runtime-settings helpers, including `runtimeSettingsSaveState`.
 - No route/API or profile model shape changed. The existing
   `runtimeSettingsSaveState` public re-export remains unchanged.
 - Focused and full dashboard gates passed: `cd dashboard; npm test -- --run
@@ -1002,67 +992,106 @@ profile run pipeline:
   export, delivery-test, or default-TOML blocker. Its P2 compatibility feedback
   about old `monitor_runner` module globals was addressed before final gates.
 
-## Current Debt Snapshot: 2026-05-14
+## Current Debt Snapshot: 2026-05-15
 
 The debt register below remains the long-form reasoning. This table is the
 current triage view for what is still real after the later splits:
 
 | Debt | Current Status | Next Useful Slice |
 | --- | --- | --- |
-| D1. WIP and branch hygiene | Cleared for the known backlog. The dirty implementation slices from the handoff are now checkpoint commits. | Keep using staged snapshot or clean worktree gates for future slices; do not use mixed-worktree gates as commit proof. |
+| D1. WIP and branch hygiene | Cleared for the known backlog. The current branch is `master`, clean before this doc cleanup, and one commit ahead of `origin/master`. | Keep using staged snapshot or clean worktree gates for future slices; do not use mixed-worktree gates as commit proof. |
 | D2. Contract sprawl | Materially improved. Shared fixtures now cover the high-risk Python/TypeScript contracts, but `docs/agent-cli-contract.md` is still long. | Keep the contract doc as an index and move new guarantees into fixtures first, prose second. |
-| D3. `dashboard_server.py` boundaries | Artifact, git, fixed-task/current-profile scheduler, Bot Gateway background, credentials facade, Telegram login, delivery settings, secret settings, source registry, source access, source assistant, action execution, profile creation, server selection, HTTP security, profile route mutation helpers, state payload assembly, GET route dispatch, settings POST routes, source POST routes, profile POST routes, and operation POST routes are split behind the old facade. The facade is currently `896` lines and mainly owns HTTP orchestration, static serving, exception mapping, and compatibility re-exports. | Further backend work should target behavior or owner boundaries outside pure route dispatch; avoid low-value line shaving. |
-| D4. `monitor_state.py` boundaries | Mostly reduced to a `411` line facade. DB/schema, common privacy guards, review cards, alerts, feedback, profile patches, and dashboard projection are split. | Profile runtime/settings helpers are the only meaningful remaining state responsibility; split only with focused tests if that area changes. |
-| D5. `report.py` coupling | Mostly reduced. `report.py` is now `503` lines; report behavior moved into `report_*` modules, and report HTML link/source rendering now lives in a focused helper module. | Treat `report_extraction.py`, `report_html.py`, and `report_sources.py` as review units; next report work should be behavior or visual-output driven, not line-count driven. |
-| D6. Dashboard root/settings state | Actions, Profiles, Inbox, Runs, the Settings source library, and the profile runtime settings editor are now composition entrypoints. `inbox.tsx` is down to `137` lines, `runs.tsx` to `76` lines, `source-library-panel.tsx` to `204` lines, and `runtime-settings-control.tsx` to `200` lines, each backed by focused submodules. | The next UI slice should be driven by a real UX/test gap rather than more line-count cleanup. |
+| D3. `dashboard_server.py` boundaries | Artifact, git, scheduler, Bot Gateway background, credentials, source, action, profile, state payload, GET, settings/source/profile/operation POST route boundaries are split behind the old facade. The facade is currently about `1122` lines and Graphify still sees `DashboardHandler` plus `_sync_desk_scheduler_context()` as cross-community bridges. | Create a compatibility-owner ledger before removing wrappers. Further backend work should target a named route, injection point, or facade re-export; avoid low-value line shaving. |
+| D4. `monitor_state.py` boundaries | Mostly reduced to a `505` line facade. DB/schema, privacy guards, review cards, alerts, feedback, profile patches, and dashboard projection are split, while `tests/monitor_state/test_projection.py` remains a `1020` line behavior lock. | Treat monitor-state projection as a protected contract. Split tests only with a clear owner boundary; do not move projection behavior just to shrink a file. |
+| D5. Report pipeline coupling | `report.py` is about `538` lines, but the larger review units are `report_extraction.py` at about `862` lines and `report_sources.py` at about `665` lines. MiniMax/provider routing and semantic batching are real product surfaces. | Treat report extraction, source evidence, and HTML output as separate fixture-backed slices. Do not add another scoring or attribution layer before the current contracts demand it. |
+| D6. Dashboard profile/evidence state | Actions, Profiles, Inbox, Runs, the Settings source library, and profile runtime settings are composition entrypoints. Current UI hotspots include `dashboard/src/components/inbox/review-card.tsx` at about `907` lines, `profile-row.tsx` at about `449` lines, and Graphify's profile query path through `profile-matching-panel.tsx` and `runtime-settings-model.ts`. | The next UI slice should be driven by a real UX/test gap: review-card evidence/source-preview behavior first, or profile matching/runtime-settings behavior when profile learning changes. |
 | D7. Runtime sanitizers | Dashboard sanitizer is now a `14` line facade. Dashboard state sanitizers are split by product area and Desk-owned helpers re-export `sanitize/desk.ts`. The former `1368` line legacy `sanitize.test.ts` is split into focused dashboard-state, Desk action/feedback, Desk bot/settings, Desk source/delivery, and entrypoint-compat files. | Keep these tests close to existing sanitizer modules; avoid adding a second sanitizer implementation. |
-| D8. Test concentration | Improved. Report, dashboard server, monitor-state, monitor CLI/runtime, tgcs CLI, and dashboard sanitizer tests now live in focused files/directories. Monitor auxiliary CLI command tests now live separately from the profile-run pipeline tests. | Keep focused directories; use focused helper tests when shrinking large backend modules, and consider splitting the remaining large focused files only when their behavior boundaries are clear. |
+| D8. Test concentration | Improved, but the rebuilt graph makes the remaining test-helper hubs visible. `patch`, `load_tgcs_module()`, `BotGatewayTests`, credential/scheduler tests, and `MonitorStateProjectionTests` are high-degree graph nodes; most are test scaffolding, not architecture abstractions. | Keep focused directories. When touching affected owners, reduce helper centrality by moving setup into owner-specific fixtures; do not run a broad test refactor without behavior work. |
 | D9. Packaging metadata | Mostly complete for local Python packaging. Build, staged wheel install, `pipx`, `uvx`, and Docker build/demo/doctor smokes passed. | Keep `signal-desk` as a source-checkout launcher until resources are package-safe; re-run Docker when Dockerfile/package-data/dependency metadata changes. |
-| D10. Documentation ownership | Current docs are aligned: this file is the debt authority, `docs/testing.md` is command authority, and quality logs are historical evidence. | Update this table and `docs/quality/task-state.md` whenever a new cleanup slice changes current status. |
+| D10. Documentation and graph ownership | This file is the debt authority, `docs/testing.md` is command authority, `docs/quality/task-state.md` is compact handoff, dated quality logs are evidence, local ignored `docs/graphify-maintenance/` records are the audit trail for automated doc-debt/Graphify sweeps, `.graphifyignore` is the graph corpus boundary, and `graphify-out/README.md` is the local generated-artifact guide when graph output exists. | Keep graph output advisory. Update this table and `docs/quality/task-state.md` whenever a cleanup slice changes current status; rebuild Graphify after meaningful doc/source boundary changes; keep recurring sweep logs reviewable but outside Git and outside the graph corpus. |
 
-Large current files are still the main maintainability signal:
+Large current files are still a useful signal, but exact line counts drift too
+quickly to be the authority. Treat this list as a dated triage map from the
+2026-05-15 workspace, not as a contract:
 
-| Area | File | Lines | Why It Matters |
-| --- | ---: | ---: | --- |
-| Python server | `scripts/dashboard_server.py` | 896 | HTTP handler orchestration, static serving, exception mapping, and compatibility re-exports remain in the facade after GET dispatch, state payload assembly, settings/source/profile/operation POST dispatch, and most helper boundaries moved out. |
-| Desk state payload | `scripts/desk_state_payload.py` | 54 | Focused `/api/state` payload owner for active action injection and source-access setup-check health overlay, with dependencies injected by the old dashboard_server facade. |
-| Desk GET routes | `scripts/desk_get_routes.py` | 64 | Focused GET route dispatcher for Desk health/status endpoints, `/api/state`, and artifact routing, with all mutable helpers injected by dashboard_server. |
-| Desk settings POST routes | `scripts/desk_settings_routes.py` | 74 | Focused settings route dispatcher for Telegram credentials/login, notification token, Bot identity, AI settings, and delivery target actions, with all mutable helpers injected by dashboard_server. |
-| Desk source POST routes | `scripts/desk_source_routes.py` | 52 | Focused source route dispatcher for source import, source assistant, source enable/topic/remove actions, with all mutable helpers injected by dashboard_server. |
-| Desk operation POST routes | `scripts/desk_operation_routes.py` | 73 | Focused dispatcher for local operation routes: Desk action run, Git update/pull, feedback export/clear/suggestions, and review-card action/undo. |
-| Desk scan scheduler | `scripts/desk_scheduler.py` | 630 | Fixed dry-run auto-scan scheduler and compatibility wrappers remain here after Bot Gateway background/autostart moved out. |
-| Desk Bot Gateway background | `scripts/desk_bot_gateway_background.py` | 556 | Focused Bot Gateway background module for local-first status, token-gated autostart, fixed launcher argv, and launchd/systemd/Windows login task handling. |
-| Desk credentials facade | `scripts/desk_credentials.py` | 299 | Compatibility facade over Telegram login, delivery settings, and local secret settings; old helper names and patch hooks remain for `dashboard_server.py` and tests. |
-| Desk Telegram login | `scripts/desk_telegram_login.py` | 328 | Focused Telegram app credential/login/session module for config loading, status projection, login-code state, Telethon error mapping, send/verify/cancel flows, and current user chat-id lookup. |
-| Desk delivery settings | `scripts/desk_delivery_settings.py` | 235 | Focused delivery target module for default target validation, sanitized target projection, dry-run notification tests, Bot update chat detection, Telegram session fallback bridging, and no-secret detection payloads. |
-| Desk secret settings | `scripts/desk_secret_settings.py` | 276 | Focused local secret-settings module for notification bot token status/update, AI provider key status/update, and provider env hydration without echoing secrets. |
-| Desk sources facade | `scripts/desk_sources.py` | 304 | Compatibility facade and assistant/access glue after source registry, source assistant, and source access moved out behind old helper names. |
-| Desk source registry | `scripts/desk_source_registry.py` | 243 | Focused registry/list/import/mutation module for saved-source listing, pasted and starter imports, source enable/topic/remove mutations, validation, limits, and sanitized payload projection. |
-| Desk source access | `scripts/desk_source_access.py` | 489 | Focused access module for cached source-health files, source-access summaries, Telethon bounded probes, quiet-source semantics, and cached-health repair actions. |
-| Desk source assistant | `scripts/desk_source_assistant.py` | 451 | Focused source planning module for free-text channel extraction, local add/remove/enable/disable plans, confirmed LLM existing-source planning, and resolved-plan application. |
-| Desk server selection | `scripts/desk_server_selection.py` | 184 | Focused local server selection module for health payloads, loopback host checks, auto-port reuse, listener detection, and URL normalization. |
-| Desk HTTP security | `scripts/desk_http_security.py` | 74 | Focused request-security module for JSON POST integrity, same-port loopback Origin/Referer checks, request port extraction, and sensitive route loopback gates. |
-| Desk profile routes | `scripts/desk_profile_routes.py` | 142 | Focused route helper module for profile settings, draft/preference patches, pre-state-access validation helpers, and profile patch actions. |
-| Desk profile POST routes | `scripts/desk_profile_post_routes.py` | 121 | Focused profile POST dispatcher for profile create/settings/draft/preference and profile patch actions, with dashboard_server injecting facade globals and constants. |
-| Dashboard projection | `scripts/dashboard_projection.py` | 486 | Focused projection module for dashboard snapshots, run/report artifacts, delivery target projection, and profile patches after profile, opportunity, and setup projection moved out. |
-| Dashboard profile projection | `scripts/dashboard_profiles.py` | 212 | Focused profile projection module for profile labels, matching summaries, report titles, and display paths. |
-| Dashboard opportunity projection | `scripts/dashboard_opportunities.py` | 210 | Focused opportunity summary module for action-signal ranking, decision counts, replay totals, and next actions. |
-| Dashboard setup projection | `scripts/dashboard_setup.py` | 199 | Focused setup-readiness module for first-run, source-access, profile, and delivery guidance. |
-| Python monitor runner | `scripts/monitor_runner.py` | 480 | Repeated-run orchestration is now focused on validation, DB writeback, review cards, delivery, and CLI routing after delivery, command execution, manifest construction, and auxiliary CLI commands moved out. |
-| Monitor auxiliary CLI commands | `scripts/monitor_cli_commands.py` | 166 | Focused owner for monitor `init-config`, `feedback-export`, and `delivery-test telegram-bot`, with compatibility wrappers in `monitor_runner.py`. |
-| Monitor command execution | `scripts/monitor_execution.py` | 412 | Focused command-execution module for scan/report command construction, prefilter branching, and latest-manifest pointer writes. |
-| Monitor manifest projection | `scripts/monitor_manifest.py` | 186 | Focused run-manifest/result projection module for stable `run_manifest_v1` and `monitor_run_result_v1` payloads. |
-| Monitor prefilter/manifest tests | `tests/monitor/test_prefilter_and_manifest.py` | 758 | Largest monitor test file after the split; scoped to expensive run/manifest paths rather than all monitor behavior. |
-| Tgcs CLI init tests | `tests/tgcs_cli/test_run_demo_init.py` | 349 | Largest CLI test file after the split; scoped to run/demo/init/quickstart/login/doctor behavior. |
-| Report rendering | `scripts/report_html.py` | 546 | HTML report card, feedback, diagnostics, and template assembly remain here after safe link/inline-source helpers moved out. |
-| Report HTML links | `scripts/report_html_links.py` | 198 | Focused helper module for safe report links, Telegram handle links, Telegram Markdown snippets, URL labels, and inline source/contact rendering. |
-| Settings source library panel | `dashboard/src/components/settings/source-library-panel.tsx` | 204 | Saved-source library composition now owns summary/search/list orchestration after model helpers and row editor moved out. |
-| Settings source library row | `dashboard/src/components/settings/source-library-row.tsx` | 155 | Focused saved-source row/editor component for pause/use, remove, and topic editing controls. |
-| Settings source library model | `dashboard/src/components/settings/source-library-model.ts` | 85 | Pure saved-source filtering, pagination, activity-label, and topic validation helpers covered by Settings tests. |
-| Dashboard runtime settings control | `dashboard/src/components/profiles/runtime-settings-control.tsx` | 200 | Profile runtime settings state owner after fieldset/action rendering moved out. |
-| Dashboard runtime settings sections | `dashboard/src/components/profiles/runtime-settings-sections.tsx` | 377 | Focused runtime settings fieldset/action rendering for scan scope, work hours, alerts, matching rules, and save/draft/cancel actions. |
-| Dashboard sanitize summary | `dashboard/src/domain/sanitize/dashboard-summary.ts` | 300 | Largest dashboard sanitizer submodule; owns optional summary/setup/source insight projections. |
-| Dashboard sanitizer tests | `dashboard/src/domain/sanitize-dashboard-state.test.ts` | 458 | Largest remaining sanitizer test file; now scoped to dashboard state rather than all sanitizer surfaces. |
+| Area | Current Hotspot | Why It Matters |
+| --- | --- | --- |
+| HTTP/Desk compatibility facade | `scripts/dashboard_server.py` | `1122` lines. `DashboardHandler`, `_sync_desk_scheduler_context()`, static/artifact serving, exception mapping, and old patch surfaces still bridge communities. Most product helpers are already split, so the remaining debt is migration ownership rather than file size. |
+| Review-card evidence UI | `dashboard/src/components/inbox/review-card.tsx` | `907` lines. Owns rendering, actions, source refs, report artifact chips, original-source preview, and source-preview HTML sanitation. This remains the clearest user-facing cleanup candidate. |
+| Profile learning and runtime settings | `scripts/profile_patches.py`, `dashboard/src/components/profiles/profile-row.tsx`, `profile-matching-panel.tsx`, `runtime-settings-model.ts` | `profile_patches.py` is `877` lines; the dashboard profile query path now crosses profile row, matching panel, runtime-settings helpers, and shared types. Split only around a tested profile-learning or runtime-settings behavior. |
+| Report extraction and source evidence | `scripts/report_extraction.py`, `scripts/report_sources.py`, `scripts/report.py` | `862`, `665`, and `538` lines respectively. These own provider/key routing, JSON repair diagnostics, semantic batching, source evidence, and final report assembly. Keep fixture coverage ahead of refactors. |
+| Desk actions/scheduler/Bot Gateway | `scripts/desk_actions.py`, `scripts/desk_scheduler.py`, `scripts/desk_bot_gateway_background.py` | `774`, `798`, and `663` lines. These are fixed-argv and local automation safety surfaces. Preserve allowlists, token/chat gating, and patch-compatible wrappers while migrating. |
+| Dashboard contracts/sanitizers/projections | `dashboard/src/domain/sanitize/desk.ts`, `dashboard/src/domain/types.ts`, `dashboard/src/api/client.ts`, `scripts/dashboard_projection.py`, `dashboard/src/domain/projections.ts` | `697`, `689`, `590`, `614`, and `241` lines. `postJson()` and `optionalString()` are high-degree because they are legitimate shared contract/sanitizer surfaces; change them only with fixture-backed contract tests. |
+| Focused large tests | `tests/monitor_state/test_projection.py`, `tests/test_bot_gateway.py`, `tests/dashboard/test_credentials_settings.py`, `tests/dashboard/test_scheduler.py`, `tests/monitor/test_prefilter_and_manifest.py` | Large because they protect broad route, projection, gateway, and manifest behavior. The graph's `patch` and `load_tgcs_module()` hubs are test scaffolding signals, not proof that production architecture is coupled. |
+| Graph weak-evidence backlog | `graphify-out/GRAPH_REPORT.md` knowledge gaps | The rebuilt graph reports `466` weakly-connected production code nodes and `12` low-confidence inferred bridges. These are triage prompts only; verify against real files before turning them into debt tickets. |
+
+## Graphify Snapshot Usage
+
+`graphify-out/GRAPH_REPORT.md` exists for the 2026-05-15 workspace and is a
+useful navigation artifact, but it is not repository truth. Its current snapshot
+has 3844 nodes, 7194 edges, 32 communities, 457 inferred edges, and an
+LLM-accounted semantic overlay from the MiniMax OpenAI-compatible China route:
+57 semantic nodes, 138 semantic edges, 39507 input tokens, and 10904 output
+tokens. The graph now has enough semantic signal to find doc/code anchors, but
+it still uses directory fallback clustering at very low density
+(`0.0009739724347117602`), so community boundaries remain inspection hints.
+Daily doc-debt and Graphify maintenance records live in local ignored
+`docs/graphify-maintenance/` files for auditability and are excluded from both
+Git and future graph corpora.
+
+Agent rules:
+
+- When `graphify-out` is present, read `graphify-out/README.md` before using
+  `GRAPH_REPORT.md` or `graph.json`.
+- Use EXTRACTED anchors to decide where to inspect next, then verify with real
+  files, docs, commands, tests, issues, or CI output.
+- Treat INFERRED edges, LLM-only semantic bridges, test helper hubs,
+  low-confidence bridges, and weakly-connected package/config nodes as
+  navigation hints rather than facts.
+- Do not write graph conclusions directly into memory or docs without checking
+  the real source.
+- Rebuild the graph after material source/doc changes before relying on
+  centrality, community, or weak-node counts.
+- Check local ignored `docs/graphify-maintenance/` records for recent automation
+  outcomes, but do not treat those records as graph evidence.
+
+Current graph-reading conclusions:
+
+- `DashboardHandler` remains a real bridge because the source confirms it still
+  owns HTTP orchestration, static/artifact serving, and exception mapping.
+- `postJson()` and `optionalString()` are high-degree because they are shared
+  client/sanitizer primitives; do not treat their centrality as debt by itself.
+- `patch` and `load_tgcs_module()` are test helper hubs. They should influence
+  test-fixture cleanup only when the related owner tests are already changing.
+- Low-confidence bridges and weakly-connected nodes belong in a review queue,
+  not in durable memory or product claims.
+
+## Next Cleanup Plan After Graph Review
+
+The graph report is useful for prioritization, but cleanup should remain
+product-risk driven rather than graph-score driven:
+
+1. Frontend-facing slice: review-card evidence/source-preview behavior. Verify
+   with Inbox component tests and source-preview sanitation before splitting UI.
+2. Profile-learning slice: `profile_patches.py` plus profile row/matching/runtime
+   settings. Only split with profile preference or runtime-settings fixtures in
+   hand.
+3. Report-quality slice: `report_extraction.py`, `report_sources.py`, and
+   `report.py`. Keep provider routing, JSON repair, source attribution, and
+   semantic batching under focused fixtures before moving code.
+4. Compatibility-ledger slice: `dashboard_server.py`, `DashboardHandler`, and
+   route/helper re-exports. Write down which tests or downstream callers still
+   depend on each facade before removing compatibility paths.
+5. Safety automation slice: `desk_actions.py`, `desk_scheduler.py`, and
+   `desk_bot_gateway_background.py`. Preserve fixed argv, local-first token/chat
+   gating, and patch-compatible wrappers.
+6. Test-fixture slice: reduce `patch` and `load_tgcs_module()` centrality only
+   inside owner-specific test work. Broad helper cleanup without behavior change
+   is currently low value.
+7. Documentation slice: keep this file as the current debt authority, keep
+   graph output local/advisory, record automated sweeps under local ignored
+   `docs/graphify-maintenance/`, and update `docs/quality/task-state.md` after
+   each cleanup checkpoint.
 
 ## Product Constraints
 
@@ -1120,7 +1149,9 @@ report rendering, extraction providers, and dashboard API clients.
 
 Evidence:
 
-- Current quality branch is `sapientropic/quality-iteration-spec-20260514`.
+- Historical quality branch for this register was
+  `sapientropic/quality-iteration-spec-20260514`; the current branch is not
+  inferred from this debt-register evidence.
 - The previously dirty implementation backlog was committed as focused
   checkpoints instead of one mixed cleanup commit.
 - Every checkpoint ran `git diff --cached --check` plus a staged snapshot or
@@ -1458,6 +1489,12 @@ Evidence:
 - `docs/quality/2026-05-13-tech-debt-iteration-log.md` is a large historical
   implementation log; it should not be used as current state.
 - `docs/quality/task-state.md` is the compact current handoff.
+- `graphify-out/` is gitignored generated evidence. When it exists locally,
+  `graphify-out/README.md` is the first reading guide for agents, and
+  `.graphifyignore` is the trackable corpus boundary.
+- `docs/graphify-maintenance/` is the local ignored audit trail for recurring
+  doc-debt/Graphify sweeps and is deliberately excluded from both Git and the
+  graph corpus.
 - Local ignored UX/research artifacts still exist under ignored doc paths, but
   they are not stable public docs.
 
@@ -1479,6 +1516,10 @@ Cleanup:
   - Current quality handoff: `docs/quality/task-state.md`.
   - Historical quality evidence: `docs/quality/*-iteration-log.md`.
   - Internal implementation specs: gitignored `docs/internal/specs/`.
+  - Local ignored Graphify maintenance audit records:
+    `docs/graphify-maintenance/`.
+  - Graph corpus boundary: `.graphifyignore`.
+  - Local generated graph guidance, when present: `graphify-out/README.md`.
 - Keep `docs/internal/specs/INDEX.md` as the private index authority for active
   specs. Public docs may link to stable summaries, but must not mirror internal
   implementation details.
@@ -1493,6 +1534,9 @@ Done when:
 - New agents can find the right source in under one minute.
 - No full contract is duplicated in multiple docs.
 - Draft specs have a clear status and owner.
+- Generated graph artifacts are clearly marked as advisory navigation evidence.
+- Daily sweep records are reviewable locally without entering Git or becoming
+  graph source material.
 
 ## Execution Plan
 
@@ -1666,23 +1710,31 @@ The technical-debt cleanup is complete when:
 6. Public docs, agent docs, roadmap, and specs have non-overlapping authority.
 7. Full Python and dashboard gates pass.
 
-## Open Decisions For Owner
+## Owner Decisions Still Open
 
-1. [⚠️ 需确认] Should the cleanup target v0.5 release hardening first, or
-   developer velocity for post-v0.5 work? Recommendation: v0.5 hardening first,
-   because the remaining risks are still release-facing: sanitizer boundaries,
-   dashboard server routes, and local packaging smoke.
-2. [⚠️ 需确认] Should behavior-changing fixes be allowed during cleanup?
-   Recommendation: only when a test exposes a real privacy, contract, or setup
-   bug; otherwise keep refactor-only.
-3. Implementation specs live under gitignored `docs/internal/specs/`; the
-   private `INDEX.md` there is the authority for active spec ownership.
-4. [⚠️ 需确认] What is the acceptable local Python test runtime after cleanup?
-   Current observed runtime is about 95 seconds. Recommendation: keep full suite
-   under two minutes, but create smaller focused gates under ten seconds.
-5. [⚠️ 需确认] Which remaining packaging target matters first after the local
-   Docker smoke passed? Recommendation: desktop launcher polish and package-safe
-   dashboard resources, because local build, staged wheel install, `pipx`,
-   `uvx`, and Docker smoke have now passed in the checkpoint run.
-6. [⚠️ 需确认] When can old compatibility paths be removed? Recommendation:
+Resolved historical decisions:
+
+- The current cleanup target is v0.5 release hardening unless the owner changes
+  the roadmap priority.
+- Core contract/privacy fixtures, dashboard route splits, Docker smoke, and
+  package metadata smokes have already been proven enough to stop treating them
+  as open planning questions.
+- Implementation specs remain under gitignored `docs/internal/specs/`; the
+  private `INDEX.md` there is the authority for active private specs.
+
+Still open:
+
+1. [⚠️ 需确认] Should behavior-changing fixes be allowed during cleanup?
+   Recommendation: only when a test exposes a real privacy, contract, setup, or
+   first-use product bug; otherwise keep refactor-only.
+2. [⚠️ 需确认] What is the acceptable local Python test runtime after cleanup?
+   Recommendation: keep the full suite under two minutes, and maintain smaller
+   focused boundary gates under ten seconds where practical.
+3. [⚠️ 需确认] Which packaging target matters first after local Python, `pipx`,
+   `uvx`, and Docker smokes passed? Recommendation: make Signal Desk resources
+   package-safe before evaluating heavier desktop packaging.
+4. [⚠️ 需确认] When can old compatibility paths be removed? Recommendation:
    keep them until at least one release after a documented migration path.
+5. [⚠️ 需确认] Should `.graphifyignore` remain a tracked graph boundary
+   contract? Recommendation: track it, because the graph corpus boundary affects
+   future agent evidence quality and contains no private runtime data.

@@ -137,7 +137,8 @@ try {
 ```
 
 Replace the example paths and Vitest pattern with the targeted commands that
-match the staged files. Record that scope in the commit note or iteration log.
+match the staged files. Record that scope in the commit note, PR note, or active
+handoff only when it affects continuation.
 
 ## Clean HEAD Worktree Gate
 

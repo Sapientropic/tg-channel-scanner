@@ -27,7 +27,6 @@ dashboard/dist/
 output/
 .tgcs/
 graphify-out/
-.graphifyignore
 
 # Local generated review workspaces and media
 docs/demo/
@@ -35,6 +34,7 @@ docs/report-design-context.md
 docs/v0.5-alpha-alert-review-inbox.md
 docs/quality-iteration.md
 docs/quality-task-state.md
+docs/graphify-maintenance/
 docs/archive/quality-iteration-*.md
 docs/internal/
 docs/pixel-ui-library-evaluation-report.md
