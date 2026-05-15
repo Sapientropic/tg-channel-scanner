@@ -4,6 +4,7 @@ import {
   Inbox,
   Rocket,
   Play,
+  RefreshCcw,
   Settings,
   UserRoundCog,
 } from "lucide-react";
@@ -14,7 +15,7 @@ import { InboxView } from "./components/inbox";
 import { ProfilesView } from "./components/profiles";
 import { RunsView } from "./components/runs";
 import { SettingsView, type SettingsTask } from "./components/settings";
-import { ConsoleHeader, NavigationRail, WorkbenchHeader } from "./components/shell";
+import { ConsoleHeader, NavigationRail, WorkbenchHeader, type TabCount } from "./components/shell";
 import { buildProfileReportNames } from "./domain/display";
 import { isActionableInboxCard, reviewQueueCount } from "./domain/inbox";
 import {
@@ -63,8 +64,10 @@ function App() {
   const deskTelegram = useDeskTelegram();
   const [activeTab, setActiveTab] = useState<Tab>("actions");
   const [busy, setBusy] = useState(false);
-  const headerBusy = busy || Boolean(busyActionId) || Boolean(deskTelegram.busy);
-  const { state, refresh, loadError } = useDashboardState({ busy: headerBusy });
+  const actionBusy = busy || Boolean(busyActionId) || Boolean(deskTelegram.busy);
+  const { state, refresh, loadError, loadStatus } = useDashboardState({ busy: actionBusy });
+  const stateReady = loadStatus === "ready";
+  const headerBusy = actionBusy || loadStatus === "loading";
   const [pendingDeskAction, setPendingDeskAction] = useState<DeskActionConfirmation | null>(null);
   const pendingDeskActionReturnFocus = useRef<HTMLElement | null>(null);
   const [settingsFocusTarget, setSettingsFocusTarget] = useState<SettingsTask | null>(null);
@@ -150,8 +153,14 @@ function App() {
 
   const metrics = useMemo(() => buildMetrics(state), [state]);
   const profileReportNames = useMemo(() => buildProfileReportNames(state.profiles), [state.profiles]);
-  const tabCounts = useMemo(() => buildTabCounts(state, startStepCount), [state]);
-  const boardMeta = useMemo(() => buildBoardMeta(activeTab, state, startStepCount), [activeTab, state]);
+  const tabCounts = useMemo<Record<Tab, TabCount>>(
+    () => (stateReady ? buildTabCounts(state, startStepCount) : buildLoadingTabCounts()),
+    [state, stateReady],
+  );
+  const boardMeta = useMemo(
+    () => (stateReady ? buildBoardMeta(activeTab, state, startStepCount) : buildLoadingBoardMeta(activeTab, loadStatus, loadError)),
+    [activeTab, loadError, loadStatus, state, stateReady],
+  );
   const latestRunId = state.runs[0]?.run_id;
   const pendingReviewCount = useMemo(() => reviewQueueCount(state.inbox), [state.inbox]);
   const latestActionCount = state.inbox.filter((card) => isActionableInboxCard(card, latestRunId)).length;
@@ -160,7 +169,7 @@ function App() {
   const showCommandStrip = activeTab === "inbox" && !hasLatestActionCards;
   const showOpportunitySummary = activeTab === "inbox" && (!hasLatestActionCards || hasBlockingSummary);
   const showValidationSummary = activeTab === "inbox" && !hasLatestActionCards;
-  const showBoardStatusStack = showCommandStrip || showOpportunitySummary || showValidationSummary;
+  const showBoardStatusStack = stateReady && (showCommandStrip || showOpportunitySummary || showValidationSummary);
 
   useEffect(() => {
     // Mobile bottom navigation can otherwise carry the previous tab's scroll
@@ -284,9 +293,9 @@ function App() {
         updateAvailableCount={updateAvailableCount}
       />
 
-      {(notice || loadError) && (
-        <div className={`notice ${notice?.tone === "error" || loadError ? "error" : "success"}`} role="status">
-          {loadError || notice?.text}
+      {(notice || (stateReady && loadError)) && (
+        <div className={`notice ${notice?.tone === "error" || (stateReady && loadError) ? "error" : "success"}`} role="status">
+          {stateReady && loadError ? loadError : notice?.text}
         </div>
       )}
 
@@ -303,7 +312,17 @@ function App() {
             </div>
           )}
           <div className="board-body">
-            {activeTab === "inbox" && (
+            {!stateReady ? (
+              <DashboardLoadingState
+                loadError={loadError}
+                loadStatus={loadStatus}
+                onRetry={() => {
+                  void refresh().catch(() => undefined);
+                }}
+              />
+            ) : (
+              <>
+                {activeTab === "inbox" && (
               <InboxView
                 cards={state.inbox}
                 latestRunId={latestRunId}
@@ -316,8 +335,8 @@ function App() {
                 onOpenStart={() => setActiveTab("actions")}
                 onOpenProfiles={() => setActiveTab("profiles")}
               />
-            )}
-            {activeTab === "actions" && (
+                )}
+                {activeTab === "actions" && (
               <ActionsView
                 actions={deskActions}
                 activeActions={state.active_actions ?? []}
@@ -344,8 +363,8 @@ function App() {
                 onOpenSettings={openSettings}
                 onRun={runDeskAction}
               />
-            )}
-            {activeTab === "profiles" && (
+                )}
+                {activeTab === "profiles" && (
               <ProfilesView
                 profiles={state.profiles}
                 patches={state.profile_patch_suggestions}
@@ -364,16 +383,16 @@ function App() {
                 onGenerateProfileSuggestions={generateFeedbackProfileSuggestions}
                 onOpenStart={() => setActiveTab("actions")}
               />
-            )}
-            {activeTab === "runs" && (
+                )}
+                {activeTab === "runs" && (
               <RunsView
                 runs={state.runs}
                 onOpenProfiles={() => setActiveTab("profiles")}
                 onOpenReview={() => setActiveTab("inbox")}
                 onRunDeskAction={(actionId, body) => void runDeskAction(actionId, body)}
               />
-            )}
-            {activeTab === "settings" && (
+                )}
+                {activeTab === "settings" && (
               <>
                 <SettingsView
                   sources={{
@@ -440,6 +459,8 @@ function App() {
                   onFocusHandled={clearSettingsFocusTarget}
                 />
               </>
+                )}
+              </>
             )}
           </div>
         </section>
@@ -454,6 +475,55 @@ function App() {
         />
       )}
     </main>
+  );
+}
+
+function buildLoadingTabCounts(): Record<Tab, TabCount> {
+  return tabShell.reduce<Record<Tab, TabCount>>((counts, tab) => {
+    counts[tab.tab] = "...";
+    return counts;
+  }, {} as Record<Tab, TabCount>);
+}
+
+function buildLoadingBoardMeta(activeTab: Tab, loadStatus: "loading" | "ready" | "error", loadError: string) {
+  const title = tabShell.find((tab) => tab.tab === activeTab)?.label || "Signal Desk";
+  const hasError = loadStatus === "error" || Boolean(loadError);
+  return {
+    title,
+    detail: hasError ? "Could not read local Signal Desk state." : "Reading local Signal Desk state.",
+    value: hasError ? "!" : "...",
+    tone: hasError ? "rust" as const : "blue" as const,
+  };
+}
+
+function DashboardLoadingState({
+  loadError,
+  loadStatus,
+  onRetry,
+}: {
+  loadError: string;
+  loadStatus: "loading" | "ready" | "error";
+  onRetry: () => void;
+}) {
+  const hasError = loadStatus === "error" || Boolean(loadError);
+  return (
+    <section className={`dashboard-loading-state ${hasError ? "error" : ""}`} role={hasError ? "alert" : "status"} aria-live="polite">
+      <div>
+        <span className="panel-kicker">{hasError ? "Local state unavailable" : "Loading"}</span>
+        <strong>{hasError ? "Signal Desk could not read its local state." : "Reading local Signal Desk state"}</strong>
+        <small>
+          {hasError
+            ? loadError || "Try again after the local dashboard server is ready."
+            : "Keeping the board blank until real counts are loaded."}
+        </small>
+      </div>
+      {hasError && (
+        <button className="text-button" onClick={onRetry} type="button">
+          <RefreshCcw size={15} />
+          <span>Try again</span>
+        </button>
+      )}
+    </section>
   );
 }
 

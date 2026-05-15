@@ -716,6 +716,11 @@ def desk_bot_gateway_background_status(*, token_configured: bool | None = None) 
     return desk_scheduler.desk_bot_gateway_background_status(token_configured=token_configured)
 
 
+def repair_installed_bot_gateway_background() -> dict:
+    _sync_desk_scheduler_context()
+    return desk_scheduler.repair_installed_bot_gateway_background()
+
+
 def desk_scheduler_status() -> dict:
     _sync_desk_scheduler_context()
     return desk_scheduler.desk_scheduler_status()

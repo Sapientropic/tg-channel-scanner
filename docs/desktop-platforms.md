@@ -90,6 +90,12 @@ action restarts the installed Windows task, reloads the macOS LaunchAgent, or
 restarts the Linux `systemd --user` service. If no scheduler backend is
 available, run `./tgcs bot run` manually.
 
+Live Telegram alerts include inline Review buttons only when the gateway can
+handle callbacks. During monitor delivery, T-Sense may restart an already
+installed background gateway before sending those buttons; if that cannot be
+confirmed, the alert still includes the original Telegram message link and asks
+the user to update the card from Signal Desk Review.
+
 ## Signal Desk Restart and Ports
 
 The app launcher starts from `127.0.0.1:8765`. With the default auto-port mode,

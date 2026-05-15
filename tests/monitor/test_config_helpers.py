@@ -6,7 +6,7 @@ from argparse import Namespace
 from pathlib import Path
 from unittest.mock import patch
 
-from scripts import monitor, monitor_delivery, monitor_execution, monitor_runner
+from scripts import monitor, monitor_delivery, monitor_execution, monitor_runner, monitor_state
 
 
 class MonitorConfigHelperTests(unittest.TestCase):
@@ -267,6 +267,61 @@ class MonitorConfigHelperTests(unittest.TestCase):
         rendered = json.dumps(reply_markup, ensure_ascii=False)
         self.assertIn("card:applied:card-1", rendered)
         self.assertIn("card:saved:card-1", rendered)
+
+    def test_live_delivery_hides_card_buttons_when_gateway_cannot_handle_callbacks(self):
+        class FakeAttempt:
+            ok = True
+            status = "sent"
+
+            @staticmethod
+            def to_dict():
+                return {"status": "sent"}
+
+        card = {
+            "card_id": "card-1",
+            "status": "pending",
+            "decision_status": "open",
+            "item_key": "item-1",
+            "item": {
+                "topic": "Fast role",
+                "rating": "high",
+                "decision_state": {"status": "new"},
+                "source_message_refs": [{"channel": "jobs", "id": 42}],
+            },
+        }
+
+        with tempfile.TemporaryDirectory() as tmp:
+            conn = monitor_state.connect(Path(tmp) / ".tgcs" / "tgcs.db")
+            try:
+                with patch.object(monitor_delivery.delivery, "send_telegram_bot_message", return_value=FakeAttempt()) as send_mock:
+                    with patch.object(monitor_delivery.monitor_state, "record_alert_event", return_value={"status": "sent"}) as record_mock:
+                        with patch.object(
+                            monitor_delivery.desk_scheduler,
+                            "desk_bot_gateway_status",
+                            return_value={"gateway_status": "not_detected", "background": {"installed": False}},
+                        ):
+                            alert_count, events = monitor.run_delivery(
+                                conn=conn,
+                                run_id_value="run-1",
+                                profile_id="jobs-fast",
+                                cards=[card],
+                                targets=[{"id": "telegram-bot-default", "type": "telegram_bot", "enabled": True, "chat_id": "123"}],
+                                mode="live",
+                                alert_rule={"name": "high_new_or_changed"},
+                                delivery_enabled=True,
+                                report_path=None,
+                                dashboard_url="http://127.0.0.1:8765",
+                            )
+            finally:
+                conn.close()
+
+        self.assertEqual(alert_count, 1)
+        self.assertEqual(events, [{"status": "sent"}])
+        self.assertIsNone(send_mock.call_args.kwargs["reply_markup"])
+        self.assertIn("Open Review in Signal Desk", send_mock.call_args.kwargs["text"])
+        payload = record_mock.call_args.kwargs["payload"]
+        self.assertFalse(payload["callback_actions_available"])
+        self.assertEqual(payload["callback_status"], "gateway_not_running")
 
 
 

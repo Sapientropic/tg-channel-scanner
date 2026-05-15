@@ -47,6 +47,36 @@ describe("InboxView", () => {
     expect(html).not.toContain("Prefer similar");
   });
 
+  it("separates remaining review cards from handled history in backlog copy", () => {
+    const html = renderToStaticMarkup(
+      <InboxView
+        cards={[
+          card(),
+          card({
+            card_id: "old-medium",
+            first_run_id: "run-0",
+            last_run_id: "run-0",
+            rating: "medium",
+            decision_status: "seen",
+          }),
+          card({
+            card_id: "handled-role",
+            opportunity_status: "applied",
+            opportunity_updated_at: "2026-05-11T02:00:00Z",
+          }),
+        ]}
+        latestRunId="run-1"
+        profileReportNames={{ "jobs-fast": "Jobs Report" }}
+        act={vi.fn()}
+        busy={false}
+      />,
+    );
+
+    expect(html).toContain("1 more to review");
+    expect(html).toContain("Handled history stays separate from cards still needing a decision.");
+    expect(html).not.toContain("outside this view");
+  });
+
   it("labels handled lifecycle cards without making them latest-action cards", () => {
     const filters = inboxFilterOptions(
       [
@@ -179,7 +209,7 @@ describe("InboxView", () => {
     expect(nextNonEmptyReviewFilter(filters, "actionable")).toBeNull();
   });
 
-  it("keeps open opportunity actions visible and moves close reasons into feedback", () => {
+  it("keeps open opportunity actions visible with a quick not-fit path", () => {
     const html = renderToStaticMarkup(
       <InboxView
         cards={[card()]}
@@ -194,11 +224,12 @@ describe("InboxView", () => {
     expect(html).toContain('data-review-tone="positive"');
     expect(html).toContain('data-review-action="saved"');
     expect(html).toContain('data-review-tone="supportive"');
+    expect(html).toContain('data-review-action="dismissed"');
+    expect(html).toContain("Not a fit");
     expect(html).toContain('data-review-action="tune"');
     expect(html).toContain('data-review-tone="negative"');
     expect(html).toContain("Notes + tags");
     expect(html).not.toContain('data-review-action="contacted"');
-    expect(html).not.toContain('data-review-action="dismissed"');
     expect(html).not.toContain('data-review-action="duplicate"');
     expect(html).not.toContain('data-review-action="reopen"');
     expect(html).not.toContain('data-review-action="follow_up"');
@@ -269,6 +300,7 @@ describe("InboxView", () => {
     expect(html).toContain("Checked");
     expect(html).toContain("checked without sending");
     expect(html).not.toContain("Dry run");
+    expect(html).not.toContain("telegram_bot");
   });
 
   it("shows repeat counts directly in the card context strip", () => {

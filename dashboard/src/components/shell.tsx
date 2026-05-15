@@ -4,6 +4,8 @@ import { Play, ShieldCheck } from "lucide-react";
 import signalIcon from "../assets/tgcs-signal-icon.png";
 import type { Tab } from "../domain/types";
 
+export type TabCount = number | string;
+
 export function ConsoleHeader({
   busy,
   onNewScan,
@@ -58,7 +60,7 @@ export function NavigationRail({
 }: {
   tabs: Array<{ tab: Tab; icon: ReactNode; label: string }>;
   activeTab: Tab;
-  tabCounts: Record<Tab, number>;
+  tabCounts: Record<Tab, TabCount>;
   setActiveTab: (tab: Tab) => void;
 }) {
   return (
@@ -86,7 +88,7 @@ function TabButton({
 }: {
   tab: Tab;
   active: Tab;
-  count: number;
+  count: TabCount;
   setActive: (tab: Tab) => void;
   icon: ReactNode;
   label: string;

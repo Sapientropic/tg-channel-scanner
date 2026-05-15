@@ -287,7 +287,7 @@ def card_action_summary(card: dict[str, Any]) -> str:
     label = lifecycle_status_label(card.get("opportunity_status"))
     title = str(card.get("title") or "Review card").strip()
     rating = str(card.get("rating") or "").strip()
-    detail = f"{label}: {title}"
+    detail = f"Review updated: {label} · {title}"
     if rating:
         detail += f" ({rating})"
     return detail

@@ -122,21 +122,58 @@ def _item_title(item: dict[str, Any]) -> str:
     return display_item_title(item, fallback="Telegram signal", max_len=120)
 
 
-def _source_refs(item: dict[str, Any]) -> str:
-    refs = item.get("source_message_refs")
-    if not isinstance(refs, list):
-        return "source refs unavailable"
-    rendered = []
-    for ref in refs[:5]:
-        if not isinstance(ref, dict):
+def _source_ref_label(ref: dict[str, Any]) -> str:
+    channel = _clean_text(ref.get("channel"), max_len=80)
+    msg_id = _clean_text(ref.get("id"), max_len=40)
+    if channel and msg_id:
+        return f"{channel} message {msg_id}"
+    if channel:
+        return channel
+    return ""
+
+
+def _source_ref_url(ref: dict[str, Any]) -> str:
+    explicit = _public_telegram_link(ref.get("url"))
+    if explicit and (urlparse(explicit).hostname or "").casefold() == "t.me":
+        return explicit
+    try:
+        from scripts.review_cards import telegram_source_ref_url
+    except ModuleNotFoundError:
+        return ""
+    return telegram_source_ref_url(
+        channel=str(ref.get("channel") or ""),
+        message_id=ref.get("id"),
+        source_info={},
+    )
+
+
+def _source_ref_candidates(*, item: dict[str, Any], card: dict[str, Any] | None) -> list[dict[str, Any]]:
+    refs: list[dict[str, Any]] = []
+    for raw_refs in ((card or {}).get("source_refs"), item.get("source_message_refs")):
+        if not isinstance(raw_refs, list):
             continue
-        channel = _clean_text(ref.get("channel"), max_len=80)
-        msg_id = _clean_text(ref.get("id"), max_len=40)
-        if channel and msg_id:
-            rendered.append(f"{channel}#{msg_id}")
+        for ref in raw_refs:
+            if isinstance(ref, dict):
+                refs.append(ref)
+    return refs
+
+
+def _source_summary(*, item: dict[str, Any], card: dict[str, Any] | None) -> tuple[str, list[str]]:
+    rendered = []
+    links = []
+    refs = _source_ref_candidates(item=item, card=card)
+    seen_links: set[str] = set()
+    for ref in refs[:5]:
+        label = _source_ref_label(ref)
+        if label:
+            rendered.append(label)
+        link = _source_ref_url(ref)
+        if link and link not in seen_links:
+            seen_links.add(link)
+            links.append(link)
     if len(refs) > 5:
-        rendered.append("...")
-    return ", ".join(rendered) if rendered else "source refs unavailable"
+        rendered.append(f"+{len(refs) - 5} more")
+    return ", ".join(rendered) if rendered else "source unavailable", links
 
 
 def _telegram_markdown_escape(value: object) -> str:
@@ -165,6 +202,7 @@ def build_telegram_alert_text(
     card: dict[str, Any] | None = None,
     report_url: str | None = None,
     dashboard_url: str | None = None,
+    actions_available: bool = False,
 ) -> str:
     """Build a redacted Telegram alert body.
 
@@ -175,20 +213,27 @@ def build_telegram_alert_text(
     """
 
     state = item.get("decision_state") if isinstance(item.get("decision_state"), dict) else {}
-    status = _clean_text(state.get("status") or "unknown", max_len=40)
+    status = _clean_text(state.get("status") or "new", max_len=40)
     rating = _clean_text(item.get("rating") or "unknown", max_len=40)
     why = _clean_text(item.get("why") or item.get("market_impact") or "", max_len=320)
-    card_id = _clean_text((card or {}).get("card_id") or "", max_len=80)
+    source_label, source_links = _source_summary(item=item, card=card)
 
     lines = [
         f"*T-Sense alert*: {_telegram_markdown_escape(_item_title(item))}",
-        f"*Rating*: {_telegram_markdown_escape(rating)} / *State*: {_telegram_markdown_escape(status)}",
+        f"*Priority*: {_telegram_markdown_escape(rating.title())} · {_telegram_markdown_escape(status.replace('_', ' ').title())}",
     ]
     if why:
         lines.append(f"*Why*: {_telegram_markdown_escape(why)}")
-    lines.append(f"*Sources*: {_telegram_markdown_escape(_source_refs(item))}")
-    if card_id:
-        lines.append(f"*Card*: {_telegram_markdown_escape(card_id)}")
+    if source_links:
+        lines.append(f"*Open original*: {source_links[0]}")
+        if len(source_links) > 1:
+            lines.append(f"*More originals*: {', '.join(source_links[1:3])}")
+    else:
+        lines.append(f"*Original*: {_telegram_markdown_escape(source_label)}")
+    if actions_available:
+        lines.append("*Action*: Buttons below update Review in Signal Desk.")
+    else:
+        lines.append("*Action*: Open Review in Signal Desk to mark Applied, Saved, or Not a fit.")
     public_report = _public_telegram_link(report_url)
     public_dashboard = _public_telegram_link(dashboard_url)
     if public_report:

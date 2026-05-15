@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from scripts import delivery, monitor_state
+from scripts import delivery, desk_scheduler, monitor_state
 from scripts.monitor_config import MonitorConfig
 
 
@@ -52,7 +52,9 @@ def apply_delivery_runtime_overrides(conn, config: MonitorConfig) -> MonitorConf
     return MonitorConfig(path=config.path, profiles=config.profiles, delivery_targets=targets, defaults=config.defaults)
 
 
-def alert_card_keyboard(card: dict[str, Any]) -> dict[str, Any] | None:
+def alert_card_keyboard(card: dict[str, Any], *, callbacks_available: bool = True) -> dict[str, Any] | None:
+    if not callbacks_available:
+        return None
     card_id = str(card.get("card_id") or "").strip()
     if not card_id:
         return None
@@ -68,6 +70,31 @@ def alert_card_keyboard(card: dict[str, Any]) -> dict[str, Any] | None:
             ],
         ]
     }
+
+
+def _bot_gateway_callback_context(*, conn, mode: str, has_live_targets: bool) -> dict[str, Any]:
+    if mode != "live" or not has_live_targets:
+        return {"available": False, "reason": "not_live_delivery"}
+    if conn is None:
+        return {"available": True, "reason": "connection_unavailable"}
+    try:
+        status = desk_scheduler.desk_bot_gateway_status(conn)
+    except Exception:
+        return {"available": False, "reason": "status_unavailable"}
+
+    gateway_status = str(status.get("gateway_status") or "")
+    if gateway_status == "running":
+        return {"available": True, "reason": "running"}
+
+    background = status.get("background") if isinstance(status.get("background"), dict) else {}
+    if bool(background.get("installed")):
+        repair = desk_scheduler.repair_installed_bot_gateway_background()
+        return {
+            "available": bool(repair.get("ok")),
+            "reason": "repaired_background" if repair.get("ok") else "background_repair_failed",
+            "repair_status": str(repair.get("status") or ""),
+        }
+    return {"available": False, "reason": "gateway_not_running"}
 
 
 def run_delivery(
@@ -94,23 +121,28 @@ def run_delivery(
     events: list[dict[str, Any]] = []
     if mode == "off" or not delivery_enabled:
         return len(candidates), events
+    has_live_targets = any(target.get("type") == "telegram_bot" and target.get("enabled", False) for target in targets)
+    callback_context = _bot_gateway_callback_context(conn=conn, mode=mode, has_live_targets=has_live_targets)
+    callbacks_available = bool(callback_context.get("available"))
     for card in candidates:
         item = card.get("item") if isinstance(card.get("item"), dict) else {}
         for target in targets:
             if target.get("type") != "telegram_bot" or not target.get("enabled", False):
                 continue
+            reply_markup = alert_card_keyboard(card, callbacks_available=callbacks_available)
             text = delivery.build_telegram_alert_text(
                 item=item,
                 card=card,
                 report_url=report_path,
                 dashboard_url=dashboard_url,
+                actions_available=reply_markup is not None,
             )
             attempt = delivery.send_telegram_bot_message(
                 target_id=target["id"],
                 chat_id=str(target.get("chat_id") or ""),
                 text=text,
                 mode=mode,
-                reply_markup=alert_card_keyboard(card),
+                reply_markup=reply_markup,
             )
             event = monitor_state.record_alert_event(
                 conn,
@@ -123,6 +155,8 @@ def run_delivery(
                     "text": text,
                     "decision_status": card.get("decision_status"),
                     "item_key": card.get("item_key"),
+                    "callback_actions_available": callbacks_available,
+                    "callback_status": callback_context.get("reason"),
                 },
                 delivery_attempt=attempt.to_dict(),
             )

@@ -264,6 +264,26 @@ class DashboardSchedulerTests(unittest.TestCase):
         self.assertEqual(result["status"], "success")
         self.assertNotIn(str(project_root), result["detail"])
 
+    def test_bot_gateway_repair_only_restarts_existing_windows_task(self):
+        calls: list[list[str]] = []
+
+        def fake_run(args):
+            calls.append(args)
+            if "/Query" in args:
+                return subprocess.CompletedProcess(args, 0, stdout="READY\n", stderr="")
+            return subprocess.CompletedProcess(args, 0, stdout="SUCCESS\n", stderr="")
+
+        with patch.object(dashboard_server.sys, "platform", "win32"):
+            with patch.object(dashboard_server, "_run_scheduler_command", side_effect=fake_run):
+                result = dashboard_server.repair_installed_bot_gateway_background()
+
+        self.assertEqual(result["status"], "started")
+        self.assertTrue(result["ok"])
+        self.assertEqual(calls[0], ["schtasks.exe", "/Query", "/TN", dashboard_server.DESK_BOT_GATEWAY_TASK_NAME])
+        self.assertEqual(calls[1], ["schtasks.exe", "/End", "/TN", dashboard_server.DESK_BOT_GATEWAY_TASK_NAME])
+        self.assertEqual(calls[2], ["schtasks.exe", "/Run", "/TN", dashboard_server.DESK_BOT_GATEWAY_TASK_NAME])
+        self.assertNotIn("/Create", json.dumps(calls))
+
 
     def test_bot_gateway_autostart_blocks_when_token_missing(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -317,7 +337,7 @@ class DashboardSchedulerTests(unittest.TestCase):
         self.assertTrue(status["background"]["installed"])
         self.assertEqual(status["background"]["status"], "installed")
         self.assertTrue(status["background"]["can_remove"])
-        self.assertIn("Restart / repair bot", status["safe_next_action"])
+        self.assertIn("Repair alerts", status["safe_next_action"])
         self.assertNotIn(str(root), rendered)
 
 

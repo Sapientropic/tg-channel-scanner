@@ -926,6 +926,58 @@
   padding: 12px;
 }
 
+.dashboard-loading-state {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  min-width: 0;
+  min-height: 180px;
+  padding: 18px;
+  border: 1px solid color-mix(in oklch, var(--signal-low) 32%, var(--line));
+  background:
+    linear-gradient(90deg, color-mix(in oklch, var(--signal-low) 8%, transparent) 1px, transparent 1px),
+    color-mix(in oklch, var(--ink) 78%, transparent);
+  background-size: 16px 100%;
+}
+
+.dashboard-loading-state.error {
+  border-color: color-mix(in oklch, var(--signal-danger) 36%, var(--line));
+  background:
+    linear-gradient(90deg, color-mix(in oklch, var(--signal-danger) 7%, transparent) 1px, transparent 1px),
+    color-mix(in oklch, var(--ink) 78%, transparent);
+  background-size: 16px 100%;
+}
+
+.dashboard-loading-state > div {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.dashboard-loading-state strong,
+.dashboard-loading-state small {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.dashboard-loading-state strong {
+  color: var(--paper);
+  font-size: 17px;
+  line-height: 1.2;
+}
+
+.dashboard-loading-state small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: var(--badge-weight);
+  line-height: 1.4;
+}
+
+.dashboard-loading-state .text-button {
+  justify-self: end;
+}
+
 .board-status-stack {
   display: grid;
   gap: 10px;

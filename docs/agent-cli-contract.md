@@ -622,6 +622,12 @@ pending patch with a new `patch_id`; it never revives the old reverted patch.
 Live alert suppression is status-aware: a sent `new` alert suppresses repeated
 `new` delivery for the same card, but a later `changed` status remains eligible
 for alerting when it still passes freshness and handled-card gates.
+Telegram Bot alert text must stay phone-useful: title, priority, short reason,
+and an original `t.me` message link when source refs can resolve one. It must
+not show card ids or target ids as primary copy. Inline card action buttons are
+only attached when the local Bot Gateway is running or an installed background
+gateway was successfully restarted for callbacks; otherwise the alert tells the
+user to update the card from Signal Desk Review.
 
 For future provider-specific LLM optimization, keep semantic extraction prompts
 cache-friendly: stable profile/schema/instructions first, incremental scan
@@ -705,7 +711,9 @@ projection includes only safe setup/run hints: whether a token is configured,
 allowed-chat counts and labels, background/autostart state, sanitized last
 update/error text, and a `safe_next_action` string. It must not expose token
 text, raw chat ids, raw Telegram message text, session paths, command strings,
-or argv.
+or argv. Monitor live delivery may restart an already-installed background Bot
+Gateway before attaching alert action buttons, but it must not create new
+scheduler/autostart state without the user using Settings > Alerts.
 
 Signal Desk `Settings` can also install starter sources, import pasted sources,
 and apply bounded source assistant plans. Preview responses include a sanitized

@@ -134,7 +134,7 @@ def desk_bot_gateway_status(conn, *, now: datetime | None = None) -> dict:
     elif gateway_status == "running":
         safe_next_action = "Bot Gateway is running."
     elif bool(background.get("installed")):
-        safe_next_action = "Use Restart / repair bot in Settings to restart the background gateway."
+        safe_next_action = "Use Repair alerts in Settings to restart the background gateway."
     else:
         safe_next_action = "Run tgcs bot run locally, or turn on background mode from Settings."
 
@@ -272,6 +272,90 @@ def desk_bot_gateway_background_status(*, token_configured: bool | None = None) 
         "can_remove": installed,
         "detail": "Bot Gateway starts at Windows login." if installed else base["detail"],
         "next_action": "You can turn it off from Settings." if installed else base["next_action"],
+    }
+
+
+def repair_installed_bot_gateway_background() -> dict:
+    """Restart the already-installed local Bot Gateway without changing setup.
+
+    Telegram alert buttons only update Dashboard data while the local gateway
+    is polling Bot API updates.  Monitor delivery may run from a background scan
+    after the gateway has gone stale, so this helper is deliberately narrower
+    than the Settings install action: it may start/restart an existing login
+    task/service, but it must not create new scheduler state without the user's
+    explicit Settings confirmation.
+    """
+
+    backend = scheduler_backend()
+    background = desk_bot_gateway_background_status(token_configured=True)
+    base = {
+        "schema_version": "desk_bot_gateway_repair_result_v1",
+        "backend": backend,
+        "attempted": False,
+        "ok": False,
+        "status": str(background.get("status") or "unknown"),
+        "detail": "",
+        "checked_at": _utc_now(),
+    }
+    if not bool(background.get("installed")):
+        return {
+            **base,
+            "status": "not_installed",
+            "detail": "Bot background mode is off.",
+        }
+
+    if backend == "windows_schtasks":
+        try:
+            _run_scheduler_command(["schtasks.exe", "/End", "/TN", DESK_BOT_GATEWAY_TASK_NAME])
+        except (OSError, subprocess.TimeoutExpired):
+            pass
+        args = ["schtasks.exe", "/Run", "/TN", DESK_BOT_GATEWAY_TASK_NAME]
+    elif backend == "macos_launchd":
+        plist_path = bot_gateway_launchd_plist_path()
+        try:
+            _run_scheduler_command(["launchctl", "unload", "-w", str(plist_path)])
+        except (OSError, subprocess.TimeoutExpired):
+            pass
+        args = ["launchctl", "load", "-w", str(plist_path)]
+    elif backend == "linux_systemd_user":
+        args = ["systemctl", "--user", "restart", f"{DESK_BOT_GATEWAY_SYSTEMD_NAME}.service"]
+    else:
+        return {
+            **base,
+            "status": "unavailable",
+            "detail": "Bot background restart is not available on this machine.",
+        }
+
+    try:
+        completed = _run_scheduler_command(args)
+    except subprocess.TimeoutExpired:
+        return {
+            **base,
+            "attempted": True,
+            "status": "timeout",
+            "detail": "Bot Gateway restart timed out.",
+        }
+    except OSError:
+        return {
+            **base,
+            "attempted": True,
+            "status": "unavailable",
+            "detail": "Signal Desk could not start the local scheduler command.",
+        }
+
+    if completed.returncode == 0:
+        return {
+            **base,
+            "attempted": True,
+            "ok": True,
+            "status": "started",
+            "detail": "Bot Gateway restart requested.",
+        }
+    return {
+        **base,
+        "attempted": True,
+        "status": "failed",
+        "detail": _desk_safe_result_text(completed.stderr, completed.stdout) or "The local scheduler rejected the restart.",
     }
 
 
@@ -557,7 +641,7 @@ def run_bot_gateway_autostart_action(action_id: str, *, body: dict | None = None
                     status="failed",
                     title="Bot background mode installed but not restarted",
                     detail=failure,
-                    next_action="Check systemd --user status, then retry Restart / repair bot from Settings.",
+                    next_action="Check systemd --user status, then retry Repair alerts from Settings.",
                     exit_code=restart_result.returncode,
                 )
         return bot_gateway_action_result(

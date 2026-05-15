@@ -735,7 +735,7 @@ button.source-chip:focus-visible,
 }
 
 .lifecycle-cluster {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .tune-profile-entry {
@@ -882,6 +882,15 @@ button.source-chip:focus-visible,
 .action-cluster button[data-review-action="skip"]:focus-visible {
   border-color: color-mix(in oklch, var(--signal-medium) 78%, var(--ink));
   background: color-mix(in oklch, var(--signal-medium) 34%, var(--surface-warm));
+  color: var(--ink);
+}
+
+.action-cluster button[data-review-action="dismissed"]:hover,
+.action-cluster button[data-review-action="dismissed"]:focus-visible,
+.mobile-action-strip button[data-review-action="dismissed"]:hover,
+.mobile-action-strip button[data-review-action="dismissed"]:focus-visible {
+  border-color: color-mix(in oklch, var(--signal-danger) 70%, var(--ink));
+  background: color-mix(in oklch, var(--signal-danger) 20%, var(--surface-warm));
   color: var(--ink);
 }
 

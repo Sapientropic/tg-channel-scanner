@@ -353,7 +353,7 @@ describe("Settings source topic editor", () => {
     expect(botGatewayStatusLine(status)).toBe("Running · token ready · 1 chat");
     expect(botGatewayLivenessLine(status)).toBe("Bot is running");
     expect(botGatewayLivenessLine({ ...status, gateway_status: "stale" })).toBe("Bot may be stopped");
-    expect(botGatewayRepairLabel({ ...status, gateway_status: "stale" })).toBe("Restart / repair bot");
+    expect(botGatewayRepairLabel({ ...status, gateway_status: "stale" })).toBe("Repair alerts");
     expect(botGatewayStatusLine({ ...status, authorized_chat_count: 0, gateway_status: "not_detected" })).toBe(
       "Not detected · token ready · no chats",
     );
@@ -430,7 +430,7 @@ describe("Settings source topic editor", () => {
 
     expect(html).toContain("Default notification chat");
     expect(html).toContain("Bot status unknown");
-    expect(html).toContain("Restart / repair bot");
+    expect(html).toContain("Repair alerts");
     expect(html).toContain("Add a Telegram chat ID to create the default private bot notification target.");
     expect(html).toContain("Telegram chat ID");
     expect(html).toContain("Detect chat ID");

@@ -303,6 +303,11 @@ def desk_bot_gateway_background_status(*, token_configured: bool | None = None) 
     return desk_bot_gateway_background.desk_bot_gateway_background_status(token_configured=token_configured)
 
 
+def repair_installed_bot_gateway_background() -> dict:
+    _sync_bot_gateway_context()
+    return desk_bot_gateway_background.repair_installed_bot_gateway_background()
+
+
 def desk_scheduler_status() -> dict:
     backend = scheduler_backend()
     profile_id = preferred_scheduler_profile_id()

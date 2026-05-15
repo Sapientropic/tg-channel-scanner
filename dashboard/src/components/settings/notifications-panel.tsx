@@ -124,25 +124,8 @@ function NotificationTokenPanel({
   const sourceLabel = notificationTokenSourceLabel(status?.source, status?.local_store_label);
   const canSave = status?.can_save !== false;
   const canClear = status?.can_clear === true;
-  return (
-    <form
-      className="notification-token-panel"
-      onSubmit={(event) => {
-        event.preventDefault();
-        if (!token.trim() || !canSave) {
-          return;
-        }
-        void saveNotificationToken(token).then(() => setToken(""));
-      }}
-    >
-      <div className="notification-token-head">
-        <KeyRound size={16} />
-        <div>
-          <strong>Telegram bot token</strong>
-          <small>{status ? `${configured ? "Configured" : "Missing"} · ${sourceLabel}` : "Checking token status"}</small>
-        </div>
-        <span className={configured ? "status enabled" : "status disabled"}>{configured ? "Ready" : "Needed"}</span>
-      </div>
+  const tokenEditor = (showDetail = true) => (
+    <>
       <label className="delivery-field">
         <span>Bot token</span>
         <input
@@ -160,7 +143,7 @@ function NotificationTokenPanel({
       >
         Stored locally. Never shown again.
       </p>
-      {(status?.detail || error) && (
+      {showDetail && (status?.detail || error) && (
         <p className={error ? "delivery-token-warning" : "delivery-note"} role={error ? "alert" : undefined}>
           {error || status?.detail}
         </p>
@@ -180,6 +163,43 @@ function NotificationTokenPanel({
           <span>Clear saved token</span>
         </button>
       </div>
+    </>
+  );
+  return (
+    <form
+      className="notification-token-panel"
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (!token.trim() || !canSave) {
+          return;
+        }
+        void saveNotificationToken(token).then(() => setToken(""));
+      }}
+    >
+      <div className="notification-token-head">
+        <KeyRound size={16} />
+        <div>
+          <strong>Telegram bot token</strong>
+          <small>{status ? `${configured ? "Configured" : "Missing"} · ${sourceLabel}` : "Checking token status"}</small>
+        </div>
+        <span className={configured ? "status enabled" : "status disabled"}>{configured ? "Ready" : "Needed"}</span>
+      </div>
+      {configured && !token ? (
+        <>
+          <p className="delivery-note">Token is saved. Use this only when rotating or removing the bot token.</p>
+          {error && (
+            <p className="delivery-token-warning" role="alert">
+              {error}
+            </p>
+          )}
+          <details className="notification-token-change">
+            <summary>Change saved token</summary>
+            {tokenEditor(!error)}
+          </details>
+        </>
+      ) : (
+        tokenEditor()
+      )}
     </form>
   );
 }

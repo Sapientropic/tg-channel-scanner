@@ -211,9 +211,8 @@ function alertProofTitle(card: ReviewCard) {
     return "No alert event has been recorded for this card";
   }
   const mode = deliveryModeSuffix(summary.latest_delivery_mode);
-  const target = summary.latest_target_type || summary.latest_target_id || "delivery target";
   const when = summary.latest_alerted_at ? ` at ${formatDate(summary.latest_alerted_at)}` : "";
-  return `${summary.alert_count} alert event${summary.alert_count === 1 ? "" : "s"} via ${target}${mode}${when}`;
+  return `${summary.alert_count} Telegram notification${summary.alert_count === 1 ? "" : "s"}${mode}${when}`;
 }
 
 function deliveryModeSuffix(mode: unknown) {
@@ -308,6 +307,19 @@ function MobileActionStrip({
           >
             <Bookmark size={16} />
             <span>Save</span>
+          </button>
+          <button
+            aria-label="Mark opportunity not a fit"
+            className="secondary-action"
+            title="Mark opportunity not a fit"
+            type="button"
+            data-review-action="dismissed"
+            data-review-tone="negative"
+            onClick={() => act(card.card_id, "dismissed")}
+            disabled={busy}
+          >
+            <X size={16} />
+            <span>Not a fit</span>
           </button>
         </>
       ) : (
@@ -449,6 +461,18 @@ function CardActions({
               <Bookmark size={16} />
               <span>Saved</span>
             </button>
+            <button
+              className="secondary-action"
+              title="Mark opportunity not a fit"
+              type="button"
+              data-review-action="dismissed"
+              data-review-tone="negative"
+              onClick={() => act(card.card_id, "dismissed")}
+              disabled={busy}
+            >
+              <X size={16} />
+              <span>Not a fit</span>
+            </button>
           </>
         ) : (
           <button
@@ -512,20 +536,8 @@ function CardActions({
             </button>
           </div>
           <div className="follow-up-group">
-            <span className="follow-up-group-label">Close card</span>
-            <div className="follow-up-signal-grid follow-up-reason-grid" aria-label="Close card reasons">
-              <button
-                className="follow-up-signal"
-                title="Close this opportunity because it is not a fit"
-                type="button"
-                data-review-action="dismissed"
-                data-review-tone="negative"
-                onClick={() => act(card.card_id, "dismissed")}
-                disabled={busy}
-              >
-                <X size={16} />
-                <span>Not a fit</span>
-              </button>
+            <span className="follow-up-group-label">Other close reasons</span>
+            <div className="follow-up-signal-grid follow-up-reason-grid" aria-label="Other close reasons">
               <button
                 className="follow-up-signal"
                 title="Close this opportunity as a duplicate"

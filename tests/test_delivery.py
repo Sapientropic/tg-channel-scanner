@@ -22,8 +22,10 @@ class DeliveryTests(unittest.TestCase):
         )
 
         self.assertIn("Exchange outage", text)
-        self.assertIn("cointelegraph#123", text)
+        self.assertIn("https://t.me/cointelegraph/123", text)
+        self.assertIn("Open Review in Signal Desk", text)
         self.assertNotIn("RAW TELEGRAM BODY", text)
+        self.assertNotIn("card_123", text)
         self.assertNotIn("output/runs", text)
         self.assertNotIn("127.0.0.1", text)
 
@@ -42,6 +44,23 @@ class DeliveryTests(unittest.TestCase):
 
         self.assertIn("*T-Sense alert*: AI Engineer", text)
         self.assertNotIn("*T-Sense alert*: Unknown", text)
+
+    def test_telegram_alert_text_marks_when_buttons_update_review(self):
+        text = delivery.build_telegram_alert_text(
+            item={
+                "role": "Rust Engineer",
+                "rating": "high",
+                "why": "Remote-friendly role.",
+                "decision_state": {"status": "changed"},
+                "source_message_refs": [{"channel": "rust_jobs", "id": 77}],
+            },
+            card={"card_id": "card_123"},
+            actions_available=True,
+        )
+
+        self.assertIn("*Priority*: High · Changed", text)
+        self.assertIn("Buttons below update Review in Signal Desk.", text)
+        self.assertIn("https://t.me/rust_jobs/77", text)
 
     def test_dry_run_telegram_delivery_does_not_require_token(self):
         attempt = delivery.send_telegram_bot_message(

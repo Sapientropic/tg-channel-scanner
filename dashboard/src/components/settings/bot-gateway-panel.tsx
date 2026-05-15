@@ -72,7 +72,7 @@ export function botGatewayLivenessLine(status: DeskBotGatewayStatus | null) {
 
 export function botGatewayRepairLabel(status: DeskBotGatewayStatus | null) {
   if (!status || status.gateway_status === "stale" || status.background?.installed) {
-    return "Restart / repair bot";
+    return "Repair alerts";
   }
   return "Run in background";
 }
@@ -153,6 +153,76 @@ function botGatewayCanRepair(status: DeskBotGatewayStatus | null) {
   );
 }
 
+type BotGatewayPrimaryAction = {
+  kind: "install" | "repair";
+  label: string;
+  detail: string;
+};
+
+function botGatewayPrimaryAction(status: DeskBotGatewayStatus | null): BotGatewayPrimaryAction | null {
+  if (status?.token_configured !== true || status.authorized_chat_count <= 0) {
+    return null;
+  }
+  if (status.gateway_status === "stale" && botGatewayCanRepair(status)) {
+    return {
+      kind: "repair",
+      label: "Repair alerts",
+      detail: "Restart the local bot link so Telegram buttons and replies work again.",
+    };
+  }
+  if (botGatewayCanInstallBackground(status)) {
+    return {
+      kind: "install",
+      label: "Keep alerts running",
+      detail: "Turn on background mode so Telegram replies can work after login.",
+    };
+  }
+  return null;
+}
+
+function botGatewayPrimaryCopy(status: DeskBotGatewayStatus | null) {
+  if (!status) {
+    return {
+      title: "Checking alert connection",
+      detail: "Signal Desk is reading the saved bot setup.",
+    };
+  }
+  if (!status.token_configured) {
+    return {
+      title: "Add a bot token first",
+      detail: "Paste the BotFather token here, then add the Telegram chat below.",
+    };
+  }
+  if (status.authorized_chat_count <= 0) {
+    return {
+      title: "Add your Telegram chat",
+      detail: "Send /start to the bot, then detect or paste the chat ID below.",
+    };
+  }
+  if (status.gateway_status === "stale") {
+    return {
+      title: "Alerts need a quick repair",
+      detail: "The saved bot setup is present, but the local reply link looks stopped.",
+    };
+  }
+  if (status.gateway_status === "running" || status.background?.installed) {
+    return {
+      title: "Alerts are ready",
+      detail: "Telegram alerts can send to the saved chat.",
+    };
+  }
+  if (status.background?.available) {
+    return {
+      title: "Make alerts persistent",
+      detail: "Telegram alerts work while Signal Desk is open. Background mode keeps them available after login.",
+    };
+  }
+  return {
+    title: "Alerts are ready while this window is open",
+    detail: "Background mode is unavailable here, but saved Telegram alerts can still send locally.",
+  };
+}
+
 export function BotGatewayPanel({
   status,
   error,
@@ -177,6 +247,9 @@ export function BotGatewayPanel({
   const canRemoveBackground = status?.background?.can_remove === true;
   const identityLine = botIdentityResultLine(identityResult);
   const repairLabel = botGatewayRepairLabel(status);
+  const primaryAction = botGatewayPrimaryAction(status);
+  const primaryCopy = botGatewayPrimaryCopy(status);
+  const PrimaryActionIcon = primaryAction?.kind === "repair" ? Wrench : CirclePlay;
   return (
     <section className="bot-gateway-panel" aria-label="Bot Gateway status">
       <div className="notification-token-head">
@@ -209,48 +282,26 @@ export function BotGatewayPanel({
           <small>bot menu</small>
         </span>
       </div>
-      <div className="bot-gateway-actions">
-        <button
-          className="text-button"
-          disabled={busy || !canRepair}
-          onClick={() => void installBotGatewayAutostart()}
-          type="button"
-        >
-          <Wrench size={15} />
-          <span>{busy ? "Working" : repairLabel}</span>
-        </button>
-        <button
-          className="text-button secondary"
-          disabled={busy || !canInstallBackground}
-          onClick={() => void installBotGatewayAutostart()}
-          type="button"
-        >
-          <CirclePlay size={15} />
-          <span>{busy ? "Working" : "Run in background"}</span>
-        </button>
-        <button
-          className="text-button secondary"
-          disabled={busy || !canRemoveBackground}
-          onClick={() => void removeBotGatewayAutostart()}
-          type="button"
-        >
-          <CirclePause size={15} />
-          <span>{busy ? "Working" : "Stop background"}</span>
-        </button>
-        <button
-          className="text-button secondary"
-          disabled={busy || !canApplyIdentity}
-          onClick={() => void applyBotIdentity()}
-          type="button"
-        >
-          <ShieldCheck size={15} />
-          <span>{busy ? "Applying" : "Update bot menu"}</span>
-        </button>
-        <span>{identityLine || "Updates the bot name, menu, and description when a token is saved."}</span>
+      <div className="bot-gateway-primary-action">
+        <div>
+          <strong>{primaryCopy.title}</strong>
+          <small>{primaryAction?.detail || primaryCopy.detail}</small>
+        </div>
+        {primaryAction && (
+          <button
+            className="text-button"
+            disabled={busy}
+            onClick={() => void installBotGatewayAutostart()}
+            type="button"
+          >
+            <PrimaryActionIcon size={15} />
+            <span>{busy ? "Working" : primaryAction.label}</span>
+          </button>
+        )}
       </div>
       <details className="bot-gateway-technical">
         <summary>Technical details</summary>
-        <div>
+        <div className="bot-gateway-technical-grid">
           <span>
             <strong>{botGatewayStatusLine(status)}</strong>
             <small>local status</small>
@@ -267,6 +318,45 @@ export function BotGatewayPanel({
             <strong>{botGatewayBackgroundLine(status)}</strong>
             <small>scheduler</small>
           </span>
+        </div>
+        <div className="bot-gateway-technical-actions" aria-label="Bot maintenance actions">
+          <button
+            className="text-button secondary"
+            disabled={busy || !canRepair}
+            onClick={() => void installBotGatewayAutostart()}
+            type="button"
+          >
+            <Wrench size={15} />
+            <span>{busy ? "Working" : repairLabel}</span>
+          </button>
+          <button
+            className="text-button secondary"
+            disabled={busy || !canInstallBackground}
+            onClick={() => void installBotGatewayAutostart()}
+            type="button"
+          >
+            <CirclePlay size={15} />
+            <span>{busy ? "Working" : "Run in background"}</span>
+          </button>
+          <button
+            className="text-button secondary"
+            disabled={busy || !canRemoveBackground}
+            onClick={() => void removeBotGatewayAutostart()}
+            type="button"
+          >
+            <CirclePause size={15} />
+            <span>{busy ? "Working" : "Stop background"}</span>
+          </button>
+          <button
+            className="text-button secondary"
+            disabled={busy || !canApplyIdentity}
+            onClick={() => void applyBotIdentity()}
+            type="button"
+          >
+            <ShieldCheck size={15} />
+            <span>{busy ? "Applying" : "Update bot menu"}</span>
+          </button>
+          <span>{identityLine || "Updates the bot name, menu, and description when a token is saved."}</span>
         </div>
       </details>
       <p className={error ? "delivery-token-warning" : "delivery-note"} role={error ? "alert" : undefined}>

@@ -12,7 +12,7 @@
   }
 
   .review-card:not([data-actions-expanded="true"]) .lifecycle-cluster {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
   .review-card:not([data-actions-expanded="true"]) .tune-profile-entry {
@@ -829,6 +829,13 @@
     color: var(--ink);
   }
 
+  .mobile-action-strip button[data-review-action="dismissed"]:hover:not(:disabled),
+  .mobile-action-strip button[data-review-action="dismissed"]:focus-visible {
+    border-color: var(--signal-danger);
+    background: color-mix(in oklch, var(--signal-danger) 22%, var(--paper));
+    color: var(--ink);
+  }
+
   .mobile-action-strip button.secondary-action:hover:not(:disabled),
   .mobile-action-strip button.secondary-action:focus-visible {
     border-color: var(--paper-3);
@@ -1275,6 +1282,15 @@
 
   .board-body {
     padding: 8px 8px 0;
+  }
+
+  .dashboard-loading-state {
+    grid-template-columns: 1fr;
+    align-items: start;
+  }
+
+  .dashboard-loading-state .text-button {
+    justify-self: stretch;
   }
 
   .plain-panel,

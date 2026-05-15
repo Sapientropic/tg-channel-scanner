@@ -164,15 +164,18 @@ export function ReviewBacklogPanel({
   onSelectFilter: Dispatch<SetStateAction<InboxFilter>>;
 }) {
   const options = inboxFilterOptions(cards, latestRunId).filter((item) => item.id !== activeFilter && item.count > 0);
-  const activeCardIds = new Set(filterInboxCards(cards, activeFilter, latestRunId).map((card) => card.card_id));
+  const activeCards = filterInboxCards(cards, activeFilter, latestRunId);
+  const activeCardIds = new Set(activeCards.map((card) => card.card_id));
   const previewCards = cards.filter((card) => !activeCardIds.has(card.card_id)).slice(0, 3);
-  const waitingCount = Math.max(0, cards.length - visibleCount);
+  const waitingCardCount = Math.max(0, cards.length - visibleCount);
+  const remainingReviewCount = Math.max(0, reviewQueueCount(cards) - activeCards.filter(isReviewQueueCard).length);
+  const handledCount = handledInboxCount(cards);
   return (
     <section className="review-backlog-panel" aria-label="Other review buckets">
       <div className="review-backlog-copy">
         <span className="panel-kicker">Other cards</span>
-        <strong>{waitingCount} outside this view</strong>
-        <small>Switch buckets only when you need older or handled cards.</small>
+        <strong>{reviewBacklogHeadline(remainingReviewCount, handledCount, waitingCardCount)}</strong>
+        <small>{reviewBacklogDetail(remainingReviewCount, handledCount)}</small>
       </div>
       <div className="review-backlog-buckets">
         {options.map((item) => (
@@ -201,6 +204,32 @@ export function ReviewBacklogPanel({
       )}
     </section>
   );
+}
+
+function reviewBacklogHeadline(remainingReviewCount: number, handledCount: number, waitingCardCount: number) {
+  if (remainingReviewCount > 0) {
+    return `${remainingReviewCount} more to review`;
+  }
+  if (handledCount > 0) {
+    return `${handledCount} handled history`;
+  }
+  if (waitingCardCount > 0) {
+    return `${waitingCardCount} other cards`;
+  }
+  return "No other cards";
+}
+
+function reviewBacklogDetail(remainingReviewCount: number, handledCount: number) {
+  if (remainingReviewCount > 0 && handledCount > 0) {
+    return "Handled history stays separate from cards still needing a decision.";
+  }
+  if (remainingReviewCount > 0) {
+    return "Use the buckets only when you want to keep reviewing.";
+  }
+  if (handledCount > 0) {
+    return "Handled cards are kept as history, outside the review queue.";
+  }
+  return "Nothing else needs attention right now.";
 }
 
 function backlogFilterForCard(card: ReviewCard, latestRunId?: string): InboxFilter {

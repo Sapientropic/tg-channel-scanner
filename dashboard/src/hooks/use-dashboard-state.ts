@@ -5,6 +5,7 @@ import { emptyDashboardState } from "../domain/sanitize";
 import type { DashboardState } from "../domain/types";
 
 export const DASHBOARD_STATE_AUTO_REFRESH_MS = 15000;
+export type DashboardLoadStatus = "loading" | "ready" | "error";
 
 type DashboardStatePollingContext = {
   busy: boolean;
@@ -18,24 +19,45 @@ export function shouldPollDashboardState({ busy, visibilityState }: DashboardSta
 export function useDashboardState({ busy = false }: { busy?: boolean } = {}) {
   const [state, setState] = useState<DashboardState>(emptyDashboardState);
   const [loadError, setLoadError] = useState("");
+  const [loadStatus, setLoadStatus] = useState<DashboardLoadStatus>("loading");
 
   const load = useCallback(async (signal?: AbortSignal) => {
     const nextState = await loadDashboardState(signal);
     setState(nextState);
     setLoadError("");
+    setLoadStatus("ready");
   }, []);
+
+  const handleLoadError = useCallback((error: unknown, { resetState = false }: { resetState?: boolean } = {}) => {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      return false;
+    }
+    setLoadError(errorMessage(error));
+    if (resetState) {
+      setState(emptyDashboardState);
+    }
+    setLoadStatus((current) => (current === "ready" && !resetState ? "ready" : "error"));
+    return true;
+  }, []);
+
+  const refresh = useCallback(async () => {
+    setLoadStatus((current) => (current === "ready" ? current : "loading"));
+    try {
+      await load();
+    } catch (error) {
+      if (handleLoadError(error)) {
+        throw error;
+      }
+    }
+  }, [handleLoadError, load]);
 
   useEffect(() => {
     const controller = new AbortController();
     load(controller.signal).catch((error) => {
-      if (error instanceof DOMException && error.name === "AbortError") {
-        return;
-      }
-      setLoadError(errorMessage(error));
-      setState(emptyDashboardState);
+      handleLoadError(error, { resetState: true });
     });
     return () => controller.abort();
-  }, [load]);
+  }, [handleLoadError, load]);
 
   useEffect(() => {
     function loadQuietly() {
@@ -44,10 +66,7 @@ export function useDashboardState({ busy = false }: { busy?: boolean } = {}) {
         return;
       }
       load().catch((error) => {
-        if (error instanceof DOMException && error.name === "AbortError") {
-          return;
-        }
-        setLoadError(errorMessage(error));
+        handleLoadError(error);
       });
     }
     const intervalId = window.setInterval(loadQuietly, DASHBOARD_STATE_AUTO_REFRESH_MS);
@@ -56,7 +75,7 @@ export function useDashboardState({ busy = false }: { busy?: boolean } = {}) {
       window.clearInterval(intervalId);
       document.removeEventListener("visibilitychange", loadQuietly);
     };
-  }, [busy, load]);
+  }, [busy, handleLoadError, load]);
 
-  return { state, refresh: () => load(), loadError };
+  return { state, refresh, loadError, loadStatus };
 }
