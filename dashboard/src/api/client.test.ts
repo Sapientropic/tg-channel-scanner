@@ -16,7 +16,10 @@ import {
   loadDeskSources,
   loadDeskSchedulerStatus,
   loadDeskTelegramStatus,
+  loadProfileTemplates,
   normalizeDashboardError,
+  previewProfileCoach,
+  previewProfileFromBrief,
   previewSourceAssistant,
   pullLatestGit,
   runDeskAction,
@@ -414,5 +417,85 @@ describe("dashboard API contract validation", () => {
     await expect(createProfileFromBrief({ brief: "Track remote TypeScript roles." })).rejects.toThrow(
       "Invalid profile creation response",
     );
+  });
+
+  it("validates profile template, create preview, and coach preview responses", async () => {
+    mockJsonResponse({
+      templates: {
+        schema_version: "desk_profile_template_catalog_v1",
+        templates: [
+          {
+            id: "jobs",
+            title: "Developer opportunities",
+            audience: "Developers",
+            default_topic: "jobs",
+            starter_brief: "Track paid developer work.",
+            coach_questions: ["Must have?"],
+            supported_fields: ["search_rules", "rejection_rules"],
+          },
+        ],
+      },
+    });
+
+    await expect(loadProfileTemplates()).resolves.toEqual({
+      schema_version: "desk_profile_template_catalog_v1",
+      templates: [
+        {
+          id: "jobs",
+          title: "Developer opportunities",
+          audience: "Developers",
+          default_topic: "jobs",
+          starter_brief: "Track paid developer work.",
+          coach_questions: ["Must have?"],
+          supported_fields: ["search_rules", "rejection_rules"],
+        },
+      ],
+    });
+
+    mockJsonResponse({
+      preview: {
+        schema_version: "desk_profile_create_preview_v1",
+        status: "ready",
+        template_id: "jobs",
+        title: "Developer opportunities",
+        topic: "jobs",
+        questions: [],
+        generated_rules: ["Include paid TypeScript work."],
+        search_rules: ["Include paid TypeScript work."],
+        rejection_rules: ["Reject unpaid internships."],
+        keywords: ["typescript"],
+        markdown_preview: "# Profile",
+        warnings: [],
+        llm_used: true,
+      },
+    });
+
+    await expect(previewProfileFromBrief({ brief: "Track TypeScript work.", template_id: "jobs" })).resolves.toMatchObject({
+      schema_version: "desk_profile_create_preview_v1",
+      status: "ready",
+      template_id: "jobs",
+    });
+
+    mockJsonResponse({
+      coach: {
+        schema_version: "profile_coach_preview_v1",
+        status: "ready",
+        profile_id: "jobs-fast",
+        evidence_counts: { keep: 1, skip: 0, false_positive: 1, follow_up: 1 },
+        diagnosis: [{ label: "Wrong matches", detail: "Tighten exclusions." }],
+        suspected_false_positive_patterns: ["full-stack generalists"],
+        suggested_preference_rules: ["Exclude full-stack roles."],
+        source_suggestions: [],
+        confidence: "medium",
+        warnings: [],
+        llm_used: true,
+      },
+    });
+
+    await expect(previewProfileCoach("jobs-fast")).resolves.toMatchObject({
+      schema_version: "profile_coach_preview_v1",
+      profile_id: "jobs-fast",
+      suggested_preference_rules: ["Exclude full-stack roles."],
+    });
   });
 });

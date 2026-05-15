@@ -115,8 +115,11 @@ describe("ProfilesView", () => {
     );
 
     expect(html).toContain("New profile");
-    expect(html).toContain("Markdown, text, or PDF");
+    expect(html).toContain("Start with a template");
+    expect(html).toContain("review rules before saving");
     expect(html).toContain("No profiles yet");
+    expect(html).not.toContain("Markdown, text, or PDF");
+    expect(html).not.toContain("Create confirmed profile");
   });
 
   it("shows preference drafts as reviewable profile changes with explicit actions", () => {

@@ -21,6 +21,7 @@ import type {
   FeedbackExportResult,
   FeedbackProfileSuggestionsResult,
   GitUpdateStatus,
+  ProfileCoachPreview,
   Profile,
   SourceImportResult,
   SourceInsight,
@@ -112,7 +113,11 @@ export type SettingsLearningController = {
   openReviewCards: () => void;
   clearFeedback: () => void;
   undoFeedbackDecision: (cardId: string) => void;
-  runAgainWithLearning: () => void;
+  runAgainWithLearning: (profileId?: string) => void;
+  profiles: Profile[];
+  profileCoachPreview: ProfileCoachPreview | null;
+  previewProfileCoach: (profileId: string) => void;
+  createProfileMatchingPreferencesDraft: (profileId: string, preferences: string) => Promise<void>;
 };
 
 export type SettingsUpdatesController = {
@@ -188,6 +193,10 @@ export function SettingsView({
     clearFeedback,
     undoFeedbackDecision,
     runAgainWithLearning,
+    profiles: learningProfiles,
+    profileCoachPreview,
+    previewProfileCoach,
+    createProfileMatchingPreferencesDraft,
   } = learning;
   const { gitStatus, gitBusy, checkUpdates, pullLatest } = updates;
   const notificationsPanelRef = useRef<HTMLDivElement | null>(null);
@@ -312,6 +321,10 @@ export function SettingsView({
           generateProfileSuggestions={generateFeedbackProfileSuggestions}
           openProfileDrafts={openProfileDrafts}
           openReviewCards={openReviewCardsForLearning}
+          profiles={learningProfiles}
+          profileCoachPreview={profileCoachPreview}
+          previewProfileCoach={previewProfileCoach}
+          createProfileMatchingPreferencesDraft={createProfileMatchingPreferencesDraft}
           runAgainWithLearning={runAgainWithLearning}
           summary={feedbackSummary}
           suggestionResult={feedbackProfileSuggestions}

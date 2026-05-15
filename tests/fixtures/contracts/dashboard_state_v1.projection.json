@@ -149,8 +149,8 @@
         "new": 2
       },
       "next_action": {
-        "label": "Generate profile suggestions",
-        "detail": "Turn collected Review tags and notes into local profile drafts. The raw export stays in Advanced export."
+        "label": "Suggest profile improvements",
+        "detail": "Turn collected Review choices and notes into profile drafts. Nothing changes until you approve a draft."
       }
     },
     "setup_status": {

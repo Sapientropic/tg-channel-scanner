@@ -362,6 +362,170 @@ def profile_patch_feedback_context(
     return context
 
 
+def profile_coach_preview(
+    conn: sqlite3.Connection,
+    *,
+    profile_id: str,
+    confirm_external_ai: bool = False,
+) -> dict[str, Any]:
+    profile_id = str(profile_id or "").strip()
+    if not profile_id:
+        raise MonitorStateError("Profile id is required.")
+    row = conn.execute("SELECT path FROM profiles WHERE profile_id = ?", (profile_id,)).fetchone()
+    if not row:
+        raise MonitorStateError(f"Profile is not registered: {profile_id}")
+    profile_path = dashboard_profile_file_path(row["path"])
+    if not profile_path.exists():
+        raise MonitorStateError(f"Profile file not found: {profile_path}")
+    profile_text = profile_path.read_text(encoding="utf-8")
+    require_profile_text_without_private_fragments("Current profile", profile_text)
+    counts = _profile_coach_evidence_counts(conn, profile_id)
+    context = profile_patch_feedback_context(conn, profile_id=profile_id, note=REVIEW_LEARNING_PATCH_NOTE, limit=24)
+    warnings: list[str] = []
+    suggested_rules: list[str] = []
+    llm_used = False
+    if context:
+        if confirm_external_ai:
+            try:
+                suggested_rules = _llm_profile_patch_preference_lines(
+                    profile_text=profile_text,
+                    note=REVIEW_LEARNING_PATCH_NOTE,
+                    feedback_context=context,
+                )
+                llm_used = bool(suggested_rules)
+            except MonitorStateError:
+                warnings.append("Smart suggestions were unavailable, so Signal Desk drafted conservative rules from Review choices.")
+            if not suggested_rules:
+                suggested_rules = _fallback_profile_patch_preference_lines(
+                    note=REVIEW_LEARNING_PATCH_NOTE,
+                    feedback_context=context,
+                )
+        else:
+            suggested_rules = _fallback_profile_patch_preference_lines(
+                note=REVIEW_LEARNING_PATCH_NOTE,
+                feedback_context=context,
+            )
+    elif counts.get("false_positive", 0):
+        suggested_rules = ["Down-rank recurring wrong-match patterns unless the item clearly satisfies the profile's core requirements."]
+
+    suggested_rules = _normalize_preference_lines("\n".join(suggested_rules))
+    status = "ready" if suggested_rules or sum(counts.values()) > 0 else "needs_evidence"
+    diagnosis = _profile_coach_diagnosis(counts, has_context=bool(context), has_rules=bool(suggested_rules))
+    source_suggestions = _profile_coach_source_suggestions(counts)
+    return {
+        "schema_version": "profile_coach_preview_v1",
+        "status": status,
+        "profile_id": profile_id,
+        "stage": "coach_diagnosis" if status == "ready" else "review_evidence",
+        "evidence_counts": counts,
+        "diagnosis": diagnosis,
+        "suspected_false_positive_patterns": _profile_coach_false_positive_patterns(counts, suggested_rules),
+        "suggested_preference_rules": suggested_rules,
+        "source_suggestions": source_suggestions,
+        "confidence": _profile_coach_confidence(counts, suggested_rules),
+        "warnings": warnings,
+        "llm_used": llm_used,
+    }
+
+
+def _profile_coach_evidence_counts(conn: sqlite3.Connection, profile_id: str) -> dict[str, int]:
+    rows = conn.execute(
+        """
+        SELECT action, COUNT(*) AS count
+        FROM feedback_events
+        WHERE profile_id = ?
+          AND action IN ('keep', 'skip', 'false_positive', 'follow_up')
+        GROUP BY action
+        """,
+        (profile_id,),
+    ).fetchall()
+    counts = {"keep": 0, "skip": 0, "false_positive": 0, "follow_up": 0}
+    for row in rows:
+        action = str(row["action"] or "")
+        if action in counts:
+            counts[action] = int(row["count"] or 0)
+    return counts
+
+
+def _profile_coach_diagnosis(counts: dict[str, int], *, has_context: bool, has_rules: bool) -> list[dict[str, str]]:
+    total = sum(counts.values())
+    if total <= 0:
+        return [
+            {
+                "label": "Review evidence",
+                "detail": "No saved Review choices yet. Mark a few cards as keep, skip, wrong match, or add notes first.",
+            }
+        ]
+    diagnosis: list[dict[str, str]] = []
+    if counts.get("false_positive", 0):
+        diagnosis.append(
+            {
+                "label": "Too many wrong matches",
+                "detail": "Recent Review choices suggest this profile needs clearer ignore rules.",
+            }
+        )
+    if counts.get("follow_up", 0) and has_context:
+        diagnosis.append(
+            {
+                "label": "Notes can become rules",
+                "detail": "Saved notes can be turned into reusable matching rules after you review them.",
+            }
+        )
+    if counts.get("keep", 0) and counts.get("skip", 0):
+        diagnosis.append(
+            {
+                "label": "Clearer boundaries",
+                "detail": "Keep and skip choices give Signal Desk examples of what should and should not match.",
+            }
+        )
+    if not diagnosis:
+        diagnosis.append(
+            {
+                "label": "Needs more examples",
+                "detail": "There is feedback, but not enough repeated pattern evidence for a confident rule.",
+            }
+        )
+    if has_rules:
+        diagnosis.append(
+            {
+                "label": "Ready to review",
+                "detail": "Suggested rules are ready for a draft. The profile will not change until you approve it.",
+            }
+        )
+    return diagnosis[:4]
+
+
+def _profile_coach_false_positive_patterns(counts: dict[str, int], suggested_rules: list[str]) -> list[str]:
+    patterns: list[str] = []
+    combined = " ".join(suggested_rules).casefold()
+    if "full-stack" in combined or "full stack" in combined:
+        patterns.append("Full-stack generalist items without clear profile fit")
+    if counts.get("false_positive", 0):
+        patterns.append("Recurring wrong-match items that satisfy keywords but not core criteria")
+    return patterns[:4]
+
+
+def _profile_coach_source_suggestions(counts: dict[str, int]) -> list[dict[str, str]]:
+    if counts.get("false_positive", 0) <= 0 and counts.get("skip", 0) <= 1:
+        return []
+    return [
+        {
+            "kind": "review_sources",
+            "label": "Review noisy sources",
+            "detail": "If wrong matches come from the same channel, review that source before changing the profile.",
+        }
+    ]
+
+
+def _profile_coach_confidence(counts: dict[str, int], suggested_rules: list[str]) -> str:
+    evidence = sum(counts.values())
+    if len(suggested_rules) >= 2 and evidence >= 4:
+        return "high"
+    if suggested_rules and evidence >= 1:
+        return "medium"
+    return "low"
+
+
 def _compact_feedback_card(item: dict[str, Any]) -> dict[str, Any]:
     allowed_keys = [
         "topic",

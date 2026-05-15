@@ -62,7 +62,7 @@ export function StartManagementStrip({
     {
       key: "ai",
       label: "AI API",
-      detail: "LLM / OCR keys",
+      detail: "Matching setup",
       icon: <KeyRound size={15} />,
       disabled: !onOpenSettings,
       onClick: () => onOpenSettings?.("ai"),

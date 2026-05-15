@@ -492,7 +492,7 @@ class MonitorStateFeedbackTests(unittest.TestCase):
         self.assertEqual(snapshot["feedback_summary"]["by_action"], {"false_positive": 1, "keep": 1, "skip": 1})
         self.assertEqual(snapshot["feedback_summary"]["by_rating"], {"high": 1, "low": 1, "medium": 1})
         self.assertEqual(snapshot["feedback_summary"]["by_decision_status"], {"unknown": 3})
-        self.assertEqual(snapshot["feedback_summary"]["next_action"]["label"], "Generate profile suggestions")
+        self.assertEqual(snapshot["feedback_summary"]["next_action"]["label"], "Suggest profile improvements")
         impacts = {item["item_title"]: item for item in snapshot["feedback_summary"]["recent_impacts"]}
         self.assertEqual(impacts["Kept role"]["impact_type"], "profile_tuning_source")
         self.assertEqual(impacts["Kept role"]["impact_status"], "ready")
@@ -615,12 +615,12 @@ class MonitorStateFeedbackTests(unittest.TestCase):
         snapshot = monitor_state.dashboard_snapshot(conn)
 
         feedback_json = json.dumps(snapshot["feedback_summary"], ensure_ascii=False)
-        self.assertEqual(snapshot["feedback_summary"]["next_action"]["label"], "Generate profile suggestions")
+        self.assertEqual(snapshot["feedback_summary"]["next_action"]["label"], "Suggest profile improvements")
         self.assertNotIn("decision-memory import", feedback_json)
         self.assertNotIn("note-free", feedback_json)
         self.assertIn("profile drafts", snapshot["feedback_summary"]["next_action"]["detail"])
         self.assertEqual(snapshot["feedback_summary"]["recent_impacts"][0]["impact_label"], "Ready for profile draft")
-        self.assertIn("future reports learn", snapshot["feedback_summary"]["recent_impacts"][0]["impact_detail"])
+        self.assertIn("future results learn", snapshot["feedback_summary"]["recent_impacts"][0]["impact_detail"])
 
 
     def test_follow_up_private_note_rejects_before_feedback_write(self):

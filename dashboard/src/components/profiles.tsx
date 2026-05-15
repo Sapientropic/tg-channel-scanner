@@ -5,7 +5,7 @@ import { InlineEmpty, PanelHeader } from "./common";
 import { NewProfilePanel } from "./profiles/new-profile-panel";
 import { parseDiff } from "./profiles/diff";
 import { ProfileRow } from "./profiles/profile-row";
-import type { Profile, ProfileCreateResult, ProfilePatch, ProfileRuntimeSettings } from "../domain/types";
+import type { Profile, ProfileCreatePreview, ProfileCreateResult, ProfilePatch, ProfileRuntimeSettings, ProfileTemplateCatalog } from "../domain/types";
 
 export { runtimeSettingsSaveState } from "./profiles/runtime-settings-model";
 
@@ -22,6 +22,10 @@ export function ProfilesView({
   createProfileDraftNote,
   createProfileMatchingPreferencesDraft,
   createProfileFromBrief,
+  loadProfileTemplates = async () => ({ schema_version: "desk_profile_template_catalog_v1" as const, templates: [] }),
+  previewProfileFromBrief,
+  profileTemplates,
+  profileCreatePreview,
   profileCreateResult,
   busy,
   onGenerateProfileSuggestions,
@@ -43,7 +47,22 @@ export function ProfilesView({
     source_filename?: string;
     source_text?: string;
     source_base64?: string;
+    template_id?: string;
+    answers?: Record<string, string>;
+    preview?: ProfileCreatePreview;
   }) => Promise<ProfileCreateResult>;
+  loadProfileTemplates?: () => Promise<ProfileTemplateCatalog>;
+  previewProfileFromBrief?: (payload: {
+    brief: string;
+    template_id?: string;
+    answers?: Record<string, string>;
+    source_filename?: string;
+    source_text?: string;
+    source_base64?: string;
+    confirm_external_ai?: boolean;
+  }) => Promise<ProfileCreatePreview>;
+  profileTemplates?: ProfileTemplateCatalog | null;
+  profileCreatePreview?: ProfileCreatePreview | null;
   profileCreateResult: ProfileCreateResult | null;
   busy: boolean;
   onGenerateProfileSuggestions?: () => void;
@@ -59,7 +78,11 @@ export function ProfilesView({
         <NewProfilePanel
           busy={busy}
           createProfileFromBrief={createProfileFromBrief}
+          loadProfileTemplates={loadProfileTemplates}
           latestResult={profileCreateResult}
+          previewProfileFromBrief={previewProfileFromBrief}
+          templates={profileTemplates?.templates ?? []}
+          preview={profileCreatePreview}
         />
         {profiles.length ? (
           <div className="table-list">
@@ -156,6 +179,12 @@ function ProfileDraftCard({
           <span>{patch.profile_display_path || patch.profile_id}</span>
         </div>
         <p className="note-line">Review this drafted profile change, then apply or dismiss it.</p>
+        {(patch.source_card_titles?.length || (patch.apply_readiness?.status !== "blocked" && patch.apply_readiness?.detail)) && (
+          <div className="patch-diagnosis" aria-label="Draft evidence and warnings">
+            {patch.source_card_titles?.slice(0, 3).map((title) => <small key={title}>{title}</small>)}
+            {patch.apply_readiness?.status !== "blocked" && patch.apply_readiness?.detail && <small>{patch.apply_readiness.detail}</small>}
+          </div>
+        )}
         <label className="profile-draft-suggestion-field">
           <span>Drafted matching changes</span>
           <textarea

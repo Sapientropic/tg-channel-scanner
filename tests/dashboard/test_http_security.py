@@ -60,10 +60,17 @@ class DashboardHttpSecurityTests(unittest.TestCase):
             "/api/profiles/jobs-fast/draft-note": "create_profile_patch_suggestion",
             "/api/profiles/jobs-fast/delete": "delete_profile",
             "/api/profiles/create": "create_profile_from_brief",
+            "/api/profiles/create-preview": "preview_profile_from_brief",
+            "/api/profiles/jobs-fast/coach-preview": "profile_coach_preview",
         }
         for path, function_name in endpoint_functions.items():
             with self.subTest(path=path):
-                module = dashboard_server.monitor_state if function_name.startswith("update_profile_") or function_name == "create_profile_patch_suggestion" else dashboard_server
+                module = (
+                    dashboard_server.monitor_state
+                    if function_name.startswith("update_profile_")
+                    or function_name in {"create_profile_patch_suggestion", "profile_coach_preview"}
+                    else dashboard_server
+                )
                 with patch.object(module, function_name) as action_mock:
                     handler = FakeHandler(path)
                     dashboard_server.DashboardHandler.do_POST(handler)

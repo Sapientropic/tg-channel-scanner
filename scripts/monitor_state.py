@@ -104,6 +104,7 @@ from scripts.profile_patches import (
     create_profile_patch_suggestion as create_profile_patch_suggestion,
     create_profile_preferences_patch_suggestion as create_profile_preferences_patch_suggestion,
     dashboard_profile_file_path as dashboard_profile_file_path,
+    profile_coach_preview as profile_coach_preview,
     replay_profile_patch as replay_profile_patch,
     revert_profile_patch as revert_profile_patch,
     sync_review_learning_profile_patch_suggestion as sync_review_learning_profile_patch_suggestion,

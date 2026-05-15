@@ -112,6 +112,9 @@ function App() {
   });
   const {
     profileCreateResult,
+    profileTemplates,
+    profileCreatePreview,
+    profileCoachPreview,
     applyPatch,
     revertPatch,
     replayPatch,
@@ -121,6 +124,9 @@ function App() {
     createProfileDraftNote,
     createProfileMatchingPreferencesDraft,
     createProfileFromBrief,
+    loadProfileTemplates,
+    previewProfileFromBrief,
+    previewProfileCoach,
     deleteProfile,
   } = useProfileActions({
     refresh,
@@ -170,6 +176,10 @@ function App() {
   const showOpportunitySummary = activeTab === "inbox" && (!hasLatestActionCards || hasBlockingSummary);
   const showValidationSummary = activeTab === "inbox" && !hasLatestActionCards;
   const showBoardStatusStack = stateReady && (showCommandStrip || showOpportunitySummary || showValidationSummary);
+  const profileRunActionId = useMemo(
+    () => deskActions.find((action) => action.group === "Run" && action.run_mode === "execute")?.action_id ?? "",
+    [deskActions],
+  );
 
   useEffect(() => {
     // Mobile bottom navigation can otherwise carry the previous tab's scroll
@@ -212,7 +222,7 @@ function App() {
       body.confirm = true;
     }
     let progressTimer: number | undefined;
-    if (actionId === "sources_probe_access" || actionId === "monitor_jobs_dry_run") {
+    if (actionId === "sources_probe_access" || actionId === profileRunActionId || actionId === "monitor_jobs_dry_run") {
       progressTimer = window.setInterval(() => {
         void refresh().catch(() => undefined);
       }, 5000);
@@ -261,6 +271,14 @@ function App() {
       return;
     }
     await executeDeskAction(actionId, body);
+  }
+
+  function runAgainWithSelectedProfile(profileId?: string) {
+    if (!profileRunActionId) {
+      setNotice({ tone: "error", text: "Run actions are still loading. Try again in a moment." });
+      return;
+    }
+    void runDeskAction(profileRunActionId, profileId ? { profile_id: profileId } : {});
   }
 
   const cancelPendingDeskAction = useCallback(() => {
@@ -378,6 +396,10 @@ function App() {
                 createProfileDraftNote={createProfileDraftNote}
                 createProfileMatchingPreferencesDraft={createProfileMatchingPreferencesDraft}
                 createProfileFromBrief={createProfileFromBrief}
+                loadProfileTemplates={loadProfileTemplates}
+                previewProfileFromBrief={previewProfileFromBrief}
+                profileTemplates={profileTemplates}
+                profileCreatePreview={profileCreatePreview}
                 profileCreateResult={profileCreateResult}
                 busy={busy}
                 onGenerateProfileSuggestions={generateFeedbackProfileSuggestions}
@@ -446,7 +468,11 @@ function App() {
                     openReviewCards: () => setActiveTab("inbox"),
                     clearFeedback,
                     undoFeedbackDecision,
-                    runAgainWithLearning: () => void runDeskAction("monitor_jobs_dry_run"),
+                    runAgainWithLearning: runAgainWithSelectedProfile,
+                    profiles: state.profiles,
+                    profileCoachPreview,
+                    previewProfileCoach: (profileId: string) => void previewProfileCoach(profileId),
+                    createProfileMatchingPreferencesDraft,
                   }}
                   updates={{
                     gitStatus,

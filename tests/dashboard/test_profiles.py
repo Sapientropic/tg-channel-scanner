@@ -101,6 +101,180 @@ class DashboardProfileTests(unittest.TestCase):
         self.assertIn("AI API key", str(raised.exception))
         self.assertFalse((root / "profiles" / "desk").exists())
 
+    def test_profile_template_catalog_get_endpoint_returns_guided_templates(self):
+        class FakeHandler:
+            path = "/api/profiles/templates"
+            status = None
+            payload = None
+            client_address = ("127.0.0.1", 51000)
+
+            def _json(self, status, payload):
+                self.status = status
+                self.payload = payload
+
+        handler = FakeHandler()
+        dashboard_server.DashboardHandler.do_GET(handler)
+
+        self.assertEqual(handler.status, HTTPStatus.OK)
+        catalog = handler.payload["templates"]
+        self.assertEqual(catalog["schema_version"], "desk_profile_template_catalog_v1")
+        template_ids = {item["id"] for item in catalog["templates"]}
+        self.assertIn("jobs", template_ids)
+        jobs = next(item for item in catalog["templates"] if item["id"] == "jobs")
+        self.assertIn("developer", jobs["audience"].casefold())
+        self.assertTrue(jobs["default_topic"])
+        self.assertGreaterEqual(len(jobs["coach_questions"]), 3)
+        self.assertIn("rejection_rules", jobs["supported_fields"])
+
+    def test_profile_create_preview_needs_input_before_ai_or_file_write(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+
+            class FakeHandler:
+                path = "/api/profiles/create-preview"
+                status = None
+                payload = None
+                client_address = ("127.0.0.1", 51000)
+
+                def _read_json_body(self):
+                    return {"brief": "jobs", "template_id": "jobs"}
+
+                def _connect(self):
+                    raise AssertionError("preview should not open local state")
+
+                def _json(self, status, payload):
+                    self.status = status
+                    self.payload = payload
+
+            with patch.object(dashboard_server, "PROJECT_ROOT", root):
+                handler = FakeHandler()
+                dashboard_server.DashboardHandler.do_POST(handler)
+
+        preview = handler.payload["preview"]
+        self.assertEqual(handler.status, HTTPStatus.OK)
+        self.assertEqual(preview["schema_version"], "desk_profile_create_preview_v1")
+        self.assertEqual(preview["status"], "needs_input")
+        self.assertGreaterEqual(len(preview["questions"]), 2)
+        self.assertFalse(preview["llm_used"])
+        self.assertFalse((root / "profiles" / "desk").exists())
+
+    def test_profile_create_preview_ready_does_not_write_until_confirmed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            db_path = root / "tgcs.db"
+
+            preview = dashboard_server.preview_profile_from_brief(
+                {
+                    "template_id": "jobs",
+                    "brief": (
+                        "Track senior remote TypeScript frontend contracts, paid AI agent projects, "
+                        "and Telegram Mini App work. Avoid unpaid internships and vague promos."
+                    ),
+                    "answers": {
+                        "must_have": "paid, remote, TypeScript or React",
+                        "avoid": "unpaid internships and candidate CVs",
+                    },
+                    "confirm_external_ai": False,
+                }
+            )
+
+            self.assertEqual(preview["status"], "ready")
+            self.assertFalse(preview["llm_used"])
+            self.assertIn("Reject", "\n".join(preview["rejection_rules"]))
+            self.assertFalse((root / "profiles" / "desk").exists())
+
+            conn = monitor_state.connect(db_path)
+            try:
+                with patch.object(dashboard_server, "PROJECT_ROOT", root):
+                    with patch.object(dashboard_server, "_unique_profile_id", return_value="developer-opportunities"):
+                        result = dashboard_server.create_profile_from_brief(
+                            conn,
+                            {
+                                "brief": "confirmed user goal",
+                                "template_id": "jobs",
+                                "answers": {"must_have": "paid remote TypeScript"},
+                                "preview": preview,
+                            },
+                        )
+                snapshot = monitor_state.dashboard_snapshot(conn)
+            finally:
+                conn.close()
+
+            profile_text = (root / result["profile_path"]).read_text(encoding="utf-8")
+            config_text = (root / ".tgcs" / "profiles.toml").read_text(encoding="utf-8")
+
+        self.assertEqual(result["schema_version"], "desk_profile_create_result_v1")
+        self.assertEqual(result["profile_id"], "developer-opportunities")
+        self.assertIn("## Search Rules", profile_text)
+        self.assertIn("## Rejection Rules", profile_text)
+        self.assertIn('source_topics = ["jobs"]', config_text)
+        self.assertEqual(snapshot["profiles"][0]["profile_id"], "developer-opportunities")
+
+    def test_profile_create_preview_returns_local_ready_preview_without_ai_key(self):
+        with patch.object(dashboard_server.report, "llm_key_available", return_value=False):
+            preview = dashboard_server.preview_profile_from_brief(
+                {
+                    "template_id": "research-leads",
+                    "brief": (
+                        "Find AI agent research papers, datasets, benchmark releases, funding calls, "
+                        "and expert threads with links and follow-up paths."
+                    ),
+                }
+            )
+
+        self.assertEqual(preview["schema_version"], "desk_profile_create_preview_v1")
+        self.assertEqual(preview["status"], "ready")
+        self.assertFalse(preview["llm_used"])
+        self.assertTrue(any("selected template" in warning.casefold() for warning in preview["warnings"]))
+        self.assertIn("research", preview["topic"])
+
+    def test_profile_create_preview_marks_llm_used_when_smart_draft_succeeds(self):
+        ai_payload = {
+            "title": "Developer Opportunities",
+            "goal": "Find paid remote TypeScript roles with clear next steps.",
+            "search_rules": ["Include paid remote TypeScript roles with a clear contact path."],
+            "rejection_rules": ["Reject unpaid internships and vague role ads."],
+            "keywords": ["typescript", "remote"],
+            "topic": "jobs",
+        }
+        with patch.object(dashboard_server.report, "llm_key_available", return_value=True):
+            with patch.object(dashboard_server, "_profile_ai_payload_from_text", return_value=ai_payload, create=True) as ai_mock:
+                preview = dashboard_server.preview_profile_from_brief(
+                    {
+                        "template_id": "jobs",
+                        "brief": "Track paid senior remote TypeScript jobs. Avoid unpaid internships.",
+                        "confirm_external_ai": True,
+                    }
+                )
+
+        ai_mock.assert_called_once()
+        self.assertEqual(preview["status"], "ready")
+        self.assertTrue(preview["llm_used"])
+        self.assertEqual(preview["warnings"], [])
+
+    def test_profile_create_preview_rejects_unknown_fields_before_state_access(self):
+        class FakeHandler:
+            path = "/api/profiles/create-preview"
+            status = None
+            payload = None
+            client_address = ("127.0.0.1", 51000)
+
+            def _read_json_body(self):
+                return {"brief": "Track developer opportunities.", "command": "tgcs monitor run"}
+
+            def _connect(self):
+                raise AssertionError("invalid preview payload should be rejected before state access")
+
+            def _json(self, status, payload):
+                self.status = status
+                self.payload = payload
+
+        handler = FakeHandler()
+        dashboard_server.DashboardHandler.do_POST(handler)
+
+        self.assertEqual(handler.status, HTTPStatus.BAD_REQUEST)
+        self.assertIn("Unsupported profile creation field", handler.payload["error"])
+
     def test_profile_create_uses_ai_generated_matching_rules(self):
         ai_payload = {
             "title": "Senior AI Roles",

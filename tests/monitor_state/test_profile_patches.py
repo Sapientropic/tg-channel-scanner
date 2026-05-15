@@ -36,6 +36,7 @@ class MonitorStateProfilePatchTests(unittest.TestCase):
             monitor_state.sync_review_learning_profile_patch_suggestion,
             profile_patches.sync_review_learning_profile_patch_suggestion,
         )
+        self.assertIs(monitor_state.profile_coach_preview, profile_patches.profile_coach_preview)
 
 
     def test_follow_up_patch_can_apply_to_profile_file(self):
@@ -94,6 +95,143 @@ class MonitorStateProfilePatchTests(unittest.TestCase):
             self.assertEqual(llm_call["note"], profile_patches.REVIEW_LEARNING_PATCH_NOTE)
             self.assertEqual(llm_call["feedback_context"][0]["note"], "Prefer official incident updates.")
             self.assertEqual(llm_call["feedback_context"][0]["title"], "New rule")
+
+    def test_profile_coach_preview_can_feed_reviewable_patch_lifecycle(self):
+        conn = sqlite3.connect(":memory:")
+        conn.row_factory = sqlite3.Row
+        monitor_state.init_db(conn)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            profile_path = Path(tmp) / "profile.md"
+            original = "# Profile\n\n## Search Rules\n1. Find frontend developer opportunities.\n"
+            profile_path.write_text(original, encoding="utf-8")
+            monitor_state.upsert_profile(conn, {"id": "jobs-fast", "path": str(profile_path), "enabled": True})
+            cards = monitor_state.upsert_review_cards(
+                conn,
+                profile_id="jobs-fast",
+                run_id="run-1",
+                items=[
+                    {
+                        "company": "Studio A",
+                        "role": "Senior Full Stack Developer",
+                        "summary": "Own frontend and backend for a SaaS video editor.",
+                        "rating": "medium",
+                        "source_message_refs": [{"channel": "source", "id": 1}],
+                    }
+                ],
+            )
+            monitor_state.set_card_action(
+                conn,
+                card_id=cards[0]["card_id"],
+                action="follow_up",
+                note="not full stack",
+                profile_path=profile_path,
+            )
+
+            with patch.object(monitor_state, "PROJECT_ROOT", Path(tmp)):
+                preview = monitor_state.profile_coach_preview(conn, profile_id="jobs-fast", confirm_external_ai=False)
+                patch_row = monitor_state.create_profile_preferences_patch_suggestion(
+                    conn,
+                    profile_id="jobs-fast",
+                    preferences_text="\n".join(preview["suggested_preference_rules"]),
+                )
+                monitor_state.apply_profile_patch(conn, patch_id=patch_row["patch_id"], profile_path=profile_path)
+                applied = profile_path.read_text(encoding="utf-8")
+                monitor_state.revert_profile_patch(conn, patch_id=patch_row["patch_id"], profile_path=profile_path)
+                reverted = profile_path.read_text(encoding="utf-8")
+
+        self.assertEqual(preview["schema_version"], "profile_coach_preview_v1")
+        self.assertEqual(preview["status"], "ready")
+        self.assertFalse(preview["llm_used"])
+        self.assertGreaterEqual(preview["evidence_counts"]["follow_up"], 1)
+        self.assertIn("Exclude full-stack roles", "\n".join(preview["suggested_preference_rules"]))
+        self.assertNotIn("not full stack", json.dumps(preview).casefold())
+        self.assertIn("Exclude full-stack roles", applied)
+        self.assertEqual(reverted, original)
+
+    def test_profile_coach_preview_handles_invalid_llm_json_with_local_fallback(self):
+        conn = sqlite3.connect(":memory:")
+        conn.row_factory = sqlite3.Row
+        monitor_state.init_db(conn)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            profile_path = Path(tmp) / "profile.md"
+            profile_path.write_text("# Profile\n\n## Search Rules\n1. Find frontend roles.\n", encoding="utf-8")
+            monitor_state.upsert_profile(conn, {"id": "jobs-fast", "path": str(profile_path), "enabled": True})
+            cards = monitor_state.upsert_review_cards(
+                conn,
+                profile_id="jobs-fast",
+                run_id="run-1",
+                items=[
+                    {
+                        "role": "Lead Full Stack Developer",
+                        "rating": "medium",
+                        "source_message_refs": [{"channel": "source", "id": 2}],
+                    }
+                ],
+            )
+            monitor_state.set_card_action(
+                conn,
+                card_id=cards[0]["card_id"],
+                action="follow_up",
+                note="not full stack",
+                profile_path=profile_path,
+            )
+
+            with patch.object(
+                profile_patches,
+                "_llm_profile_patch_preference_lines",
+                side_effect=monitor_state.MonitorStateError("AI profile draft returned invalid JSON; try again."),
+            ):
+                with patch.object(monitor_state, "PROJECT_ROOT", Path(tmp)):
+                    preview = monitor_state.profile_coach_preview(conn, profile_id="jobs-fast", confirm_external_ai=True)
+
+        self.assertEqual(preview["status"], "ready")
+        self.assertFalse(preview["llm_used"])
+        self.assertTrue(any("Smart suggestions were unavailable" in warning for warning in preview["warnings"]))
+        self.assertIn("Exclude full-stack roles", "\n".join(preview["suggested_preference_rules"]))
+
+    def test_profile_coach_preview_marks_llm_used_when_smart_suggestions_succeed(self):
+        conn = sqlite3.connect(":memory:")
+        conn.row_factory = sqlite3.Row
+        monitor_state.init_db(conn)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            profile_path = Path(tmp) / "profile.md"
+            profile_path.write_text("# Profile\n\n## Search Rules\n1. Find frontend roles.\n", encoding="utf-8")
+            monitor_state.upsert_profile(conn, {"id": "jobs-fast", "path": str(profile_path), "enabled": True})
+            cards = monitor_state.upsert_review_cards(
+                conn,
+                profile_id="jobs-fast",
+                run_id="run-1",
+                items=[
+                    {
+                        "role": "Lead Full Stack Developer",
+                        "rating": "medium",
+                        "source_message_refs": [{"channel": "source", "id": 2}],
+                    }
+                ],
+            )
+            monitor_state.set_card_action(
+                conn,
+                card_id=cards[0]["card_id"],
+                action="follow_up",
+                note="not full stack",
+                profile_path=profile_path,
+            )
+
+            with patch.object(
+                profile_patches,
+                "_llm_profile_patch_preference_lines",
+                return_value=["Exclude full-stack roles unless frontend ownership is explicit."],
+            ) as llm_mock:
+                with patch.object(monitor_state, "PROJECT_ROOT", Path(tmp)):
+                    preview = monitor_state.profile_coach_preview(conn, profile_id="jobs-fast", confirm_external_ai=True)
+
+        llm_mock.assert_called_once()
+        self.assertTrue(preview["llm_used"])
+        self.assertEqual(preview["warnings"], [])
+        self.assertIn("Exclude full-stack roles", "\n".join(preview["suggested_preference_rules"]))
 
 
     def test_profile_patch_llm_rewrites_raw_note_into_preference_lines(self):

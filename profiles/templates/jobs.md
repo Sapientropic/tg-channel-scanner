@@ -17,10 +17,26 @@
 8. For fast alerts, rate high only when the role is worth acting on within the next hour.
 9. Treat keyword prefilter hits as candidates only; the final rating must still be based on fit, freshness, and actionability.
 
+## Rejection Rules
+1. Reject candidate CVs, resumes, portfolio posts, "looking for work" posts, and self-promotion because they are not an employer/recruiter/client opening.
+2. Reject backend-only and generic full-stack roles unless the post explicitly says the work is frontend-focused.
+3. Reject unpaid internships, course ads, job-board navigation posts, repeated channel promo text, and vague hiring rumors.
+4. Do not match roles that are on-site only in rejected locations, or posts without a real contact, application, budget, or client/employer signal.
+5. Do not include low-confidence guesses as high or medium; keep only useful boundary examples as low.
+
 ## Prefilter Tuning
 - Suggest adding keywords when missed good roles share a repeated phrase.
 - Suggest removing keywords when they repeatedly create false positives.
 - Prefer phrases that imply an actual opening, not generic stack terms alone.
+
+## Good Examples
+- A founder asks for a paid React/TypeScript contractor for a Telegram Mini App and includes budget, deadline, and contact.
+- A recruiter posts a remote frontend-heavy senior role with stack, company, compensation hint, and application link.
+
+## Bad Examples
+- A developer posts a candidate CV, portfolio, or "looking for work" message.
+- A backend-only or generic full-stack vacancy has no clear frontend ownership.
+- A channel reposts a job-board list without employer, budget, contact, or source refs.
 
 ## Extraction Schema
 mode: custom

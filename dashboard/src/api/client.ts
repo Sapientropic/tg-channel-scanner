@@ -15,7 +15,10 @@ import {
   sanitizeFeedbackExportResult,
   sanitizeFeedbackProfileSuggestionsResult,
   sanitizeGitUpdateStatus,
+  sanitizeProfileCoachPreview,
   sanitizeProfileCreateResult,
+  sanitizeProfileCreatePreview,
+  sanitizeProfileTemplateCatalog,
   sanitizeSourceImportResult,
 } from "../domain/sanitize";
 import type {
@@ -35,8 +38,11 @@ import type {
   FeedbackExportResult,
   FeedbackProfileSuggestionsResult,
   GitUpdateStatus,
+  ProfileCoachPreview,
+  ProfileCreatePreview,
   ProfileRuntimeSettings,
   ProfileCreateResult,
+  ProfileTemplateCatalog,
   SourceImportResult,
 } from "../domain/types";
 
@@ -146,12 +152,55 @@ export async function createProfileFromBrief(payload: {
   source_filename?: string;
   source_text?: string;
   source_base64?: string;
+  template_id?: string;
+  answers?: Record<string, string>;
+  preview?: ProfileCreatePreview;
 }): Promise<ProfileCreateResult> {
   const resultPayload = await postJson("/api/profiles/create", payload);
   assertSchemaVersion(resultPayload.profile, "desk_profile_create_result_v1", "Invalid profile creation response");
   const result = sanitizeProfileCreateResult(resultPayload.profile);
   if (!result) {
     throw new Error("Invalid profile creation response");
+  }
+  return result;
+}
+
+export async function loadProfileTemplates(signal?: AbortSignal): Promise<ProfileTemplateCatalog> {
+  const payload = await readJson(await fetch("/api/profiles/templates", { signal }));
+  assertSchemaVersion(payload.templates, "desk_profile_template_catalog_v1", "Invalid profile template response");
+  const result = sanitizeProfileTemplateCatalog(payload.templates);
+  if (!result) {
+    throw new Error("Invalid profile template response");
+  }
+  return result;
+}
+
+export async function previewProfileFromBrief(payload: {
+  brief: string;
+  template_id?: string;
+  answers?: Record<string, string>;
+  source_filename?: string;
+  source_text?: string;
+  source_base64?: string;
+  confirm_external_ai?: boolean;
+}): Promise<ProfileCreatePreview> {
+  const resultPayload = await postJson("/api/profiles/create-preview", payload);
+  assertSchemaVersion(resultPayload.preview, "desk_profile_create_preview_v1", "Invalid profile preview response");
+  const result = sanitizeProfileCreatePreview(resultPayload.preview);
+  if (!result) {
+    throw new Error("Invalid profile preview response");
+  }
+  return result;
+}
+
+export async function previewProfileCoach(profileId: string, confirmExternalAi = true): Promise<ProfileCoachPreview> {
+  const payload = await postJson(`/api/profiles/${encodeURIComponent(profileId)}/coach-preview`, {
+    confirm_external_ai: confirmExternalAi,
+  });
+  assertSchemaVersion(payload.coach, "profile_coach_preview_v1", "Invalid profile coach response");
+  const result = sanitizeProfileCoachPreview(payload.coach);
+  if (!result) {
+    throw new Error("Invalid profile coach response");
   }
   return result;
 }

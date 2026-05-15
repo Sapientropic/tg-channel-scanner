@@ -24,12 +24,39 @@ def handle_profile_post_route(
     profile_matching_preferences_allowed_fields: Set[str],
     profile_matching_preferences_max_length: int,
     delete_profile: Callable[[Any, str], dict] | None = None,
+    preview_profile_from_brief: Callable[[Mapping[str, Any]], dict] | None = None,
+    profile_coach_preview: Callable[..., dict] | None = None,
 ) -> bool:
+    if path == "/api/profiles/create-preview":
+        require_loopback_access(handler, "Profile creation")
+        if preview_profile_from_brief is None:
+            raise ValueError("Profile preview is not available.")
+        result = preview_profile_from_brief(body)
+        handler._json(HTTPStatus.OK, {"ok": True, "preview": result})
+        return True
     if path == "/api/profiles/create":
         require_loopback_access(handler, "Profile creation")
         with close_after_use(handler._connect()) as conn:
             result = create_profile_from_brief(conn, body)
         handler._json(HTTPStatus.OK, {"ok": True, "profile": result})
+        return True
+    if path.startswith("/api/profiles/") and path.endswith("/coach-preview"):
+        require_loopback_access(handler, "Profile coach")
+        if profile_coach_preview is None:
+            raise ValueError("Profile coach preview is not available.")
+        unexpected = sorted(str(key) for key in body.keys() if key not in {"confirm_external_ai"})
+        if unexpected:
+            raise ValueError(f"Unsupported profile coach field: {', '.join(unexpected)}")
+        profile_id = path.removeprefix("/api/profiles/").removesuffix("/coach-preview").strip("/")
+        from urllib.parse import unquote
+
+        with close_after_use(handler._connect()) as conn:
+            result = profile_coach_preview(
+                conn,
+                profile_id=unquote(profile_id),
+                confirm_external_ai=body.get("confirm_external_ai") is True,
+            )
+        handler._json(HTTPStatus.OK, {"ok": True, "coach": result})
         return True
     if path.startswith("/api/profiles/") and path.endswith("/alert-mode"):
         require_loopback_access(handler, "Profile settings")

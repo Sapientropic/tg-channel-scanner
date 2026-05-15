@@ -14,7 +14,7 @@ describe("Learning panel copy", () => {
         changed_since_last_export: false,
         exported_at: "2026-05-10T00:00:00Z",
       }),
-    ).toBe("3 decisions saved for learning · output/feedback/review-feedback.jsonl");
+    ).toBe("3 decisions saved for learning");
   });
 
   it("summarizes generated profile drafts without making JSONL the happy path", () => {
@@ -32,7 +32,7 @@ describe("Learning panel copy", () => {
 
   it("uses app-first wording for the primary learning action", () => {
     expect(learningActionLabel(0)).toBe("Review cards");
-    expect(learningActionLabel(2)).toBe("Generate drafts");
+    expect(learningActionLabel(2)).toBe("Suggest improvements");
     expect(learningActionLabel(2, 1)).toBe("Review profile drafts");
   });
 
@@ -57,6 +57,7 @@ describe("Learning panel copy", () => {
     expect(html).toContain("Clear learning decisions");
     expect(html).toMatch(/<button class="text-button secondary"[^>]*disabled[^>]*>[\s\S]*?Clear learning decisions/);
     expect(html).not.toContain("Collect review decisions");
+    expect(html).not.toContain("output/feedback/review-feedback.jsonl");
   });
 
   it("renders calibration evidence for profile tuning decisions", () => {
@@ -104,11 +105,71 @@ describe("Learning panel copy", () => {
     expect(html).toContain("Reverted changes 1");
     expect(html).toContain("reverted");
     expect(html).toContain('aria-label="Next-run calibration evidence"');
-    expect(html).toContain("After latest applied draft");
+    expect(html).toContain("After latest update");
     expect(html).toContain("Tune remaining false positives");
     expect(html).toContain("Review profile drafts");
     expect(html).toContain("Runs 1");
     expect(html).toContain("Cards 3");
     expect(html).toContain("High rate 67%");
+  });
+
+  it("renders the profile coach loop with reviewed suggestions and selected-profile run action", () => {
+    const html = renderToStaticMarkup(
+      createElement(LearningPanel, {
+        busy: false,
+        clearFeedback: () => undefined,
+        exportFeedback: () => undefined,
+        exportResult: null,
+        generateProfileSuggestions: () => undefined,
+        openProfileDrafts: () => undefined,
+        openReviewCards: () => undefined,
+        runAgainWithLearning: () => undefined,
+        summary: {
+          current_decision_count: 3,
+          exportable_count: 1,
+          non_exportable_follow_up_count: 2,
+          pending_profile_diff_count: 0,
+          applied_profile_diff_count: 1,
+        },
+        suggestionResult: null,
+        undoFeedbackDecision: () => undefined,
+        profiles: [
+          {
+            profile_id: "jobs-fast",
+            display_name: "Jobs Fast",
+            enabled: true,
+            updated_at: "2026-05-10T00:00:00Z",
+          },
+        ],
+        profileCoachPreview: {
+          schema_version: "profile_coach_preview_v1",
+          status: "ready",
+          profile_id: "jobs-fast",
+          evidence_counts: { keep: 1, skip: 0, false_positive: 1, follow_up: 2 },
+          diagnosis: [{ label: "Wrong matches", detail: "Recurring full-stack roles need a clearer exclusion." }],
+          suspected_false_positive_patterns: ["full-stack generalist roles"],
+          suggested_preference_rules: ["Exclude full-stack roles unless frontend ownership is explicit."],
+          source_suggestions: [],
+          confidence: "medium",
+          warnings: [],
+          llm_used: true,
+        },
+        previewProfileCoach: () => undefined,
+        createProfileMatchingPreferencesDraft: () => undefined,
+      }),
+    );
+
+    expect(html).toContain("Profile Coach");
+    expect(html).toContain("Tune this profile from Review choices");
+    expect(html).toContain("Suggestions run only when you ask");
+    expect(html).toContain("Suggest improvements");
+    expect(html).not.toContain("Coach diagnosis");
+    expect(html).not.toContain("Profile/source");
+    expect(html).not.toContain("Run and validate");
+    expect(html).not.toContain("LLM");
+    expect(html).toContain("Wrong matches");
+    expect(html).toContain("Exclude full-stack roles");
+    expect(html).toContain("Create draft to review");
+    expect(html).toContain("Run this profile again");
   });
 });

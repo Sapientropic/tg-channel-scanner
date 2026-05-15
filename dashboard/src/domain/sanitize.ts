@@ -15,6 +15,9 @@ export {
   sanitizeFeedbackExportResult,
   sanitizeFeedbackProfileSuggestionsResult,
   sanitizeGitUpdateStatus,
+  sanitizeProfileCoachPreview,
   sanitizeProfileCreateResult,
+  sanitizeProfileCreatePreview,
+  sanitizeProfileTemplateCatalog,
   sanitizeSourceImportResult,
 } from "./sanitize/desk";

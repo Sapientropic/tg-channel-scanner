@@ -265,8 +265,8 @@ def feedback_next_action(exportable_count: int, follow_up_count: int, patch_coun
         }
     if tuning_source_count:
         return {
-            "label": "Generate profile suggestions",
-            "detail": "Turn collected Review tags and notes into local profile drafts. The raw export stays in Advanced export.",
+            "label": "Suggest profile improvements",
+            "detail": "Turn collected Review choices and notes into profile drafts. Nothing changes until you approve a draft.",
             "target_tab": "settings",
             "action_id": "feedback_profile_suggestions",
         }
@@ -337,7 +337,7 @@ def recent_feedback_impacts(conn: sqlite3.Connection, *, limit: int = 6) -> list
                     "impact_type": "profile_tuning_source",
                     "impact_status": "ready",
                     "impact_label": "Ready for profile draft",
-                    "impact_detail": "Generate profile suggestions so future reports learn from this choice.",
+                    "impact_detail": "Ask Profile Coach for improvements so future results learn from this choice.",
                 }
             )
         elif action == "follow_up":
@@ -356,7 +356,7 @@ def recent_feedback_impacts(conn: sqlite3.Connection, *, limit: int = 6) -> list
                             "pending": "Review the profile-level draft generated from saved Review feedback.",
                             "applied": "This feedback has already changed the local profile.",
                             "reverted": "This feedback changed the profile and was later reverted.",
-                        }.get(patch_status, "Generate profile suggestions again if this note still matters."),
+                        }.get(patch_status, "Ask for profile improvements again if this note still matters."),
                         "patch_id": row["patch_id"] or "",
                     }
                 )
@@ -366,7 +366,7 @@ def recent_feedback_impacts(conn: sqlite3.Connection, *, limit: int = 6) -> list
                         "impact_type": "profile_tuning_source",
                         "impact_status": "ready",
                         "impact_label": "Note saved for profile tuning",
-                        "impact_detail": "Generate profile suggestions so this note can become a reviewable profile draft.",
+                        "impact_detail": "Ask Profile Coach to turn this note into a reviewable profile draft.",
                     }
                 )
         else:

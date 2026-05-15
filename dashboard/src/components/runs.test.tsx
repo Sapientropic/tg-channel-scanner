@@ -182,7 +182,7 @@ describe("run health decision", () => {
       }),
     ]);
     expect(clusters).toHaveLength(1);
-    expect(clusters[0].outcome.title).toBe("OCR optional");
+    expect(clusters[0].outcome.title).toBe("Image text optional");
     expect(clusters[0].outcome.tone).toBe("info");
   });
 

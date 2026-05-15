@@ -89,17 +89,22 @@
 
 .new-profile-panel {
   display: grid;
-  gap: 8px;
+  gap: 10px;
   min-width: 0;
-  padding: 8px;
+  padding: 10px;
   border: 1px solid color-mix(in oklch, var(--signal-high) 28%, transparent);
   background: color-mix(in oklch, var(--signal-high) 7%, transparent);
 }
 
+.new-profile-panel[data-open="true"] {
+  gap: 12px;
+  padding: 12px;
+}
+
 .new-profile-toggle {
   display: grid;
-  grid-template-columns: auto minmax(0, 0.42fr) minmax(0, 1fr);
-  gap: 8px;
+  grid-template-columns: auto max-content minmax(0, 1fr);
+  gap: 8px 10px;
   align-items: center;
   min-width: 0;
   min-height: 44px;
@@ -118,6 +123,7 @@
   font-weight: var(--badge-weight);
   line-height: 1.1;
   text-transform: uppercase;
+  white-space: nowrap;
 }
 
 .new-profile-toggle small,
@@ -139,7 +145,7 @@
 
 .new-profile-body {
   display: grid;
-  gap: 8px;
+  gap: 10px;
   min-width: 0;
 }
 
@@ -151,15 +157,15 @@
 
 .new-profile-body label > span {
   color: var(--muted);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: var(--badge-weight);
-  line-height: 1.2;
-  text-transform: uppercase;
+  line-height: 1.28;
+  text-transform: none;
 }
 
 .new-profile-starters {
   display: grid;
-  gap: 7px;
+  gap: 8px;
   min-width: 0;
 }
 
@@ -174,11 +180,12 @@
 .new-profile-starters > div {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 8px;
   min-width: 0;
 }
 
 .new-profile-starters button {
+  flex: 1 1 160px;
   min-height: 34px;
   padding: 0 9px;
   border: 1px solid color-mix(in oklch, var(--teal) 34%, var(--paper-3));
@@ -191,16 +198,97 @@
   text-transform: uppercase;
 }
 
+.new-profile-starters button[aria-pressed="true"] {
+  border-color: var(--paper);
+  background: var(--amber);
+  color: var(--ink);
+  box-shadow: inset 0 -3px 0 color-mix(in oklch, var(--ink) 20%, transparent);
+}
+
 .new-profile-starters button:hover:not(:disabled),
 .new-profile-starters button:focus-visible {
   border-color: var(--teal);
   background: color-mix(in oklch, var(--teal) 15%, transparent);
 }
 
+.new-profile-starters button[aria-pressed="true"]:hover:not(:disabled),
+.new-profile-starters button[aria-pressed="true"]:focus-visible {
+  border-color: var(--paper);
+  background: color-mix(in oklch, var(--amber) 86%, var(--paper));
+}
+
+.new-profile-template-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px 10px;
+  align-items: baseline;
+  min-width: 0;
+}
+
+.new-profile-template-summary .panel-kicker {
+  grid-column: auto;
+  flex: 0 0 auto;
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.new-profile-template-summary strong {
+  min-width: 0;
+  color: var(--paper);
+  font-size: 16px;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.new-profile-template-summary small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: var(--badge-weight);
+  line-height: 1.25;
+}
+
 .new-profile-body textarea {
   min-height: 104px;
   font-size: 13px;
   line-height: 1.42;
+}
+
+.new-profile-body input {
+  width: 100%;
+  min-width: 0;
+  min-height: 42px;
+  border: 1px solid var(--field-border);
+  background: var(--field-bg);
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+  padding: 0 10px;
+  caret-color: var(--ink);
+}
+
+.new-profile-body input:focus-visible,
+.new-profile-body textarea:focus-visible {
+  border-color: var(--amber);
+  box-shadow: 0 0 0 2px color-mix(in oklch, var(--signal-medium) 18%, transparent);
+  outline: none;
+}
+
+.new-profile-body input::placeholder,
+.new-profile-body textarea::placeholder {
+  color: color-mix(in oklch, var(--ink) 62%, var(--paper));
+  opacity: 1;
+}
+
+.new-profile-answers {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  min-width: 0;
+}
+
+.new-profile-answers label:nth-child(-n + 3) {
+  grid-column: 1 / -1;
 }
 
 .new-profile-file {
@@ -212,6 +300,13 @@
   border: 1px dashed color-mix(in oklch, var(--signal-high) 34%, transparent);
   background: color-mix(in oklch, var(--ink) 36%, transparent);
   cursor: pointer;
+}
+
+.new-profile-file span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .new-profile-file input {
@@ -233,6 +328,12 @@
   min-width: 0;
 }
 
+.new-profile-actions .text-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
 .new-profile-result {
   display: grid;
   gap: 3px;
@@ -247,6 +348,103 @@
   color: var(--paper);
   font-size: 12px;
   line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.new-profile-preview {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid color-mix(in oklch, var(--signal-high) 32%, transparent);
+  background: color-mix(in oklch, var(--signal-high) 9%, transparent);
+}
+
+.new-profile-preview strong,
+.new-profile-preview small {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.new-profile-preview strong {
+  color: var(--paper);
+  font-size: 15px;
+  line-height: 1.22;
+}
+
+.new-profile-preview small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: var(--badge-weight);
+  line-height: 1.38;
+}
+
+.new-profile-preview ul {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.new-profile-preview li {
+  min-width: 0;
+  color: color-mix(in oklch, var(--paper) 82%, var(--muted));
+  font-size: 12px;
+  line-height: 1.36;
+  overflow-wrap: anywhere;
+}
+
+.new-profile-preview li::before {
+  color: var(--amber);
+  content: "> ";
+}
+
+.new-profile-preview-rules {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px 10px;
+  min-width: 0;
+}
+
+.new-profile-preview-rules > span {
+  color: var(--amber);
+  font-size: 11px;
+  font-weight: var(--badge-weight);
+  line-height: 1.15;
+  text-transform: uppercase;
+}
+
+.new-profile-preview-rules > ul {
+  align-content: start;
+}
+
+.new-profile-preview-rules > span:nth-of-type(1),
+.new-profile-preview-rules > ul:nth-of-type(1) {
+  grid-column: 1;
+}
+
+.new-profile-preview-rules > span:nth-of-type(2),
+.new-profile-preview-rules > ul:nth-of-type(2) {
+  grid-column: 2;
+}
+
+.patch-diagnosis {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid color-mix(in oklch, var(--signal-medium) 26%, transparent);
+  background: color-mix(in oklch, var(--signal-medium) 7%, transparent);
+}
+
+.patch-diagnosis small {
+  min-width: 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: var(--badge-weight);
+  line-height: 1.35;
   overflow-wrap: anywhere;
 }
 

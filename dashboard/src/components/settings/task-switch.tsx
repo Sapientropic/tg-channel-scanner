@@ -19,13 +19,13 @@ export function SettingsTaskSwitch({
 }) {
   const tasks: Array<{ id: SettingsTask; label: string; count: number; detail: string }> = [
     { id: "sources", label: "Sources", count: sourceCount, detail: "Add or manage channels" },
-    { id: "ai", label: "AI API", count: aiCount, detail: "LLM and OCR keys" },
-    { id: "notifications", label: "Alerts", count: notificationCount, detail: "Bot token and delivery" },
+    { id: "ai", label: "AI API", count: aiCount, detail: "Matching and image reading" },
+    { id: "notifications", label: "Alerts", count: notificationCount, detail: "Where alerts go" },
     {
       id: "learning",
       label: "Learning",
       count: feedbackCount,
-      detail: feedbackCount > 0 ? "Profile tuning" : "Review cards to teach preferences",
+      detail: feedbackCount > 0 ? "Use Review choices" : "Review cards to teach preferences",
     },
     { id: "updates", label: "Updates", count: updateCount, detail: updateCount > 0 ? "New app version" : "App version" },
   ];

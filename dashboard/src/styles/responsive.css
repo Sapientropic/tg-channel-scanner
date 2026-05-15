@@ -287,16 +287,26 @@
 
   .tabs {
     grid-template-columns: repeat(5, minmax(0, 1fr));
-    gap: 6px;
+    gap: 5px;
   }
 
   .tab {
-    grid-template-columns: 24px minmax(0, 1fr);
-    min-height: 50px;
+    grid-template-columns: 22px max-content;
+    justify-content: center;
+    gap: 7px;
+    min-height: 48px;
+    padding: 0 7px;
   }
 
   .tab-count {
     display: none;
+  }
+
+  .tab-label {
+    max-width: 100%;
+    font-size: 12px;
+    overflow: visible;
+    text-overflow: clip;
   }
 
   .card-spine {
@@ -1074,6 +1084,18 @@
 
   .new-profile-toggle small {
     grid-column: 2;
+  }
+
+  .new-profile-answers,
+  .new-profile-preview-rules {
+    grid-template-columns: 1fr;
+  }
+
+  .new-profile-preview-rules > span:nth-of-type(1),
+  .new-profile-preview-rules > ul:nth-of-type(1),
+  .new-profile-preview-rules > span:nth-of-type(2),
+  .new-profile-preview-rules > ul:nth-of-type(2) {
+    grid-column: 1;
   }
 
   .new-profile-actions {

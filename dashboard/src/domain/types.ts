@@ -677,6 +677,52 @@ export type FeedbackClearResult = {
   cleared_count: number;
 };
 
+export type ProfileTemplate = {
+  id: string;
+  title: string;
+  audience: string;
+  default_topic: string;
+  starter_brief: string;
+  coach_questions: string[];
+  supported_fields: string[];
+};
+
+export type ProfileTemplateCatalog = {
+  schema_version: "desk_profile_template_catalog_v1";
+  templates: ProfileTemplate[];
+};
+
+export type ProfileCreatePreview = {
+  schema_version: "desk_profile_create_preview_v1";
+  status: "ready" | "needs_input" | string;
+  template_id: string;
+  title: string;
+  topic: string;
+  questions: string[];
+  generated_rules: string[];
+  search_rules: string[];
+  rejection_rules: string[];
+  keywords: string[];
+  markdown_preview: string;
+  warnings: string[];
+  llm_used: boolean;
+};
+
+export type ProfileCoachPreview = {
+  schema_version: "profile_coach_preview_v1";
+  status: "ready" | "needs_evidence" | string;
+  profile_id: string;
+  stage?: string;
+  evidence_counts: Record<string, number>;
+  diagnosis: Array<{ label: string; detail: string }>;
+  suspected_false_positive_patterns: string[];
+  suggested_preference_rules: string[];
+  source_suggestions: Array<{ kind: string; label: string; detail: string }>;
+  confidence: string;
+  warnings: string[];
+  llm_used: boolean;
+};
+
 export type ProfileCreateResult = {
   schema_version: "desk_profile_create_result_v1";
   profile_id: string;

@@ -16,7 +16,10 @@ import type {
   FeedbackExportResult,
   FeedbackProfileSuggestionsResult,
   GitUpdateStatus,
+  ProfileCoachPreview,
   ProfileCreateResult,
+  ProfileCreatePreview,
+  ProfileTemplateCatalog,
   SourceImportResult,
 } from "../types";
 import {
@@ -174,6 +177,120 @@ export function sanitizeProfileCreateResult(value: unknown): ProfileCreateResult
     next_action: optionalString(value.next_action) ?? "",
     created_at: optionalString(value.created_at),
   };
+}
+
+export function sanitizeProfileTemplateCatalog(value: unknown): ProfileTemplateCatalog | null {
+  if (!isRecord(value) || value.schema_version !== "desk_profile_template_catalog_v1") {
+    return null;
+  }
+  const templates = sanitizeObjectArray(value.templates, "profile_templates.templates").flatMap((record) => {
+    const id = optionalString(record.id);
+    const title = optionalString(record.title);
+    const audience = optionalString(record.audience);
+    const defaultTopic = optionalString(record.default_topic);
+    const starterBrief = optionalString(record.starter_brief);
+    if (!id || !title || !audience || !defaultTopic || !starterBrief) {
+      return [];
+    }
+    return [
+      {
+        id,
+        title,
+        audience,
+        default_topic: defaultTopic,
+        starter_brief: starterBrief,
+        coach_questions: stringArray(record.coach_questions),
+        supported_fields: stringArray(record.supported_fields),
+      },
+    ];
+  });
+  return {
+    schema_version: "desk_profile_template_catalog_v1",
+    templates,
+  };
+}
+
+export function sanitizeProfileCreatePreview(value: unknown): ProfileCreatePreview | null {
+  if (!isRecord(value) || value.schema_version !== "desk_profile_create_preview_v1") {
+    return null;
+  }
+  const status = optionalString(value.status);
+  const templateId = optionalString(value.template_id);
+  const title = optionalString(value.title);
+  const topic = optionalString(value.topic);
+  if (!status || !["ready", "needs_input"].includes(status) || !templateId || !title || !topic) {
+    return null;
+  }
+  return {
+    schema_version: "desk_profile_create_preview_v1",
+    status,
+    template_id: templateId,
+    title,
+    topic,
+    questions: stringArray(value.questions),
+    generated_rules: stringArray(value.generated_rules),
+    search_rules: stringArray(value.search_rules),
+    rejection_rules: stringArray(value.rejection_rules),
+    keywords: stringArray(value.keywords),
+    markdown_preview: optionalString(value.markdown_preview) ?? "",
+    warnings: stringArray(value.warnings),
+    llm_used: value.llm_used === true,
+  };
+}
+
+export function sanitizeProfileCoachPreview(value: unknown): ProfileCoachPreview | null {
+  if (!isRecord(value) || value.schema_version !== "profile_coach_preview_v1") {
+    return null;
+  }
+  const status = optionalString(value.status);
+  const profileId = optionalString(value.profile_id);
+  const confidence = optionalString(value.confidence);
+  const evidenceCounts = sanitizeEvidenceCounts(value.evidence_counts);
+  if (!status || !profileId || !confidence || !evidenceCounts) {
+    return null;
+  }
+  return {
+    schema_version: "profile_coach_preview_v1",
+    status,
+    profile_id: profileId,
+    stage: optionalString(value.stage),
+    evidence_counts: evidenceCounts,
+    diagnosis: sanitizeProfileCoachDiagnosis(value.diagnosis),
+    suspected_false_positive_patterns: stringArray(value.suspected_false_positive_patterns),
+    suggested_preference_rules: stringArray(value.suggested_preference_rules),
+    source_suggestions: sanitizeProfileCoachSourceSuggestions(value.source_suggestions),
+    confidence,
+    warnings: stringArray(value.warnings),
+    llm_used: value.llm_used === true,
+  };
+}
+
+function sanitizeEvidenceCounts(value: unknown): Record<string, number> | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+  const output: Record<string, number> = {};
+  for (const key of ["keep", "skip", "false_positive", "follow_up"]) {
+    output[key] = nonNegativeIntegerOrDefault(value[key], 0);
+  }
+  return output;
+}
+
+function sanitizeProfileCoachDiagnosis(value: unknown): ProfileCoachPreview["diagnosis"] {
+  return sanitizeObjectArray(value, "profile_coach.diagnosis").flatMap((record) => {
+    const label = optionalString(record.label);
+    const detail = optionalString(record.detail);
+    return label && detail ? [{ label, detail }] : [];
+  });
+}
+
+function sanitizeProfileCoachSourceSuggestions(value: unknown): ProfileCoachPreview["source_suggestions"] {
+  return sanitizeObjectArray(value, "profile_coach.source_suggestions").flatMap((record) => {
+    const kind = optionalString(record.kind);
+    const label = optionalString(record.label);
+    const detail = optionalString(record.detail);
+    return kind && label && detail ? [{ kind, label, detail }] : [];
+  });
 }
 
 export function sanitizeDeskActions(value: unknown): DeskAction[] {

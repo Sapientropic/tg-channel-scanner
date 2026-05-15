@@ -5,6 +5,20 @@ from scripts.profile_schema import parse_profile_config
 
 
 class ProfileTemplateTests(unittest.TestCase):
+    STANDARD_SECTIONS = {
+        "Basic Info",
+        "Search Rules",
+        "Rejection Rules",
+        "Prefilter Tuning",
+        "Good Examples",
+        "Bad Examples",
+        "Extraction Schema",
+        "Extraction Prompt",
+        "Report Preferences",
+        "Follow-up Preferences",
+        "Report Labels",
+    }
+
     def test_builtin_profile_templates_exist_and_parse(self):
         template_dir = Path("profiles/templates")
         expected = {
@@ -24,6 +38,28 @@ class ProfileTemplateTests(unittest.TestCase):
                 self.assertTrue(config.labels.report_title)
                 self.assertTrue(config.labels.output_filename.endswith(".md"))
                 self.assertTrue(config.mode.fields)
+
+    def test_builtin_templates_meet_profile_coach_contract(self):
+        template_dir = Path("profiles/templates")
+
+        for path in template_dir.glob("*.md"):
+            with self.subTest(path=path):
+                text = path.read_text(encoding="utf-8")
+                normalized = " ".join(text.casefold().split())
+                sections = {
+                    line.removeprefix("##").strip()
+                    for line in text.splitlines()
+                    if line.startswith("## ")
+                }
+                self.assertTrue(self.STANDARD_SECTIONS.issubset(sections))
+                self.assertRegex(normalized, r"\b(source_message_refs|source refs|source references)\b")
+                self.assertIn("section_high", normalized)
+                self.assertIn("section_medium", normalized)
+                self.assertIn("section_low", normalized)
+                rejection_body = text.split("## Rejection Rules", 1)[1].split("##", 1)[0].casefold()
+                self.assertIn("reject", rejection_body)
+                self.assertRegex(rejection_body, r"do not match|do not include|never match|not a match")
+                self.assertRegex(rejection_body, r"\b(skip|exclude|reject|avoid)\b")
 
     def test_jobs_profile_uses_compact_fast_alert_schema(self):
         text = Path("profiles/templates/jobs.md").read_text(encoding="utf-8")

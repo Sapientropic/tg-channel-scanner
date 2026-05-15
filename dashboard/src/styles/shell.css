@@ -835,6 +835,8 @@
 }
 
 .tab-label {
+  font-size: 13px;
+  line-height: 1;
   overflow: hidden;
   font-weight: var(--badge-weight);
   text-overflow: ellipsis;

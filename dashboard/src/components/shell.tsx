@@ -40,7 +40,7 @@ export function ConsoleHeader({
           <div className="header-readout" aria-label="Local dashboard boundary">
             <span>Local app</span>
             <span>Data stays local</span>
-            <span>Raw text hidden</span>
+            <span>Private text hidden</span>
           </div>
         </div>
       </div>

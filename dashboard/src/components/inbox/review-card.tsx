@@ -605,7 +605,7 @@ function CardActions({
             />
           </div>
           <div className="follow-up-footer">
-            <small>Saves this note with the card. Generate profile suggestions after reviewing the queue.</small>
+            <small>Saves this note with the card. Ask Profile Coach after reviewing the queue.</small>
             <button
               className="follow-up-submit"
               data-review-tone="supportive"

@@ -1,0 +1,120 @@
+{
+  "schema_version": "profile_coach_contract_fixture_v1",
+  "profile_template_catalog": {
+    "schema_version": "desk_profile_template_catalog_v1",
+    "templates": [
+      {
+        "id": "jobs",
+        "title": "Developer opportunities",
+        "audience": "Developers looking for paid work",
+        "default_topic": "jobs",
+        "starter_brief": "Track paid TypeScript opportunities.",
+        "coach_questions": ["What must be true?", "What should never match?"],
+        "supported_fields": ["search_rules", "rejection_rules"]
+      }
+    ]
+  },
+  "profile_create_preview": {
+    "schema_version": "desk_profile_create_preview_v1",
+    "status": "ready",
+    "template_id": "jobs",
+    "title": "Developer opportunities",
+    "topic": "jobs",
+    "questions": [],
+    "generated_rules": ["Include paid TypeScript work with clear contact path."],
+    "search_rules": ["Include paid TypeScript work with clear contact path."],
+    "rejection_rules": ["Reject unpaid internships and candidate CVs."],
+    "keywords": ["typescript", "remote"],
+    "markdown_preview": "# Profile: Developer opportunities",
+    "warnings": ["Drafted from the selected template; review the rules before saving."],
+    "llm_used": false
+  },
+  "profile_coach_preview": {
+    "schema_version": "profile_coach_preview_v1",
+    "status": "ready",
+    "profile_id": "jobs-fast",
+    "stage": "coach_diagnosis",
+    "evidence_counts": {
+      "keep": 1,
+      "skip": 0,
+      "false_positive": 1,
+      "follow_up": 1
+    },
+    "diagnosis": [
+      {
+        "label": "Wrong-match pressure",
+        "detail": "Recent wrong-match feedback suggests the profile needs clearer exclusion rules."
+      }
+    ],
+    "suspected_false_positive_patterns": ["Full-stack generalist items without clear profile fit"],
+    "suggested_preference_rules": ["Exclude full-stack roles unless frontend ownership is explicit."],
+    "source_suggestions": [
+      {
+        "kind": "review_sources",
+        "label": "Review noisy sources",
+        "detail": "Preview source topic or enabled-state changes before applying them."
+      }
+    ],
+    "confidence": "medium",
+    "warnings": [],
+    "llm_used": true
+  },
+  "frontend_input": {
+    "profile_template_catalog": {
+      "schema_version": "desk_profile_template_catalog_v1",
+      "templates": [
+        {
+          "id": "jobs",
+          "title": "Developer opportunities",
+          "audience": "Developers looking for paid work",
+          "default_topic": "jobs",
+          "starter_brief": "Track paid TypeScript opportunities.",
+          "coach_questions": ["What must be true?"],
+          "supported_fields": ["search_rules", "rejection_rules"],
+          "raw_path": "C:/Users/Administrator/private/templates/jobs.md"
+        }
+      ]
+    },
+    "profile_create_preview": {
+      "schema_version": "desk_profile_create_preview_v1",
+      "status": "ready",
+      "template_id": "jobs",
+      "title": "Developer opportunities",
+      "topic": "jobs",
+      "questions": [],
+      "generated_rules": ["Include paid TypeScript work with clear contact path."],
+      "search_rules": ["Include paid TypeScript work with clear contact path."],
+      "rejection_rules": ["Reject unpaid internships and candidate CVs."],
+      "keywords": ["typescript", "remote"],
+      "markdown_preview": "# Profile: Developer opportunities",
+      "warnings": [],
+      "llm_used": true,
+      "source_text": "RAW_PRIVATE_SOURCE_TEXT_SHOULD_NOT_SURFACE"
+    },
+    "profile_coach_preview": {
+      "schema_version": "profile_coach_preview_v1",
+      "status": "ready",
+      "profile_id": "jobs-fast",
+      "evidence_counts": {"keep": 1, "skip": 0, "false_positive": 1, "follow_up": 1},
+      "diagnosis": [
+        {
+          "label": "Wrong-match pressure",
+          "detail": "Recent wrong-match feedback suggests the profile needs clearer exclusion rules.",
+          "raw_note": "RAW_PRIVATE_NOTE_SHOULD_NOT_SURFACE"
+        }
+      ],
+      "suspected_false_positive_patterns": ["Full-stack generalist items without clear profile fit"],
+      "suggested_preference_rules": ["Exclude full-stack roles unless frontend ownership is explicit."],
+      "source_suggestions": [],
+      "confidence": "medium",
+      "warnings": [],
+      "llm_used": true,
+      "absolute_path": "C:/Users/Administrator/private/profile.md"
+    }
+  },
+  "denied_strings": [
+    "RAW_PRIVATE_SOURCE_TEXT_SHOULD_NOT_SURFACE",
+    "RAW_PRIVATE_NOTE_SHOULD_NOT_SURFACE",
+    "C:/Users/Administrator/private"
+  ]
+}

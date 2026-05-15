@@ -596,6 +596,8 @@ apply_source_assistant_resolved_plan = _desk_sources_module.apply_source_assista
 
 
 create_profile_from_brief = desk_profiles.create_profile_from_brief
+preview_profile_from_brief = desk_profiles.preview_profile_from_brief
+profile_template_catalog = desk_profiles.profile_template_catalog
 delete_profile = desk_profiles.delete_profile
 _profile_create_input_text = desk_profiles._profile_create_input_text
 _profile_text_from_base64_file = desk_profiles._profile_text_from_base64_file
@@ -899,6 +901,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 desk_bot_gateway_status=desk_bot_gateway_status,
                 desk_ai_settings_status=desk_ai_settings_status,
                 dashboard_state_payload=dashboard_state_payload,
+                profile_template_catalog=profile_template_catalog,
             ):
                 return
             self._serve_static(parsed.path)
@@ -978,6 +981,8 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 profile_matching_preferences_allowed_fields=PROFILE_MATCHING_PREFERENCES_ALLOWED_FIELDS,
                 profile_matching_preferences_max_length=PROFILE_MATCHING_PREFERENCES_MAX_LENGTH,
                 delete_profile=delete_profile,
+                preview_profile_from_brief=preview_profile_from_brief,
+                profile_coach_preview=monitor_state.profile_coach_preview,
             ):
                 return
             self._json(HTTPStatus.NOT_FOUND, {"ok": False, "error": "not_found"})

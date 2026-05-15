@@ -59,10 +59,10 @@ const diagnosticLabels: Record<string, string> = {
   all_filtered_out: "All filtered out",
   bypassed_scan_input: "Saved scan input",
   channel_failures: "Source access failed",
-  llm_unavailable: "LLM unavailable",
+  llm_unavailable: "AI matching unavailable",
   missing_scan_metadata: "Scan metadata missing",
   no_messages_fetched: "No messages fetched",
-  ocr_disabled_media_present: "OCR optional",
+  ocr_disabled_media_present: "Image text optional",
   scan_failed: "Scan failed",
   scan_incomplete: "Scan incomplete",
 };

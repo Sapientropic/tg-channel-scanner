@@ -22,6 +22,7 @@ def handle_get_route(
     desk_bot_gateway_status: Callable[[Any], dict],
     desk_ai_settings_status: Callable[[], dict],
     dashboard_state_payload: Callable[[Any], dict],
+    profile_template_catalog: Callable[[], dict] | None = None,
 ) -> bool:
     if path == "/api/desk/health":
         require_loopback_access(handler, "Signal Desk health")
@@ -55,6 +56,12 @@ def handle_get_route(
     if path == "/api/desk/ai-settings/status":
         require_loopback_access(handler, "AI API settings status")
         handler._json(HTTPStatus.OK, {"ok": True, "ai": desk_ai_settings_status()})
+        return True
+    if path == "/api/profiles/templates":
+        require_loopback_access(handler, "Profile templates")
+        if profile_template_catalog is None:
+            raise ValueError("Profile template catalog is not available.")
+        handler._json(HTTPStatus.OK, {"ok": True, "templates": profile_template_catalog()})
         return True
     if path == "/api/state":
         require_loopback_access(handler, "Dashboard state")

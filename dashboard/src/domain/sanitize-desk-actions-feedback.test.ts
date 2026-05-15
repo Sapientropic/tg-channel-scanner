@@ -7,7 +7,10 @@ import {
   sanitizeFeedbackExportResult,
   sanitizeFeedbackProfileSuggestionsResult,
   sanitizeGitUpdateStatus,
+  sanitizeProfileCoachPreview,
   sanitizeProfileCreateResult,
+  sanitizeProfileCreatePreview,
+  sanitizeProfileTemplateCatalog,
 } from "./sanitize";
 import {
   sanitizeDeskActionResult as sanitizeDashboardModuleDeskActionResult,
@@ -240,6 +243,98 @@ describe("Desk action and feedback sanitizers", () => {
         profile_path: "profiles/jobs-fast.md",
       }),
     ).toBeNull();
+    expect(
+      sanitizeProfileTemplateCatalog({
+        schema_version: "desk_profile_template_catalog_v1",
+        templates: [
+          {
+            id: " jobs ",
+            title: " Developer opportunities ",
+            audience: " Builders ",
+            default_topic: " jobs ",
+            starter_brief: " Track paid frontend work. ",
+            coach_questions: [" Must have? ", "Avoid?"],
+            supported_fields: ["search_rules", "rejection_rules"],
+            raw_path: "C:/Users/Administrator/private/jobs.md",
+          },
+        ],
+      }),
+    ).toEqual({
+      schema_version: "desk_profile_template_catalog_v1",
+      templates: [
+        {
+          id: "jobs",
+          title: "Developer opportunities",
+          audience: "Builders",
+          default_topic: "jobs",
+          starter_brief: "Track paid frontend work.",
+          coach_questions: ["Must have?", "Avoid?"],
+          supported_fields: ["search_rules", "rejection_rules"],
+        },
+      ],
+    });
+    expect(sanitizeProfileTemplateCatalog({ templates: [] })).toBeNull();
+    expect(
+      sanitizeProfileCreatePreview({
+        schema_version: "desk_profile_create_preview_v1",
+        status: " ready ",
+        template_id: " jobs ",
+        title: " Developer opportunities ",
+        topic: " jobs ",
+        questions: [" Must have? "],
+        search_rules: [" Include paid TypeScript work. "],
+        rejection_rules: [" Reject unpaid internships. "],
+        keywords: [" TypeScript ", "react"],
+        markdown_preview: "# Profile",
+        warnings: [" Local scaffold used. "],
+        generated_rules: [" Include paid TypeScript work. "],
+        llm_used: true,
+        source_text: "raw private text",
+      }),
+    ).toEqual({
+      schema_version: "desk_profile_create_preview_v1",
+      status: "ready",
+      template_id: "jobs",
+      title: "Developer opportunities",
+      topic: "jobs",
+      questions: ["Must have?"],
+      generated_rules: ["Include paid TypeScript work."],
+      search_rules: ["Include paid TypeScript work."],
+      rejection_rules: ["Reject unpaid internships."],
+      keywords: ["TypeScript", "react"],
+      markdown_preview: "# Profile",
+      warnings: ["Local scaffold used."],
+      llm_used: true,
+    });
+    expect(sanitizeProfileCreatePreview({ schema_version: "desk_profile_create_preview_v1", status: "broken" })).toBeNull();
+    expect(
+      sanitizeProfileCoachPreview({
+        schema_version: "profile_coach_preview_v1",
+        status: " ready ",
+        profile_id: " jobs-fast ",
+        confidence: " medium ",
+        evidence_counts: { keep: 1, skip: 2, false_positive: 3, follow_up: 4, raw: "ignored" },
+        diagnosis: [{ label: " False positives ", detail: " Need tighter exclusions. ", raw_note: "ignored" }],
+        suspected_false_positive_patterns: [" full-stack generalists "],
+        suggested_preference_rules: [" Exclude full-stack roles. "],
+        source_suggestions: [{ kind: "review_sources", label: "Review noisy sources", detail: "Check recurring wrong matches." }],
+        warnings: [" AI fallback used. "],
+        llm_used: true,
+      }),
+    ).toEqual({
+      schema_version: "profile_coach_preview_v1",
+      status: "ready",
+      profile_id: "jobs-fast",
+      confidence: "medium",
+      evidence_counts: { keep: 1, skip: 2, false_positive: 3, follow_up: 4 },
+      diagnosis: [{ label: "False positives", detail: "Need tighter exclusions." }],
+      suspected_false_positive_patterns: ["full-stack generalists"],
+      suggested_preference_rules: ["Exclude full-stack roles."],
+      source_suggestions: [{ kind: "review_sources", label: "Review noisy sources", detail: "Check recurring wrong matches." }],
+      warnings: ["AI fallback used."],
+      llm_used: true,
+    });
+    expect(sanitizeProfileCoachPreview({ schema_version: "profile_coach_preview_v1", status: "ready" })).toBeNull();
   });
 
   it("sanitizes Desk action payloads without trusting backend-only fields", () => {
