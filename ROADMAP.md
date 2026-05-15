@@ -1,6 +1,6 @@
 # T-Sense Roadmap
 
-Last researched: 2026-05-14
+Last researched: 2026-05-15
 
 This roadmap is market-informed, but it is still a product plan, not a
 commitment log. Review note: product pages, Telegram platform rules, and
@@ -19,6 +19,11 @@ T-Sense should become a local-first Telegram intelligence loop:
 
 The wedge is not "another Telegram feed." The wedge is "what should I act on
 today, and why can I trust that answer?"
+
+Telegram-native surfaces should support that loop, not replace the local
+engine. The near-term path is a reliable private Bot Gateway for status and
+safe commands; a Mini App is a later companion card surface for review,
+approval, and lightweight settings.
 
 ## Market Snapshot
 
@@ -111,6 +116,30 @@ Recent source checks sharpen the v0.5 direction:
   raw subscribed-source scanning should remain local, user-initiated, and
   evidence-preserving rather than a hosted scraping/indexing product.
 
+### 2026-05-15 Product Review Refresh
+
+The Mini App review confirmed the surface split:
+
+- The local scanner, Signal Desk, and CLI remain the product core. A Mini App
+  should not become the primary scanner, session holder, or raw evidence store.
+- The current bot-style card flow is not the ideal review experience. The
+  target Telegram-native interaction is a packaged Mini App card surface with
+  fast Keep/Skip/Wrong match/Tune profile actions, backed by already-generated
+  structured run and review data.
+- The v0.5 priority stays Bot Gateway reliability: authorized chat setup,
+  command clarity, dry-run scans, latest results, source assistant preview, and
+  clean handoff back to Signal Desk.
+- Public Telegram discovery is a possible sourcing aid, but it is not the same
+  as a public message search index. The allowed direction is source discovery:
+  collect or suggest public channel links/metadata, then require the user to
+  join or authorize the source before T-Sense scans messages through the local
+  MTProto path.
+- Packaging should be evaluated alongside v0.6 team/local deployment work.
+  Tauri is the default candidate to investigate because it matches the
+  TypeScript/Rust local-first shape and can keep bundles smaller; Electron
+  remains a fallback if webview consistency, mature desktop APIs, or updater
+  needs outweigh footprint.
+
 ## User Pain Points
 
 1. Telegram volume hides time-sensitive decisions.
@@ -176,7 +205,10 @@ Best early users:
 
 Non-goals for now:
 
-1. Do not become a public Telegram search index.
+1. Do not become a public Telegram message archive or search index. Bounded
+   public-channel discovery is allowed only when it stores source metadata or
+   links, then routes message scanning through user-joined or user-authorized
+   sources.
 2. Do not build a hosted SaaS until legal, privacy, and session handling are
    clearly designed.
 3. Do not train, fine-tune, or resell datasets from Telegram data. As of
@@ -374,6 +406,10 @@ Remaining work before calling v0.5 done:
 - Harden the local Telegram Bot Gateway as the no-dashboard control surface:
   command menu, dry-run scans, latest results, source assistant, and authorized
   chat handling should survive ordinary desktop use.
+- Keep the Mini App card-review prototype out of the v0.5 done gate unless it
+  is explicitly used as a demo/latest-run interaction test. Bot reliability
+  comes first; rich cards come after the gateway can carry status and handoff
+  without CLI recovery.
 - Continue hardening follow-up-to-profile UX around already-collected local
   notes: make it obvious which accepted diff affected the next run and keep
   rollback/reapply boundaries visible.
@@ -417,9 +453,15 @@ Planned work:
 - Provide `pipx`, `uvx`, and Docker installation paths.
 - Harden the local dashboard for packaging, backup/restore, and small trusted
   team use.
-- Design the second-stage hosted Telegram surface: webhook receiver, Mini App
-  shell, auth model, encrypted tenant storage, and a clean handoff from local
-  Signal Desk state.
+- Evaluate packaged desktop options, with Tauri as the default candidate and
+  Electron as the compatibility fallback.
+- Design the second-stage Telegram surface as a companion layer: webhook
+  receiver when needed, Mini App card shell, auth model, encrypted tenant
+  storage, and a clean handoff from local Signal Desk state. It must not become
+  a hosted raw-message scanner by default.
+- Explore bounded public-channel discovery as source intake, not message
+  indexing: discover links and metadata, then let the user join/authorize before
+  local scanning.
 - Add encrypted config/session guidance and backup/restore docs.
 - Support multi-profile batch runs from the same channel registry.
 - Add team-safe runbooks for shared profiles, local deployment, and third-party
@@ -509,6 +551,9 @@ Exit criteria:
 - [Telegram Bot Features](https://core.telegram.org/bots/features) document
   privacy-mode limits that keep bot control surfaces different from local
   MTProto user-session scanning.
+- [Telegram Mini Apps](https://core.telegram.org/bots/webapps) document the
+  in-Telegram web surface and launch/auth model, which is useful for a review
+  companion shell but does not replace local MTProto scanning.
 - [Telegram Content Licensing Terms](https://telegram.org/tos/content-licensing)
   remain a release-time checkpoint for content licensing and AI-scraping
   constraints.

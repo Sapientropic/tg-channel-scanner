@@ -5,6 +5,7 @@ slice_goal: "Continue the technical-debt SPEC with high-value dashboard/backend 
 stop_condition: "Do not enter final closeout before 2026-05-14 14:00 Asia/Shanghai unless the user explicitly stops; if SPEC work is exhausted, research competitors/user pain points and expand ROADMAP/SPEC before continuing."
 handoff_policy: after_deadline_closeout
 continuation_policy: "Use docs/technical-debt-cleanup-spec.md as the debt authority; continue with one remaining boundary at a time and keep old facade exports until downstream callers move."
+authority_note: "Compact active handoff only. Current technical-debt status lives in docs/technical-debt-cleanup-spec.md; command recipes live in docs/testing.md; dated quality logs are evidence records."
 intake_status: explicit_user_request
 gate_status: bot_gateway_ordering_gates_passed
 blockers: []

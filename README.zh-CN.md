@@ -219,6 +219,10 @@ python scripts/monitor.py feedback-export \
 | `docs/desktop-platforms.md` | 桌面启动器、本地 key 存储和自动扫描平台边界。 |
 | `docs/output-artifacts.md` | 本地 `output/` 产物分层、Desk 可打开报告路径和清理策略。 |
 | `docs/agent-cli-contract.md` | 给 agent 使用的稳定 JSON / CLI 合同。 |
+| `docs/needle-local-command-router-research.md` | Cactus Needle 作为本地 Bot Gateway 意图路由层的调研备忘。 |
+| `docs/technical-debt-cleanup-spec.md` | 当前技术债权威入口和文档 ownership 地图。 |
+| `docs/quality/task-state.md` | 当前质量迭代的精简交接；先看技术债权威入口。 |
+| `docs/quality/2026-05-13-tech-debt-iteration-log.md` | 历史清债证据日志，不是当前状态权威。 |
 | `docs/testing.md` | 本地测试与质量门槛命令入口。 |
 | `docs/getting-api-credentials.md` | Telegram API 凭证获取指南。 |
 | `docs/tos-risk-analysis.md` | ToS 与运行风险说明。 |
@@ -227,6 +231,11 @@ python scripts/monitor.py feedback-export \
 
 本地测试和质量门槛命令统一看 [docs/testing.md](docs/testing.md)。其中也说明了
 dirty worktree 下如何验证 staged index。
+
+当前技术债状态统一看
+[docs/technical-debt-cleanup-spec.md](docs/technical-debt-cleanup-spec.md)；
+[docs/quality/task-state.md](docs/quality/task-state.md) 只是当前精简交接，
+带日期的 quality log 是证据记录。
 
 ## License
 

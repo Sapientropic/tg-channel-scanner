@@ -4,6 +4,10 @@ This is the canonical local command index for repository verification. CI is
 still the platform authority; these gates are the expected local evidence before
 committing or asking for review.
 
+This file owns commands only. Current technical-debt status lives in
+`docs/technical-debt-cleanup-spec.md`, the compact active handoff lives in
+`docs/quality/task-state.md`, and dated quality logs are historical evidence.
+
 ## Rules
 
 - Run focused tests first for fast feedback, then run the broader gate that

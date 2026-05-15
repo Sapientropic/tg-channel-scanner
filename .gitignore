@@ -26,6 +26,8 @@ dashboard/dist/
 # Output
 output/
 .tgcs/
+graphify-out/
+.graphifyignore
 
 # Local generated review workspaces and media
 docs/demo/

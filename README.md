@@ -241,6 +241,10 @@ python scripts/monitor.py feedback-export \
 | `docs/desktop-platforms.md` | Desktop launcher, key storage, and auto-scan platform notes. |
 | `docs/output-artifacts.md` | Local `output/` artifact lanes, Desk-openable report paths, and cleanup policy. |
 | `docs/agent-cli-contract.md` | Stable JSON/CLI contract for agents. |
+| `docs/needle-local-command-router-research.md` | Research note on Cactus Needle as a local Bot Gateway intent router. |
+| `docs/technical-debt-cleanup-spec.md` | Current technical-debt authority and documentation ownership map. |
+| `docs/quality/task-state.md` | Compact current quality handoff; read it after the debt authority. |
+| `docs/quality/2026-05-13-tech-debt-iteration-log.md` | Historical cleanup evidence, not current state authority. |
 | `docs/testing.md` | Canonical local testing and quality-gate commands. |
 | `docs/getting-api-credentials.md` | Telegram API credential guide. |
 | `docs/tos-risk-analysis.md` | Terms-of-service and operational risk notes. |
@@ -250,6 +254,10 @@ python scripts/monitor.py feedback-export \
 Use [docs/testing.md](docs/testing.md) as the canonical local testing and
 quality-gate command index. It also covers staged-index verification for dirty
 worktrees.
+
+Use [docs/technical-debt-cleanup-spec.md](docs/technical-debt-cleanup-spec.md)
+for current debt status. [docs/quality/task-state.md](docs/quality/task-state.md)
+is only the compact active handoff, and dated quality logs are evidence records.
 
 ## License
 

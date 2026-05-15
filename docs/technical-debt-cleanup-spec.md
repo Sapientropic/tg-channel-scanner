@@ -1482,6 +1482,9 @@ Cleanup:
 - Keep `docs/internal/specs/INDEX.md` as the private index authority for active
   specs. Public docs may link to stable summaries, but must not mirror internal
   implementation details.
+- When product reviews create implementation choices, add or update the active
+  internal spec first. Keep `ROADMAP.md` to phase direction and stable product
+  boundaries so implementation contracts do not spread across public docs.
 - Keep temporary quality logs labeled as historical evidence or move them out of
   tracked docs once they are no longer needed for handoff.
 
