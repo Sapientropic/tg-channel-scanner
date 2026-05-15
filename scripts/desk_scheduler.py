@@ -13,10 +13,11 @@ from pathlib import Path
 from typing import Any
 
 try:
-    from scripts import desk_bot_gateway_background, monitor_config
+    from scripts import desk_bot_gateway_background, monitor_config, monitor_state
 except ModuleNotFoundError:
     import desk_bot_gateway_background
     import monitor_config
+    import monitor_state
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -25,9 +26,12 @@ DESK_BOT_GATEWAY_STALE_SECONDS = 120
 DESK_BOT_SUPPORTED_COMMANDS = ["/status", "/latest", "/sources", "/profiles", "/scan"]
 DESK_SCHEDULER_PROFILE_ID = "jobs-fast"
 DESK_SCHEDULER_INTERVAL_MINUTES = 15
-DESK_SCHEDULER_TASK_NAME = "TGCS jobs-fast dry-run"
-DESK_SCHEDULER_LAUNCHD_LABEL = "com.sapientropic.tgcs.jobs-fast.dry-run"
-DESK_SCHEDULER_SYSTEMD_NAME = "tgcs-jobs-fast-dry-run"
+DESK_SCHEDULER_TASK_NAME = "T-Sense auto review"
+DESK_SCHEDULER_LEGACY_TASK_NAMES = ("TGCS jobs-fast dry-run",)
+DESK_SCHEDULER_LAUNCHD_LABEL = "com.sapientropic.tsense.auto-review"
+DESK_SCHEDULER_LEGACY_LAUNCHD_LABELS = ("com.sapientropic.tgcs.jobs-fast.dry-run",)
+DESK_SCHEDULER_SYSTEMD_NAME = "tsense-auto-review"
+DESK_SCHEDULER_LEGACY_SYSTEMD_NAMES = ("tgcs-jobs-fast-dry-run",)
 DESK_BOT_GATEWAY_TASK_NAME = "T-Sense Bot Gateway"
 DESK_BOT_GATEWAY_LAUNCHD_LABEL = "com.sapientropic.tsense.bot-gateway"
 DESK_BOT_GATEWAY_SYSTEMD_NAME = "tsense-bot-gateway"
@@ -134,32 +138,72 @@ def _safe_profile_id(value: object) -> str:
     return text
 
 
-def preferred_scheduler_profile_id(
+def _configured_profiles_with_runtime_overrides(config: monitor_config.MonitorConfig, root: Path) -> list[dict[str, Any]]:
+    profiles = list(config.profiles.values())
+    database = str(config.defaults.get("database") or ".tgcs/tgcs.db")
+    db_path = Path(database)
+    if not db_path.is_absolute():
+        db_path = root / db_path
+    if not db_path.exists():
+        return profiles
+    try:
+        conn = monitor_state.connect(db_path)
+    except Exception:
+        return profiles
+    try:
+        return [monitor_state.apply_profile_runtime_overrides(conn, profile) for profile in profiles]
+    finally:
+        conn.close()
+
+
+def scheduler_profile_selection(
     *,
     project_root: Path | None = None,
     fallback_profile_id: str | None = None,
-) -> str:
+) -> dict[str, Any]:
     fallback = _safe_profile_id(fallback_profile_id or DESK_SCHEDULER_PROFILE_ID) or DESK_SCHEDULER_PROFILE_ID
     root = PROJECT_ROOT if project_root is None else project_root
     try:
         config = monitor_config.load_config(root / ".tgcs" / "profiles.toml")
     except ValueError:
-        return fallback
-    active_profiles = [profile for profile in config.profiles.values() if profile.get("enabled", True)]
+        return {"profile_id": fallback, "has_enabled_profile": True, "source": "fallback_config_unavailable"}
+
+    profiles = _configured_profiles_with_runtime_overrides(config, root)
+    active_profiles = [profile for profile in profiles if profile.get("enabled", True)]
     desk_profiles = [
         (index, profile)
         for index, profile in enumerate(active_profiles)
         if str(profile.get("path") or "").replace("\\", "/").startswith("profiles/desk/")
     ]
-    if not desk_profiles:
-        return fallback
-    # Signal Desk-created profiles are the user's current matching intent.
-    # Prefer the newest `profiles/desk/*` record so manual scans, schedule
-    # previews, and installed background scans do not silently split into
-    # different profiles. Keep the OS task name stable; reinstalling updates the
-    # fixed task instead of creating per-profile orphan tasks.
-    _, profile = sorted(desk_profiles, key=lambda item: (str(item[1].get("updated_at") or ""), item[0]))[-1]
-    return _safe_profile_id(profile.get("id")) or fallback
+    if desk_profiles:
+        # Signal Desk-created profiles are the user's current matching intent.
+        # Prefer the newest `profiles/desk/*` record so manual scans, schedule
+        # previews, and installed background scans do not silently split into
+        # different profiles. Keep the OS task name stable; reinstalling updates
+        # the fixed task instead of creating per-profile orphan tasks.
+        _, profile = sorted(desk_profiles, key=lambda item: (str(item[1].get("updated_at") or ""), item[0]))[-1]
+        return {
+            "profile_id": _safe_profile_id(profile.get("id")) or fallback,
+            "has_enabled_profile": True,
+            "source": "desk_profile",
+        }
+
+    fallback_profile = next((profile for profile in profiles if _safe_profile_id(profile.get("id")) == fallback), None)
+    if fallback_profile is None:
+        return {"profile_id": fallback, "has_enabled_profile": False, "source": "fallback_missing"}
+    if fallback_profile.get("enabled", True):
+        return {"profile_id": fallback, "has_enabled_profile": True, "source": "fallback_profile"}
+    return {"profile_id": fallback, "has_enabled_profile": False, "source": "fallback_disabled"}
+
+
+def preferred_scheduler_profile_id(
+    *,
+    project_root: Path | None = None,
+    fallback_profile_id: str | None = None,
+) -> str:
+    return str(
+        scheduler_profile_selection(project_root=project_root, fallback_profile_id=fallback_profile_id)["profile_id"]
+    )
 
 
 def schedule_display_command(profile_id: str) -> str:
@@ -204,37 +248,66 @@ def scheduler_backend() -> str:
     return "manual_cron_preview"
 
 
-def scheduler_base(backend: str, *, profile_id: str | None = None) -> dict:
+def scheduler_base(backend: str, *, profile_id: str | None = None, has_enabled_profile: bool | None = None) -> dict:
     selected_profile_id = profile_id or preferred_scheduler_profile_id()
+    profile_available = True if has_enabled_profile is None else has_enabled_profile
     can_install = backend in {"windows_schtasks", "macos_launchd", "linux_systemd_user"}
     return {
         "schema_version": "desk_scheduler_status_v1",
         "task_label": f"{selected_profile_id} AI review",
         "profile_id": selected_profile_id,
+        "has_enabled_profile": profile_available,
         "interval_minutes": DESK_SCHEDULER_INTERVAL_MINUTES,
         "platform": sys.platform,
         "backend": backend,
-        "can_install": can_install,
+        "can_install": can_install and profile_available,
         "can_remove": can_install,
         "display_command": schedule_display_command(selected_profile_id),
         "checked_at": _utc_now(),
     }
 
 
-def launchd_plist_path() -> Path:
-    return Path.home() / "Library" / "LaunchAgents" / f"{DESK_SCHEDULER_LAUNCHD_LABEL}.plist"
+def launchd_labels() -> list[str]:
+    labels = [DESK_SCHEDULER_LAUNCHD_LABEL]
+    for label in DESK_SCHEDULER_LEGACY_LAUNCHD_LABELS:
+        if label and label not in labels:
+            labels.append(label)
+    return labels
+
+
+def launchd_plist_path(label: str | None = None) -> Path:
+    selected_label = label or DESK_SCHEDULER_LAUNCHD_LABEL
+    return Path.home() / "Library" / "LaunchAgents" / f"{selected_label}.plist"
+
+
+def launchd_plist_paths() -> list[tuple[str, Path]]:
+    return [(label, launchd_plist_path(label)) for label in launchd_labels()]
 
 
 def systemd_user_dir() -> Path:
     return Path.home() / ".config" / "systemd" / "user"
 
 
-def systemd_service_path() -> Path:
-    return systemd_user_dir() / f"{DESK_SCHEDULER_SYSTEMD_NAME}.service"
+def systemd_names() -> list[str]:
+    names = [DESK_SCHEDULER_SYSTEMD_NAME]
+    for name in DESK_SCHEDULER_LEGACY_SYSTEMD_NAMES:
+        if name and name not in names:
+            names.append(name)
+    return names
 
 
-def systemd_timer_path() -> Path:
-    return systemd_user_dir() / f"{DESK_SCHEDULER_SYSTEMD_NAME}.timer"
+def systemd_service_path(name: str | None = None) -> Path:
+    selected_name = name or DESK_SCHEDULER_SYSTEMD_NAME
+    return systemd_user_dir() / f"{selected_name}.service"
+
+
+def systemd_timer_path(name: str | None = None) -> Path:
+    selected_name = name or DESK_SCHEDULER_SYSTEMD_NAME
+    return systemd_user_dir() / f"{selected_name}.timer"
+
+
+def systemd_unit_paths() -> list[tuple[str, Path, Path]]:
+    return [(name, systemd_service_path(name), systemd_timer_path(name)) for name in systemd_names()]
 
 
 def posix_tgcs_entry() -> Path:
@@ -289,6 +362,98 @@ def fixed_monitor_python_argv(python_entry: Path | None = None, *, profile_id: s
     ]
 
 
+def windows_task_action(argv: list[str]) -> str:
+    return " ".join(f'"{part}"' if " " in part or "\\" in part else part for part in argv)
+
+
+def windows_scheduler_task_names() -> list[str]:
+    names = [DESK_SCHEDULER_TASK_NAME]
+    for name in DESK_SCHEDULER_LEGACY_TASK_NAMES:
+        if name and name not in names:
+            names.append(name)
+    return names
+
+
+def _cleanup_legacy_windows_scheduler_tasks() -> None:
+    for task_name in windows_scheduler_task_names()[1:]:
+        try:
+            _run_scheduler_command(["schtasks.exe", "/Delete", "/TN", task_name, "/F"])
+        except (OSError, subprocess.TimeoutExpired):
+            pass
+
+
+def _cleanup_legacy_launchd_scheduler_tasks() -> None:
+    for label, plist_path in launchd_plist_paths()[1:]:
+        try:
+            _run_scheduler_command(["launchctl", "unload", "-w", str(plist_path)])
+        except (OSError, subprocess.TimeoutExpired):
+            pass
+        plist_path.unlink(missing_ok=True)
+
+
+def _cleanup_legacy_systemd_scheduler_units() -> None:
+    removed = False
+    for name, service_path, timer_path in systemd_unit_paths()[1:]:
+        try:
+            _run_scheduler_command(["systemctl", "--user", "disable", "--now", f"{name}.timer"])
+        except (OSError, subprocess.TimeoutExpired):
+            pass
+        if service_path.exists() or timer_path.exists():
+            removed = True
+        service_path.unlink(missing_ok=True)
+        timer_path.unlink(missing_ok=True)
+    if removed:
+        try:
+            _run_scheduler_command(["systemctl", "--user", "daemon-reload"])
+        except (OSError, subprocess.TimeoutExpired):
+            pass
+
+
+def _remove_launchd_scheduler_tasks() -> subprocess.CompletedProcess[str]:
+    targets = [(label, path) for label, path in launchd_plist_paths() if path.exists()]
+    if not targets:
+        targets = [(DESK_SCHEDULER_LAUNCHD_LABEL, launchd_plist_path())]
+
+    completed: subprocess.CompletedProcess[str] | None = None
+    for _label, plist_path in targets:
+        completed = _run_scheduler_command(["launchctl", "unload", "-w", str(plist_path)])
+        # Remove the file even if launchctl reports that the job is not loaded:
+        # stale LaunchAgent plists are exactly what keeps old auto-review jobs
+        # coming back after users think they have turned the feature off.
+        plist_path.unlink(missing_ok=True)
+        if completed.returncode != 0:
+            return completed
+    return completed or subprocess.CompletedProcess(["launchctl"], 0, stdout="", stderr="")
+
+
+def _remove_systemd_scheduler_units() -> subprocess.CompletedProcess[str]:
+    targets = [
+        (name, service_path, timer_path)
+        for name, service_path, timer_path in systemd_unit_paths()
+        if service_path.exists() or timer_path.exists()
+    ]
+    if not targets:
+        targets = [(DESK_SCHEDULER_SYSTEMD_NAME, systemd_service_path(), systemd_timer_path())]
+
+    completed: subprocess.CompletedProcess[str] | None = None
+    removed = False
+    for name, service_path, timer_path in targets:
+        completed = _run_scheduler_command(["systemctl", "--user", "disable", "--now", f"{name}.timer"])
+        if completed.returncode != 0:
+            return completed
+        if service_path.exists() or timer_path.exists():
+            removed = True
+        service_path.unlink(missing_ok=True)
+        timer_path.unlink(missing_ok=True)
+
+    if removed:
+        try:
+            _run_scheduler_command(["systemctl", "--user", "daemon-reload"])
+        except (OSError, subprocess.TimeoutExpired):
+            pass
+    return completed or subprocess.CompletedProcess(["systemctl"], 0, stdout="", stderr="")
+
+
 def systemd_exec_path(path: Path) -> str:
     text = str(path)
     if any(char.isspace() for char in text):
@@ -328,8 +493,10 @@ def repair_installed_bot_gateway_background() -> dict:
 
 def desk_scheduler_status() -> dict:
     backend = scheduler_backend()
-    profile_id = preferred_scheduler_profile_id()
-    base = scheduler_base(backend, profile_id=profile_id)
+    selection = scheduler_profile_selection()
+    profile_id = str(selection["profile_id"])
+    has_enabled_profile = bool(selection["has_enabled_profile"])
+    base = scheduler_base(backend, profile_id=profile_id, has_enabled_profile=has_enabled_profile)
     if backend == "manual_cron_preview":
         return {
             **base,
@@ -341,24 +508,54 @@ def desk_scheduler_status() -> dict:
         }
 
     if backend == "macos_launchd":
-        installed = launchd_plist_path().exists()
-        if installed:
-            return launchd_scheduler_status(base)
+        installed_label = ""
+        installed_path = None
+        for label, path in launchd_plist_paths():
+            if path.exists():
+                installed_label = label
+                installed_path = path
+                break
+        if installed_path is not None:
+            if not has_enabled_profile:
+                return {
+                    **base,
+                    "available": True,
+                    "installed": True,
+                    "status": "profile_disabled",
+                    "detail": "Automatic AI reviews are installed, but no enabled profile is available.",
+                    "next_action": "Turn off auto review, or enable a profile before background checks continue.",
+                    "task_name": installed_label,
+                    "legacy_task_name": installed_label != DESK_SCHEDULER_LAUNCHD_LABEL,
+                }
+            return launchd_scheduler_status(base, label=installed_label)
         return {
             **base,
             "available": True,
-            "installed": installed,
-            "status": "installed" if installed else "not_installed",
-            "detail": "Automatic AI reviews are on every 15 minutes." if installed else "Automatic AI reviews are off.",
-            "next_action": (
-                "You can turn them off from Signal Desk when you no longer need background checks."
-                if installed
-                else "Turn on auto review from Signal Desk when you want background checks."
-            ),
+            "installed": False,
+            "status": "not_installed",
+            "detail": "Automatic AI reviews are off.",
+            "next_action": "Turn on auto review from Signal Desk when you want background checks.",
         }
 
     if backend == "linux_systemd_user":
-        installed = systemd_timer_path().exists()
+        installed_name = ""
+        installed = False
+        for name, _service_path, timer_path in systemd_unit_paths():
+            if timer_path.exists():
+                installed_name = name
+                installed = True
+                break
+        if installed and not has_enabled_profile:
+            return {
+                **base,
+                "available": True,
+                "installed": True,
+                "status": "profile_disabled",
+                "detail": "Automatic AI reviews are installed, but no enabled profile is available.",
+                "next_action": "Turn off auto review, or enable a profile before background checks continue.",
+                "task_name": installed_name,
+                "legacy_task_name": installed_name != DESK_SCHEDULER_SYSTEMD_NAME,
+            }
         return {
             **base,
             "available": True,
@@ -370,10 +567,18 @@ def desk_scheduler_status() -> dict:
                 if installed
                 else "Turn on auto review from Signal Desk when you want background checks."
             ),
+            **({"task_name": installed_name, "legacy_task_name": installed_name != DESK_SCHEDULER_SYSTEMD_NAME} if installed else {}),
         }
 
     try:
-        completed = _run_scheduler_command(["schtasks.exe", "/Query", "/TN", DESK_SCHEDULER_TASK_NAME])
+        completed = None
+        installed_task_name = ""
+        for task_name in windows_scheduler_task_names():
+            candidate = _run_scheduler_command(["schtasks.exe", "/Query", "/TN", task_name])
+            completed = candidate
+            if candidate.returncode == 0:
+                installed_task_name = task_name
+                break
     except subprocess.TimeoutExpired:
         return {
             **base,
@@ -393,7 +598,17 @@ def desk_scheduler_status() -> dict:
             "next_action": "Use manual scans from Signal Desk.",
         }
 
-    if completed.returncode == 0:
+    if completed and completed.returncode == 0:
+        if not has_enabled_profile:
+            return {
+                **base,
+                "available": True,
+                "installed": True,
+                "status": "profile_disabled",
+                "detail": "Automatic AI reviews are installed, but no enabled profile is available.",
+                "next_action": "Turn off auto review, or enable a profile before background checks continue.",
+                "task_name": installed_task_name,
+            }
         return {
             **base,
             "available": True,
@@ -401,6 +616,8 @@ def desk_scheduler_status() -> dict:
             "status": "installed",
             "detail": "Automatic AI reviews are on every 15 minutes.",
             "next_action": "You can turn them off from Signal Desk when you no longer need background checks.",
+            "task_name": installed_task_name,
+            "legacy_task_name": installed_task_name != DESK_SCHEDULER_TASK_NAME,
         }
     return {
         **base,
@@ -412,11 +629,12 @@ def desk_scheduler_status() -> dict:
     }
 
 
-def launchd_service_target() -> str:
+def launchd_service_target(label: str | None = None) -> str:
+    selected_label = label or DESK_SCHEDULER_LAUNCHD_LABEL
     getuid = getattr(os, "getuid", None)
     if callable(getuid):
-        return f"gui/{getuid()}/{DESK_SCHEDULER_LAUNCHD_LABEL}"
-    return DESK_SCHEDULER_LAUNCHD_LABEL
+        return f"gui/{getuid()}/{selected_label}"
+    return selected_label
 
 
 def launchd_last_exit_code(output: str) -> int | None:
@@ -429,9 +647,11 @@ def launchd_last_exit_code(output: str) -> int | None:
         return None
 
 
-def launchd_scheduler_status(base: dict) -> dict:
+def launchd_scheduler_status(base: dict, *, label: str | None = None) -> dict:
+    selected_label = label or DESK_SCHEDULER_LAUNCHD_LABEL
+    legacy = selected_label != DESK_SCHEDULER_LAUNCHD_LABEL
     try:
-        completed = _run_scheduler_command(["launchctl", "print", launchd_service_target()])
+        completed = _run_scheduler_command(["launchctl", "print", launchd_service_target(selected_label)])
     except subprocess.TimeoutExpired:
         return {
             **base,
@@ -440,6 +660,8 @@ def launchd_scheduler_status(base: dict) -> dict:
             "status": "unknown",
             "detail": "Automatic reviews are installed, but Signal Desk could not confirm launchd status before the check timed out.",
             "next_action": "If new Review cards stop arriving, repair auto review from Signal Desk.",
+            "task_name": selected_label,
+            "legacy_task_name": legacy,
         }
     except OSError:
         return {
@@ -449,6 +671,8 @@ def launchd_scheduler_status(base: dict) -> dict:
             "status": "unknown",
             "detail": "Automatic reviews are installed, but Signal Desk could not query launchd on this machine.",
             "next_action": "If new Review cards stop arriving, repair auto review from Signal Desk.",
+            "task_name": selected_label,
+            "legacy_task_name": legacy,
         }
 
     output = "\n".join([completed.stdout or "", completed.stderr or ""])
@@ -461,6 +685,8 @@ def launchd_scheduler_status(base: dict) -> dict:
             "status": "failed",
             "detail": "Automatic reviews are installed, but launchd does not report the job as loaded.",
             "next_action": "Repair auto review from Signal Desk to rewrite and reload the LaunchAgent.",
+            "task_name": selected_label,
+            "legacy_task_name": legacy,
             **({"last_exit_code": last_exit_code} if last_exit_code is not None else {}),
         }
     if last_exit_code not in (None, 0):
@@ -472,6 +698,8 @@ def launchd_scheduler_status(base: dict) -> dict:
             "detail": f"Automatic reviews are installed, but launchd last exited with code {last_exit_code}.",
             "next_action": "Repair auto review from Signal Desk to rewrite and reload the LaunchAgent.",
             "last_exit_code": last_exit_code,
+            "task_name": selected_label,
+            "legacy_task_name": legacy,
         }
     return {
         **base,
@@ -480,6 +708,8 @@ def launchd_scheduler_status(base: dict) -> dict:
         "status": "installed",
         "detail": "Automatic AI reviews are on every 15 minutes.",
         "next_action": "You can turn them off from Signal Desk when you no longer need background checks.",
+        "task_name": selected_label,
+        "legacy_task_name": legacy,
         **({"last_exit_code": last_exit_code} if last_exit_code is not None else {}),
     }
 
@@ -559,7 +789,9 @@ def run_desk_scheduler_action(action_id: str, *, body: dict | None = None) -> di
         raise DashboardDeskActionError("Scheduler actions only accept an explicit confirmation flag.")
     if body.get("confirm") is not True:
         raise DashboardDeskActionError("Automation changes require explicit confirmation.")
-    profile_id = preferred_scheduler_profile_id()
+    selection = scheduler_profile_selection()
+    profile_id = str(selection["profile_id"])
+    has_enabled_profile = bool(selection["has_enabled_profile"])
     display_command = schedule_display_command(profile_id)
     backend = scheduler_backend()
     if backend == "manual_cron_preview":
@@ -574,8 +806,8 @@ def run_desk_scheduler_action(action_id: str, *, body: dict | None = None) -> di
 
     tgcs_entry = PROJECT_ROOT / "tgcs.bat" if backend == "windows_schtasks" else posix_tgcs_entry()
     macos_tgcs_script = tgcs_script_path()
-    required_entry = macos_tgcs_script if backend == "macos_launchd" else tgcs_entry
-    if action_id == "schedule_install_dry_run" and not required_entry.exists():
+    required_entries = [macos_tgcs_script] if backend in {"windows_schtasks", "macos_launchd"} else [tgcs_entry]
+    if action_id == "schedule_install_dry_run" and any(not entry.exists() for entry in required_entries):
         return scheduler_result(
             action_id,
             status="blocked",
@@ -587,12 +819,21 @@ def run_desk_scheduler_action(action_id: str, *, body: dict | None = None) -> di
 
     if action_id not in {"schedule_install_dry_run", "schedule_remove_dry_run"}:
         raise DashboardDeskActionError(f"Unknown scheduler action: {action_id}")
+    if action_id == "schedule_install_dry_run" and not has_enabled_profile:
+        return scheduler_result(
+            action_id,
+            status="blocked",
+            title="No enabled profile for auto review",
+            detail="All matching profiles are paused, so Signal Desk will not install a background auto-review task.",
+            next_action="Enable a profile, then turn on auto review again.",
+            display_command=display_command,
+        )
 
     if backend == "windows_schtasks":
         # Keep this as a single fixed /TR argument in a list argv call. Do not
         # refactor this path through shell=True: the browser must never be able
         # to turn scheduler setup into a local shell proxy.
-        task_action = f'"{tgcs_entry}" monitor run --profile-id {profile_id} --delivery-mode live'
+        task_action = windows_task_action(fixed_monitor_python_argv(profile_id=profile_id))
         if action_id == "schedule_install_dry_run":
             args = [
                 "schtasks.exe",
@@ -617,7 +858,17 @@ def run_desk_scheduler_action(action_id: str, *, body: dict | None = None) -> di
             success_next = "Manual scans still work from Signal Desk."
 
         try:
-            completed = _run_scheduler_command(args)
+            if action_id == "schedule_remove_dry_run":
+                completed = None
+                for task_name in windows_scheduler_task_names():
+                    candidate = _run_scheduler_command(["schtasks.exe", "/Delete", "/TN", task_name, "/F"])
+                    completed = candidate
+                    if candidate.returncode == 0:
+                        break
+                if completed is None:
+                    completed = subprocess.CompletedProcess(args, 1, stdout="", stderr="The local scheduler rejected the change.")
+            else:
+                completed = _run_scheduler_command(args)
         except subprocess.TimeoutExpired:
             return scheduler_result(
                 action_id,
@@ -638,6 +889,8 @@ def run_desk_scheduler_action(action_id: str, *, body: dict | None = None) -> di
             )
 
         if completed.returncode == 0:
+            if action_id == "schedule_install_dry_run":
+                _cleanup_legacy_windows_scheduler_tasks()
             return scheduler_result(
                 action_id,
                 status="success",
@@ -710,7 +963,12 @@ def run_desk_scheduler_action(action_id: str, *, body: dict | None = None) -> di
         raise DashboardDeskActionError(f"Unknown scheduler backend: {backend}")
 
     try:
-        completed = _run_scheduler_command(args)
+        if backend == "macos_launchd" and action_id == "schedule_remove_dry_run":
+            completed = _remove_launchd_scheduler_tasks()
+        elif backend == "linux_systemd_user" and action_id == "schedule_remove_dry_run":
+            completed = _remove_systemd_scheduler_units()
+        else:
+            completed = _run_scheduler_command(args)
     except subprocess.TimeoutExpired:
         return scheduler_result(
             action_id,
@@ -730,17 +988,11 @@ def run_desk_scheduler_action(action_id: str, *, body: dict | None = None) -> di
             display_command=display_command,
         )
 
-    if backend == "macos_launchd" and action_id == "schedule_remove_dry_run":
-        launchd_plist_path().unlink(missing_ok=True)
-    if backend == "linux_systemd_user" and action_id == "schedule_remove_dry_run":
-        systemd_service_path().unlink(missing_ok=True)
-        systemd_timer_path().unlink(missing_ok=True)
-        try:
-            _run_scheduler_command(["systemctl", "--user", "daemon-reload"])
-        except (OSError, subprocess.TimeoutExpired):
-            pass
-
     if completed.returncode == 0:
+        if action_id == "schedule_install_dry_run" and backend == "macos_launchd":
+            _cleanup_legacy_launchd_scheduler_tasks()
+        if action_id == "schedule_install_dry_run" and backend == "linux_systemd_user":
+            _cleanup_legacy_systemd_scheduler_units()
         return scheduler_result(
             action_id,
             status="success",

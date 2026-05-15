@@ -66,7 +66,8 @@ class DashboardSchedulerTests(unittest.TestCase):
     def test_schedule_install_dry_run_uses_fixed_schtasks_argv(self):
         with tempfile.TemporaryDirectory() as tmp:
             project_root = Path(tmp)
-            (project_root / "tgcs.bat").write_text("@echo off\n", encoding="utf-8")
+            (project_root / "scripts").mkdir()
+            (project_root / "scripts" / "tgcs.py").write_text("# tgcs entry\n", encoding="utf-8")
             completed = subprocess.CompletedProcess(["schtasks.exe"], 0, stdout="SUCCESS\n", stderr="")
 
             with patch.object(dashboard_server.sys, "platform", "win32"):
@@ -77,23 +78,28 @@ class DashboardSchedulerTests(unittest.TestCase):
                             body={"confirm": True},
                         )
 
-        args = run_mock.call_args.args[0]
+        args = run_mock.call_args_list[0].args[0]
         self.assertEqual(args[0], "schtasks.exe")
         self.assertIn("/Create", args)
         self.assertIn(dashboard_server.DESK_SCHEDULER_TASK_NAME, args)
         trigger = args[args.index("/TR") + 1]
-        self.assertIn("tgcs.bat", trigger)
+        self.assertIn("tgcs.py", trigger)
         self.assertIn("--profile-id jobs-fast", trigger)
         self.assertIn("--delivery-mode live", trigger)
         self.assertNotIn("--delivery-mode dry-run", trigger)
         self.assertEqual(result["status"], "success")
         self.assertNotIn(str(project_root), result["detail"])
+        self.assertIn(
+            ["schtasks.exe", "/Delete", "/TN", "TGCS jobs-fast dry-run", "/F"],
+            [call.args[0] for call in run_mock.call_args_list],
+        )
 
 
     def test_schedule_install_dry_run_prefers_latest_desk_profile(self):
         with tempfile.TemporaryDirectory() as tmp:
             project_root = Path(tmp)
-            (project_root / "tgcs.bat").write_text("@echo off\n", encoding="utf-8")
+            (project_root / "scripts").mkdir()
+            (project_root / "scripts" / "tgcs.py").write_text("# tgcs entry\n", encoding="utf-8")
             config_path = project_root / ".tgcs" / "profiles.toml"
             config_path.parent.mkdir(parents=True)
             config_path.write_text(
@@ -124,7 +130,7 @@ class DashboardSchedulerTests(unittest.TestCase):
                             body={"confirm": True},
                         )
 
-        args = run_mock.call_args.args[0]
+        args = run_mock.call_args_list[0].args[0]
         trigger = args[args.index("/TR") + 1]
         self.assertIn("--profile-id frontend-only", trigger)
         self.assertEqual(
@@ -134,10 +140,54 @@ class DashboardSchedulerTests(unittest.TestCase):
         self.assertIn("frontend-only AI reviews", result["detail"])
 
 
+    def test_schedule_install_dry_run_blocks_when_profile_paused_in_desk_state(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project_root = Path(tmp)
+            (project_root / "scripts").mkdir()
+            (project_root / "scripts" / "tgcs.py").write_text("# tgcs entry\n", encoding="utf-8")
+            config_path = project_root / ".tgcs" / "profiles.toml"
+            config_path.parent.mkdir(parents=True)
+            config_path.write_text(
+                "\n".join(
+                    [
+                        'schema_version = "profile_run_config_v1"',
+                        "",
+                        "[[profiles]]",
+                        'id = "jobs-fast"',
+                        'path = "profiles/templates/jobs.md"',
+                        "enabled = true",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            conn = monitor_state.connect(project_root / ".tgcs" / "tgcs.db")
+            try:
+                monitor_state.upsert_profile(
+                    conn,
+                    {"id": "jobs-fast", "path": str(project_root / "profiles" / "templates" / "jobs.md"), "enabled": True},
+                )
+                monitor_state.update_profile_enabled(conn, profile_id="jobs-fast", enabled=False)
+            finally:
+                conn.close()
+
+            with patch.object(dashboard_server.sys, "platform", "win32"):
+                with patch.object(dashboard_server, "PROJECT_ROOT", project_root):
+                    with patch.object(dashboard_server, "_run_scheduler_command") as run_mock:
+                        result = dashboard_server.run_desk_action(
+                            "schedule_install_dry_run",
+                            body={"confirm": True},
+                        )
+
+        run_mock.assert_not_called()
+        self.assertEqual(result["status"], "blocked")
+        self.assertIn("No enabled profile", result["title"])
+
+
     def test_schedule_remove_dry_run_uses_fixed_schtasks_argv(self):
         with tempfile.TemporaryDirectory() as tmp:
             project_root = Path(tmp)
-            (project_root / "tgcs.bat").write_text("@echo off\n", encoding="utf-8")
+            (project_root / "scripts").mkdir()
+            (project_root / "scripts" / "tgcs.py").write_text("# tgcs entry\n", encoding="utf-8")
             completed = subprocess.CompletedProcess(["schtasks.exe"], 0, stdout="SUCCESS\n", stderr="")
 
             with patch.object(dashboard_server.sys, "platform", "win32"):
@@ -154,10 +204,29 @@ class DashboardSchedulerTests(unittest.TestCase):
         self.assertEqual(result["status"], "success")
 
 
+    def test_schedule_remove_dry_run_removes_legacy_windows_task_when_new_name_is_missing(self):
+        calls: list[list[str]] = []
+
+        def fake_run(args):
+            calls.append(args)
+            if args[args.index("/TN") + 1] == "TGCS jobs-fast dry-run":
+                return subprocess.CompletedProcess(args, 0, stdout="SUCCESS\n", stderr="")
+            return subprocess.CompletedProcess(args, 1, stdout="", stderr="ERROR: missing\n")
+
+        with patch.object(dashboard_server.sys, "platform", "win32"):
+            with patch.object(dashboard_server, "_run_scheduler_command", side_effect=fake_run):
+                result = dashboard_server.run_desk_action("schedule_remove_dry_run", body={"confirm": True})
+
+        self.assertEqual(result["status"], "success")
+        self.assertEqual(calls[0], ["schtasks.exe", "/Delete", "/TN", dashboard_server.DESK_SCHEDULER_TASK_NAME, "/F"])
+        self.assertEqual(calls[1], ["schtasks.exe", "/Delete", "/TN", "TGCS jobs-fast dry-run", "/F"])
+
+
     def test_schedule_install_dry_run_failure_sanitizes_project_path(self):
         with tempfile.TemporaryDirectory() as tmp:
             project_root = Path(tmp)
-            (project_root / "tgcs.bat").write_text("@echo off\n", encoding="utf-8")
+            (project_root / "scripts").mkdir()
+            (project_root / "scripts" / "tgcs.py").write_text("# tgcs entry\n", encoding="utf-8")
             completed = subprocess.CompletedProcess(
                 ["schtasks.exe"],
                 1,
@@ -511,11 +580,11 @@ class DashboardSchedulerTests(unittest.TestCase):
                                     body={"confirm": True},
                                 )
 
-            plist_path = home / "Library" / "LaunchAgents" / "com.sapientropic.tgcs.jobs-fast.dry-run.plist"
+            plist_path = home / "Library" / "LaunchAgents" / "com.sapientropic.tsense.auto-review.plist"
             plist = plistlib.loads(plist_path.read_bytes())
 
         self.assertEqual(result["status"], "success")
-        self.assertEqual(plist["Label"], "com.sapientropic.tgcs.jobs-fast.dry-run")
+        self.assertEqual(plist["Label"], "com.sapientropic.tsense.auto-review")
         self.assertEqual(
             plist["ProgramArguments"],
             [
@@ -538,7 +607,7 @@ class DashboardSchedulerTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             home = Path(tmp) / "home"
             project_root = Path(tmp) / "repo"
-            plist_path = home / "Library" / "LaunchAgents" / "com.sapientropic.tgcs.jobs-fast.dry-run.plist"
+            plist_path = home / "Library" / "LaunchAgents" / "com.sapientropic.tsense.auto-review.plist"
             plist_path.parent.mkdir(parents=True)
             plist_path.write_text("placeholder", encoding="utf-8")
             completed = subprocess.CompletedProcess(
@@ -561,10 +630,65 @@ class DashboardSchedulerTests(unittest.TestCase):
         self.assertIn("Repair auto review", status["next_action"])
         args = run_mock.call_args.args[0]
         self.assertEqual(args[0:2], ["launchctl", "print"])
-        self.assertIn("com.sapientropic.tgcs.jobs-fast.dry-run", args[-1])
+        self.assertIn("com.sapientropic.tsense.auto-review", args[-1])
+
+
+    def test_desk_scheduler_status_detects_legacy_macos_launch_agent(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp) / "home"
+            project_root = Path(tmp) / "repo"
+            plist_path = home / "Library" / "LaunchAgents" / "com.sapientropic.tgcs.jobs-fast.dry-run.plist"
+            plist_path.parent.mkdir(parents=True)
+            plist_path.write_text("placeholder", encoding="utf-8")
+            calls: list[list[str]] = []
+
+            def fake_run(args):
+                calls.append(args)
+                return subprocess.CompletedProcess(args, 0, stdout="state = running\n", stderr="")
+
+            with patch.object(dashboard_server.sys, "platform", "darwin"):
+                with patch.object(dashboard_server.Path, "home", return_value=home):
+                    with patch.object(dashboard_server, "PROJECT_ROOT", project_root):
+                        with patch.object(dashboard_server, "_run_scheduler_command", side_effect=fake_run):
+                            status = dashboard_server.desk_scheduler_status()
+
+        self.assertTrue(status["installed"])
+        self.assertTrue(status["legacy_task_name"])
+        self.assertEqual(status["task_name"], "com.sapientropic.tgcs.jobs-fast.dry-run")
+        self.assertIn("com.sapientropic.tgcs.jobs-fast.dry-run", calls[0][-1])
 
 
     def test_schedule_remove_dry_run_unloads_macos_launch_agent_with_fixed_argv(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp) / "home"
+            project_root = Path(tmp) / "repo"
+            plist_path = home / "Library" / "LaunchAgents" / "com.sapientropic.tsense.auto-review.plist"
+            home.mkdir()
+            project_root.mkdir()
+            plist_path.parent.mkdir(parents=True)
+            plist_path.write_text("placeholder", encoding="utf-8")
+            (project_root / "tgcs").write_text("#!/usr/bin/env bash\n", encoding="utf-8")
+            calls: list[list[str]] = []
+
+            def fake_run(args):
+                calls.append(args)
+                return subprocess.CompletedProcess(args, 0, stdout="", stderr="")
+
+            with patch.object(dashboard_server.sys, "platform", "darwin"):
+                with patch.object(dashboard_server.Path, "home", return_value=home):
+                    with patch.object(dashboard_server, "PROJECT_ROOT", project_root):
+                        with patch.object(dashboard_server, "_run_scheduler_command", side_effect=fake_run):
+                            result = dashboard_server.run_desk_action(
+                                "schedule_remove_dry_run",
+                                body={"confirm": True},
+                            )
+
+        self.assertEqual(result["status"], "success")
+        self.assertEqual(calls, [["launchctl", "unload", "-w", str(plist_path)]])
+        self.assertFalse(plist_path.exists())
+
+
+    def test_schedule_remove_dry_run_unloads_legacy_macos_launch_agent(self):
         with tempfile.TemporaryDirectory() as tmp:
             home = Path(tmp) / "home"
             project_root = Path(tmp) / "repo"
@@ -590,7 +714,7 @@ class DashboardSchedulerTests(unittest.TestCase):
                             )
 
         self.assertEqual(result["status"], "success")
-        self.assertEqual(calls, [["launchctl", "unload", "-w", str(plist_path)]])
+        self.assertIn(["launchctl", "unload", "-w", str(plist_path)], calls)
         self.assertFalse(plist_path.exists())
 
 
@@ -623,8 +747,8 @@ class DashboardSchedulerTests(unittest.TestCase):
                                         body={"confirm": True},
                                     )
 
-            service_path = home / ".config" / "systemd" / "user" / "tgcs-jobs-fast-dry-run.service"
-            timer_path = home / ".config" / "systemd" / "user" / "tgcs-jobs-fast-dry-run.timer"
+            service_path = home / ".config" / "systemd" / "user" / "tsense-auto-review.service"
+            timer_path = home / ".config" / "systemd" / "user" / "tsense-auto-review.timer"
             service_text = service_path.read_text(encoding="utf-8")
             timer_text = timer_path.read_text(encoding="utf-8")
 
@@ -632,10 +756,51 @@ class DashboardSchedulerTests(unittest.TestCase):
         self.assertIn(f"ExecStart={project_root / 'tgcs'} monitor run --profile-id jobs-fast --delivery-mode live", service_text)
         self.assertIn("OnUnitActiveSec=15min", timer_text)
         self.assertIn(["systemctl", "--user", "daemon-reload"], calls)
-        self.assertIn(["systemctl", "--user", "enable", "--now", "tgcs-jobs-fast-dry-run.timer"], calls)
+        self.assertIn(["systemctl", "--user", "enable", "--now", "tsense-auto-review.timer"], calls)
 
 
     def test_schedule_remove_dry_run_disables_linux_systemd_user_units_with_fixed_argv(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp) / "home"
+            project_root = Path(tmp) / "repo"
+            service_path = home / ".config" / "systemd" / "user" / "tsense-auto-review.service"
+            timer_path = home / ".config" / "systemd" / "user" / "tsense-auto-review.timer"
+            home.mkdir()
+            project_root.mkdir()
+            service_path.parent.mkdir(parents=True)
+            service_path.write_text("[Service]\n", encoding="utf-8")
+            timer_path.write_text("[Timer]\n", encoding="utf-8")
+            (project_root / "tgcs").write_text("#!/usr/bin/env bash\n", encoding="utf-8")
+            calls: list[list[str]] = []
+
+            def fake_run(args):
+                calls.append(args)
+                return subprocess.CompletedProcess(args, 0, stdout="", stderr="")
+
+            with patch.object(dashboard_server.sys, "platform", "linux"):
+                with patch.dict(dashboard_server.os.environ, {"XDG_RUNTIME_DIR": str(Path(tmp) / "runtime")}, clear=False):
+                    with patch.object(
+                        dashboard_server,
+                        "shutil",
+                        SimpleNamespace(which=lambda name: "/usr/bin/systemctl" if name == "systemctl" else None),
+                        create=True,
+                    ):
+                        with patch.object(dashboard_server.Path, "home", return_value=home):
+                            with patch.object(dashboard_server, "PROJECT_ROOT", project_root):
+                                with patch.object(dashboard_server, "_run_scheduler_command", side_effect=fake_run):
+                                    result = dashboard_server.run_desk_action(
+                                        "schedule_remove_dry_run",
+                                        body={"confirm": True},
+                                    )
+
+        self.assertEqual(result["status"], "success")
+        self.assertIn(["systemctl", "--user", "disable", "--now", "tsense-auto-review.timer"], calls)
+        self.assertIn(["systemctl", "--user", "daemon-reload"], calls)
+        self.assertFalse(service_path.exists())
+        self.assertFalse(timer_path.exists())
+
+
+    def test_schedule_remove_dry_run_disables_legacy_linux_systemd_user_units(self):
         with tempfile.TemporaryDirectory() as tmp:
             home = Path(tmp) / "home"
             project_root = Path(tmp) / "repo"
@@ -671,13 +836,12 @@ class DashboardSchedulerTests(unittest.TestCase):
 
         self.assertEqual(result["status"], "success")
         self.assertIn(["systemctl", "--user", "disable", "--now", "tgcs-jobs-fast-dry-run.timer"], calls)
-        self.assertIn(["systemctl", "--user", "daemon-reload"], calls)
         self.assertFalse(service_path.exists())
         self.assertFalse(timer_path.exists())
 
 
     def test_desk_scheduler_status_queries_fixed_task_name(self):
-        completed = subprocess.CompletedProcess(["schtasks.exe"], 0, stdout="TaskName: TGCS jobs-fast dry-run\n", stderr="")
+        completed = subprocess.CompletedProcess(["schtasks.exe"], 0, stdout="TaskName: T-Sense auto review\n", stderr="")
 
         with patch.object(dashboard_server.sys, "platform", "win32"):
             with patch.object(dashboard_server, "_run_scheduler_command", return_value=completed) as run_mock:
@@ -689,6 +853,26 @@ class DashboardSchedulerTests(unittest.TestCase):
         self.assertTrue(status["installed"])
         self.assertEqual(status["status"], "installed")
         self.assertIn("every 15 minutes", status["detail"])
+
+
+    def test_desk_scheduler_status_detects_legacy_windows_task_name(self):
+        calls: list[list[str]] = []
+
+        def fake_run(args):
+            calls.append(args)
+            if args[args.index("/TN") + 1] == "TGCS jobs-fast dry-run":
+                return subprocess.CompletedProcess(args, 0, stdout="TaskName: TGCS jobs-fast dry-run\n", stderr="")
+            return subprocess.CompletedProcess(args, 1, stdout="", stderr="ERROR: missing\n")
+
+        with patch.object(dashboard_server.sys, "platform", "win32"):
+            with patch.object(dashboard_server, "_run_scheduler_command", side_effect=fake_run):
+                status = dashboard_server.desk_scheduler_status()
+
+        self.assertTrue(status["installed"])
+        self.assertTrue(status["legacy_task_name"])
+        self.assertEqual(status["task_name"], "TGCS jobs-fast dry-run")
+        self.assertEqual(calls[0], ["schtasks.exe", "/Query", "/TN", dashboard_server.DESK_SCHEDULER_TASK_NAME])
+        self.assertEqual(calls[1], ["schtasks.exe", "/Query", "/TN", "TGCS jobs-fast dry-run"])
 
 
     def test_desk_scheduler_status_reports_missing_task_without_leaking_output(self):

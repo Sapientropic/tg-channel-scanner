@@ -30,7 +30,7 @@
         "title": "Turn on auto review",
         "detail": "Create a local scheduler task for AI reviews and Telegram alerts when notifications are enabled.",
         "run_mode": "confirm_execute",
-        "display_command": "Local scheduler: jobs-fast AI review",
+        "display_command": "Local scheduler: T-Sense auto review",
         "next_action": "Signal Desk will run local AI reviews automatically every 15 minutes."
       },
       {

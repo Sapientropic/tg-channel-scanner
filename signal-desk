@@ -12,4 +12,13 @@ elif [ ! -f "$ROOT_DIR/.tgcs/sources.json" ]; then
   "$ROOT_DIR/tgcs" init --starter jobs
 fi
 
-exec "$ROOT_DIR/tgcs" dashboard --open "$@"
+if [ "${TGCS_SIGNAL_DESK_FOREGROUND:-0}" = "1" ]; then
+  exec "$ROOT_DIR/tgcs" dashboard --open "$@"
+fi
+
+mkdir -p "$ROOT_DIR/output"
+echo "Opening Signal Desk in your browser."
+echo "Signal Desk will keep running in the background; logs are in output/signal-desk.log."
+nohup "$ROOT_DIR/tgcs" dashboard --open "$@" >"$ROOT_DIR/output/signal-desk.log" 2>"$ROOT_DIR/output/signal-desk.err.log" &
+echo "$!" > "$ROOT_DIR/output/signal-desk.pid"
+disown "$!" 2>/dev/null || true

@@ -11,8 +11,8 @@ from typing import Any
 
 from scripts.tgcs_launchers import PROJECT_ROOT, _local_path
 
-SCHEDULER_LAUNCHD_LABEL = "com.sapientropic.tgcs.jobs-fast.dry-run"
-SCHEDULER_SYSTEMD_NAME = "tgcs-jobs-fast-dry-run"
+SCHEDULER_LAUNCHD_LABEL = "com.sapientropic.tsense.auto-review"
+SCHEDULER_SYSTEMD_NAME = "tsense-auto-review"
 PROFILES_CONFIG_NAME = "profiles.toml"
 DEFAULT_PROFILE = "market-news"
 

@@ -53,6 +53,56 @@ class PosixLauncherTests(unittest.TestCase):
         for rel_path in POSIX_LAUNCHERS:
             self.assertEqual(modes.get(rel_path), "100755", rel_path)
 
+    def test_signal_desk_launcher_defaults_to_detached_dashboard(self):
+        text = (PROJECT_ROOT / "signal-desk").read_text(encoding="utf-8")
+
+        self.assertIn("TGCS_SIGNAL_DESK_FOREGROUND", text)
+        self.assertIn("nohup", text)
+        self.assertIn("output/signal-desk.log", text)
+        self.assertIn(
+            'if [ "${TGCS_SIGNAL_DESK_FOREGROUND:-0}" = "1" ]; then\n'
+            '  exec "$ROOT_DIR/tgcs" dashboard --open "$@"\n'
+            "fi\n",
+            text,
+        )
+        self.assertLess(
+            text.index('if [ "${TGCS_SIGNAL_DESK_FOREGROUND:-0}" = "1" ]; then'),
+            text.index('nohup "$ROOT_DIR/tgcs" dashboard --open "$@"'),
+        )
+
+    @unittest.skipUnless(shutil.which("bash"), "bash is required for POSIX launcher smoke checks")
+    @unittest.skipIf(os.name == "nt", "POSIX launcher smoke runs on Linux/macOS CI")
+    def test_signal_desk_launcher_detaches_dashboard_by_default(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "checkout"
+            root.mkdir()
+            (root / ".venv" / "bin").mkdir(parents=True)
+            (root / ".venv" / "bin" / "python").write_text("#!/usr/bin/env bash\n", encoding="utf-8")
+            (root / ".tgcs").mkdir()
+            (root / ".tgcs" / "sources.json").write_text("{}", encoding="utf-8")
+            (root / "signal-desk").write_bytes((PROJECT_ROOT / "signal-desk").read_bytes())
+            tgcs_stub = root / "tgcs"
+            tgcs_stub.write_text(
+                "#!/usr/bin/env bash\nprintf '%s\\n' \"$*\" >> tgcs.calls\nsleep 5\n",
+                encoding="utf-8",
+            )
+            for launcher in [root / "signal-desk", tgcs_stub, root / ".venv" / "bin" / "python"]:
+                launcher.chmod(0o755)
+
+            result = subprocess.run(
+                ["bash", "signal-desk"],
+                cwd=root,
+                capture_output=True,
+                encoding="utf-8",
+                errors="replace",
+                text=True,
+                timeout=2,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertTrue((root / "tgcs.calls").exists())
+            self.assertIn("dashboard --open", (root / "tgcs.calls").read_text(encoding="utf-8"))
+
     @unittest.skipUnless(shutil.which("bash"), "bash is required for POSIX launcher syntax checks")
     @unittest.skipIf(os.name == "nt", "POSIX syntax checks run on Linux/macOS CI")
     def test_posix_launchers_pass_bash_syntax_check(self):

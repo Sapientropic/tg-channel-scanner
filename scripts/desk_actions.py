@@ -329,7 +329,7 @@ DESK_ACTIONS: tuple[dict, ...] = (
         "title": "Turn on auto review",
         "detail": "Create a local scheduler task for AI reviews and Telegram alerts when notifications are enabled.",
         "run_mode": "confirm_execute",
-        "display_command": "Local scheduler: jobs-fast AI review",
+        "display_command": "Local scheduler: T-Sense auto review",
         "next_action": "Signal Desk will run local AI reviews automatically every 15 minutes.",
     },
     {
@@ -338,7 +338,7 @@ DESK_ACTIONS: tuple[dict, ...] = (
         "title": "Turn off auto review",
         "detail": "Remove the automatic AI review task created by Signal Desk.",
         "run_mode": "confirm_execute",
-        "display_command": "Local scheduler: remove jobs-fast AI review",
+        "display_command": "Local scheduler: remove T-Sense auto review",
         "next_action": "Automatic AI reviews are removed. Manual reviews still work in Signal Desk.",
     },
     {

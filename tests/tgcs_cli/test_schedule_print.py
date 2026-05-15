@@ -196,7 +196,7 @@ class TgcsSchedulePrintTests(unittest.TestCase):
         run_mock.assert_not_called()
         output = stdout.getvalue()
         self.assertIn("LaunchAgent plist path:", output)
-        self.assertIn("com.sapientropic.tgcs.jobs-fast.dry-run.plist", output)
+        self.assertIn("com.sapientropic.tsense.auto-review.plist", output)
         self.assertIn(str(root / "tgcs"), output)
         self.assertIn("launchctl load -w", output)
 
@@ -226,8 +226,8 @@ class TgcsSchedulePrintTests(unittest.TestCase):
         run_mock.assert_not_called()
         output = stdout.getvalue()
         self.assertIn("systemd user service:", output)
-        self.assertIn("tgcs-jobs-fast-dry-run.service", output)
-        self.assertIn("systemctl --user enable --now tgcs-jobs-fast-dry-run.timer", output)
+        self.assertIn("tsense-auto-review.service", output)
+        self.assertIn("systemctl --user enable --now tsense-auto-review.timer", output)
         self.assertIn(str(root / "tgcs"), output)
 
     def test_schedule_print_auto_uses_cron_when_linux_user_runtime_is_missing(self):
