@@ -22,6 +22,16 @@ dist/
 node_modules/
 dashboard/dist/
 *.tsbuildinfo
+.playwright-mcp/
+
+# Private paid app / local Codex runner
+.codex/
+desktop/
+script/
+tests/test_macos_acceptance_check.py
+
+# Rust / Tauri
+target/
 
 # Output
 output/
@@ -37,6 +47,7 @@ docs/quality-task-state.md
 docs/graphify-maintenance/
 docs/archive/quality-iteration-*.md
 docs/internal/
+docs/product/
 docs/pixel-ui-library-evaluation-report.md
 docs/signal-desk-ux-redesign.md
 docs/research/

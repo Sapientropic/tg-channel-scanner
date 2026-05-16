@@ -1,0 +1,233 @@
+.support-panel {
+  gap: 14px;
+}
+
+.support-summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--wash-paper-14);
+  background: color-mix(in oklch, var(--teal) 7%, transparent);
+}
+
+.support-summary > div,
+.support-path-card,
+.support-boundary-card,
+.support-recovery-row > div {
+  min-width: 0;
+}
+
+.support-summary strong,
+.support-summary small,
+.support-path-card strong,
+.support-path-card span,
+.support-path-card small,
+.support-boundary-card strong,
+.support-boundary-card span,
+.support-boundary-card small,
+.support-recovery-row strong,
+.support-recovery-row small {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.support-summary strong {
+  display: block;
+  color: var(--paper);
+  font-size: 16px;
+  line-height: 1.2;
+}
+
+.support-summary small {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: var(--badge-weight);
+}
+
+.support-path-grid,
+.support-boundary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 10px;
+  min-width: 0;
+}
+
+.support-path-card,
+.support-boundary-card {
+  display: grid;
+  gap: 9px;
+  align-content: start;
+  padding: 10px;
+  border: 1px solid var(--wash-paper-14);
+  background: var(--wash-paper-6);
+}
+
+.support-path-card > div {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.support-path-card strong,
+.support-boundary-card strong,
+.support-recovery-row strong {
+  color: var(--paper);
+  font-size: 13px;
+}
+
+.support-path-card span,
+.support-boundary-card span {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: var(--badge-weight);
+  text-transform: uppercase;
+}
+
+.support-path-card[data-exists="true"] span,
+.support-boundary-card[data-external="false"] span {
+  color: var(--teal);
+}
+
+.support-boundary-card[data-external="true"] span {
+  color: var(--amber);
+}
+
+.support-path-card small,
+.support-boundary-card small,
+.support-recovery-row small {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.support-path-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+
+.support-reveal-button {
+  min-height: 30px;
+}
+
+.support-boundaries,
+.support-readiness,
+.support-migration,
+.support-recovery {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.support-readiness-summary {
+  min-width: 0;
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.support-readiness-list {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.support-readiness-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: start;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--wash-paper-14);
+  background: var(--wash-paper-6);
+}
+
+.support-readiness-row > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.support-readiness-row strong,
+.support-readiness-row small,
+.support-readiness-row em {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.support-readiness-row strong {
+  color: var(--paper);
+  font-size: 13px;
+}
+
+.support-readiness-row small {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.support-readiness-row em {
+  color: var(--paper);
+  font-size: 11px;
+  font-style: normal;
+}
+
+.support-readiness-row > span {
+  flex: 0 0 auto;
+  color: var(--amber);
+  font-size: 10px;
+  font-weight: var(--badge-weight);
+  text-transform: uppercase;
+}
+
+.support-readiness-row[data-status="ready"] > span {
+  color: var(--teal);
+}
+
+.support-recovery-list {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.support-recovery-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--wash-paper-14);
+  background: var(--wash-paper-6);
+}
+
+.support-recovery-row > div {
+  display: grid;
+  gap: 3px;
+}
+
+.support-migration-detail,
+.support-migration-next {
+  min-width: 0;
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.support-export {
+  display: flex;
+  justify-content: flex-end;
+  min-width: 0;
+}

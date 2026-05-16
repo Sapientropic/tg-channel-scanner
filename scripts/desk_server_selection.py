@@ -69,6 +69,7 @@ def desk_health(*, host: str, port: int) -> dict[str, Any]:
             "desk_source_assistant_v1",
             "desk_scheduler_v1",
             "desk_bot_gateway_status_v1",
+            "desk_support_status_v1",
             "dashboard_state_v1",
         ],
     }

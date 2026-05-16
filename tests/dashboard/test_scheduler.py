@@ -54,7 +54,7 @@ class DashboardSchedulerTests(unittest.TestCase):
     def test_schedule_install_dry_run_blocks_when_launcher_is_missing(self):
         with tempfile.TemporaryDirectory() as tmp:
             with patch.object(dashboard_server.sys, "platform", "win32"):
-                with patch.object(dashboard_server, "PROJECT_ROOT", Path(tmp)):
+                with patch.object(dashboard_server, "PROJECT_ROOT", Path(tmp)), patch.object(dashboard_server, "CODE_ROOT", Path(tmp)):
                     with patch.object(dashboard_server, "_run_scheduler_command") as run_mock:
                         result = dashboard_server.run_desk_action("schedule_install_dry_run", body={"confirm": True})
 
@@ -71,7 +71,7 @@ class DashboardSchedulerTests(unittest.TestCase):
             completed = subprocess.CompletedProcess(["schtasks.exe"], 0, stdout="SUCCESS\n", stderr="")
 
             with patch.object(dashboard_server.sys, "platform", "win32"):
-                with patch.object(dashboard_server, "PROJECT_ROOT", project_root):
+                with patch.object(dashboard_server, "PROJECT_ROOT", project_root), patch.object(dashboard_server, "CODE_ROOT", project_root):
                     with patch.object(dashboard_server, "_run_scheduler_command", return_value=completed) as run_mock:
                         result = dashboard_server.run_desk_action(
                             "schedule_install_dry_run",
@@ -123,7 +123,7 @@ class DashboardSchedulerTests(unittest.TestCase):
             completed = subprocess.CompletedProcess(["schtasks.exe"], 0, stdout="SUCCESS\n", stderr="")
 
             with patch.object(dashboard_server.sys, "platform", "win32"):
-                with patch.object(dashboard_server, "PROJECT_ROOT", project_root):
+                with patch.object(dashboard_server, "PROJECT_ROOT", project_root), patch.object(dashboard_server, "CODE_ROOT", project_root):
                     with patch.object(dashboard_server, "_run_scheduler_command", return_value=completed) as run_mock:
                         result = dashboard_server.run_desk_action(
                             "schedule_install_dry_run",
@@ -171,7 +171,7 @@ class DashboardSchedulerTests(unittest.TestCase):
                 conn.close()
 
             with patch.object(dashboard_server.sys, "platform", "win32"):
-                with patch.object(dashboard_server, "PROJECT_ROOT", project_root):
+                with patch.object(dashboard_server, "PROJECT_ROOT", project_root), patch.object(dashboard_server, "CODE_ROOT", project_root):
                     with patch.object(dashboard_server, "_run_scheduler_command") as run_mock:
                         result = dashboard_server.run_desk_action(
                             "schedule_install_dry_run",
@@ -191,7 +191,7 @@ class DashboardSchedulerTests(unittest.TestCase):
             completed = subprocess.CompletedProcess(["schtasks.exe"], 0, stdout="SUCCESS\n", stderr="")
 
             with patch.object(dashboard_server.sys, "platform", "win32"):
-                with patch.object(dashboard_server, "PROJECT_ROOT", project_root):
+                with patch.object(dashboard_server, "PROJECT_ROOT", project_root), patch.object(dashboard_server, "CODE_ROOT", project_root):
                     with patch.object(dashboard_server, "_run_scheduler_command", return_value=completed) as run_mock:
                         result = dashboard_server.run_desk_action(
                             "schedule_remove_dry_run",
@@ -235,7 +235,7 @@ class DashboardSchedulerTests(unittest.TestCase):
             )
 
             with patch.object(dashboard_server.sys, "platform", "win32"):
-                with patch.object(dashboard_server, "PROJECT_ROOT", project_root):
+                with patch.object(dashboard_server, "PROJECT_ROOT", project_root), patch.object(dashboard_server, "CODE_ROOT", project_root):
                     with patch.object(dashboard_server, "_run_scheduler_command", return_value=completed):
                         result = dashboard_server.run_desk_action(
                             "schedule_install_dry_run",
@@ -266,11 +266,26 @@ class DashboardSchedulerTests(unittest.TestCase):
             pythonw = project_root / "pythonw.exe"
             pythonw.write_text("", encoding="utf-8")
 
-            with patch.object(dashboard_server, "PROJECT_ROOT", project_root):
+            with patch.object(dashboard_server, "PROJECT_ROOT", project_root), patch.object(dashboard_server, "CODE_ROOT", project_root):
                 with patch.object(dashboard_server, "_pythonw_entry", return_value=pythonw):
                     argv = dashboard_server._fixed_bot_gateway_argv()
 
-        self.assertEqual(argv, [str(pythonw), str(bot_script), "run", "--poll-timeout", "8"])
+        self.assertEqual(
+            argv,
+            [
+                str(pythonw),
+                str(bot_script),
+                "run",
+                "--db",
+                str(project_root / ".tgcs" / "tgcs.db"),
+                "--state",
+                str(project_root / ".tgcs" / "bot-gateway-state.json"),
+                "--lock",
+                str(project_root / ".tgcs" / "bot-gateway.lock"),
+                "--poll-timeout",
+                "8",
+            ],
+        )
 
 
     def test_bot_gateway_background_status_uses_dashboard_scheduler_patch_after_split(self):
@@ -303,7 +318,7 @@ class DashboardSchedulerTests(unittest.TestCase):
                 return completed
 
             with patch.object(dashboard_server.sys, "platform", "win32"):
-                with patch.object(dashboard_server, "PROJECT_ROOT", project_root):
+                with patch.object(dashboard_server, "PROJECT_ROOT", project_root), patch.object(dashboard_server, "CODE_ROOT", project_root):
                     with patch.object(dashboard_server, "_pythonw_entry", return_value=pythonw):
                         with patch.object(
                             dashboard_server,
@@ -325,7 +340,8 @@ class DashboardSchedulerTests(unittest.TestCase):
         self.assertIn(dashboard_server.DESK_BOT_GATEWAY_TASK_NAME, args)
         self.assertIn(str(pythonw), trigger)
         self.assertIn(str(bot_script), trigger)
-        self.assertIn("run --poll-timeout", trigger)
+        self.assertIn("run --db", trigger)
+        self.assertIn("--poll-timeout 8", trigger)
         self.assertNotIn("123456", trigger)
         self.assertNotIn("token", trigger.lower())
         self.assertEqual(calls[1], ["schtasks.exe", "/End", "/TN", dashboard_server.DESK_BOT_GATEWAY_TASK_NAME])
@@ -361,7 +377,7 @@ class DashboardSchedulerTests(unittest.TestCase):
             (project_root / "scripts" / "bot_gateway.py").write_text("# bot gateway\n", encoding="utf-8")
 
             with patch.object(dashboard_server.sys, "platform", "win32"):
-                with patch.object(dashboard_server, "PROJECT_ROOT", project_root):
+                with patch.object(dashboard_server, "PROJECT_ROOT", project_root), patch.object(dashboard_server, "CODE_ROOT", project_root):
                     with patch.object(
                         dashboard_server,
                         "desk_notification_token_status",
@@ -391,7 +407,7 @@ class DashboardSchedulerTests(unittest.TestCase):
             )
             try:
                 with patch.object(dashboard_server.sys, "platform", "win32"):
-                    with patch.object(dashboard_server, "PROJECT_ROOT", root):
+                    with patch.object(dashboard_server, "PROJECT_ROOT", root), patch.object(dashboard_server, "CODE_ROOT", root):
                         with patch.object(
                             dashboard_server,
                             "desk_notification_token_status",
@@ -413,12 +429,13 @@ class DashboardSchedulerTests(unittest.TestCase):
     def test_bot_gateway_autostart_writes_macos_launch_agent_with_fixed_argv(self):
         with tempfile.TemporaryDirectory() as tmp:
             home = Path(tmp) / "home"
-            project_root = Path(tmp) / "repo"
+            code_root = Path(tmp) / "bundle-code"
+            project_root = Path(tmp) / "Application Support" / "T-Sense"
             home.mkdir()
-            (project_root / "scripts").mkdir(parents=True)
-            bot_script = project_root / "scripts" / "bot_gateway.py"
+            (code_root / "scripts").mkdir(parents=True)
+            bot_script = code_root / "scripts" / "bot_gateway.py"
             bot_script.write_text("# bot gateway\n", encoding="utf-8")
-            python = project_root / "python"
+            python = code_root / "python"
             python.write_text("", encoding="utf-8")
             calls: list[list[str]] = []
 
@@ -428,7 +445,7 @@ class DashboardSchedulerTests(unittest.TestCase):
 
             with patch.object(dashboard_server.sys, "platform", "darwin"):
                 with patch.object(dashboard_server.Path, "home", return_value=home):
-                    with patch.object(dashboard_server, "PROJECT_ROOT", project_root):
+                    with patch.object(dashboard_server, "PROJECT_ROOT", project_root), patch.object(dashboard_server, "CODE_ROOT", code_root):
                         with patch.object(dashboard_server, "_pythonw_entry", return_value=python):
                             with patch.object(
                                 dashboard_server,
@@ -446,8 +463,28 @@ class DashboardSchedulerTests(unittest.TestCase):
 
         self.assertEqual(result["status"], "success")
         self.assertEqual(plist["Label"], "com.sapientropic.tsense.bot-gateway")
-        self.assertEqual(plist["ProgramArguments"], [str(python), str(bot_script), "run", "--poll-timeout", "8"])
+        self.assertEqual(
+            plist["ProgramArguments"],
+            [
+                str(python),
+                str(bot_script),
+                "run",
+                "--db",
+                str(project_root / ".tgcs" / "tgcs.db"),
+                "--state",
+                str(project_root / ".tgcs" / "bot-gateway-state.json"),
+                "--lock",
+                str(project_root / ".tgcs" / "bot-gateway.lock"),
+                "--poll-timeout",
+                "8",
+            ],
+        )
         self.assertEqual(plist["KeepAlive"], {"Crashed": True})
+        self.assertEqual(plist["WorkingDirectory"], str(project_root))
+        self.assertEqual(plist["EnvironmentVariables"]["TGCS_PROJECT_ROOT"], str(project_root))
+        self.assertEqual(plist["EnvironmentVariables"]["TG_SCANNER_CONFIG_DIR"], str(project_root / ".tgcs" / "telegram"))
+        self.assertEqual(plist["EnvironmentVariables"]["TGCLI_CONFIG_DIR"], str(project_root / ".tgcs" / "telegram"))
+        self.assertEqual(plist["StandardOutPath"], str(project_root / "output" / "tsense-bot-gateway.log"))
         self.assertIn(["launchctl", "unload", "-w", str(plist_path)], calls)
         self.assertIn(["launchctl", "load", "-w", str(plist_path)], calls)
 
@@ -479,7 +516,7 @@ class DashboardSchedulerTests(unittest.TestCase):
                         create=True,
                     ):
                         with patch.object(dashboard_server.Path, "home", return_value=home):
-                            with patch.object(dashboard_server, "PROJECT_ROOT", project_root):
+                            with patch.object(dashboard_server, "PROJECT_ROOT", project_root), patch.object(dashboard_server, "CODE_ROOT", project_root):
                                 with patch.object(dashboard_server, "_pythonw_entry", return_value=python):
                                     with patch.object(
                                         dashboard_server,
@@ -556,12 +593,13 @@ class DashboardSchedulerTests(unittest.TestCase):
     def test_schedule_install_dry_run_writes_macos_launch_agent_with_fixed_argv(self):
         with tempfile.TemporaryDirectory() as tmp:
             home = Path(tmp) / "home"
-            project_root = Path(tmp) / "repo"
+            code_root = Path(tmp) / "bundle-code"
+            project_root = Path(tmp) / "Application Support" / "T-Sense"
             home.mkdir()
-            (project_root / "scripts").mkdir(parents=True)
-            tgcs_script = project_root / "scripts" / "tgcs.py"
+            (code_root / "scripts").mkdir(parents=True)
+            tgcs_script = code_root / "scripts" / "tgcs.py"
             tgcs_script.write_text("# tgcs entry\n", encoding="utf-8")
-            python = project_root / ".venv" / "bin" / "python"
+            python = code_root / ".venv" / "bin" / "python"
             python.parent.mkdir(parents=True)
             python.write_text("", encoding="utf-8")
             calls: list[list[str]] = []
@@ -572,7 +610,7 @@ class DashboardSchedulerTests(unittest.TestCase):
 
             with patch.object(dashboard_server.sys, "platform", "darwin"):
                 with patch.object(dashboard_server.Path, "home", return_value=home):
-                    with patch.object(dashboard_server, "PROJECT_ROOT", project_root):
+                    with patch.object(dashboard_server, "PROJECT_ROOT", project_root), patch.object(dashboard_server, "CODE_ROOT", code_root):
                         with patch.object(dashboard_server, "_pythonw_entry", return_value=python):
                             with patch.object(dashboard_server, "_run_scheduler_command", side_effect=fake_run):
                                 result = dashboard_server.run_desk_action(
@@ -598,7 +636,11 @@ class DashboardSchedulerTests(unittest.TestCase):
                 "live",
             ],
         )
-        self.assertNotIn("WorkingDirectory", plist)
+        self.assertEqual(plist["WorkingDirectory"], str(project_root))
+        self.assertEqual(plist["EnvironmentVariables"]["TGCS_PROJECT_ROOT"], str(project_root))
+        self.assertEqual(plist["EnvironmentVariables"]["TG_SCANNER_CONFIG_DIR"], str(project_root / ".tgcs" / "telegram"))
+        self.assertEqual(plist["EnvironmentVariables"]["TGCLI_CONFIG_DIR"], str(project_root / ".tgcs" / "telegram"))
+        self.assertEqual(plist["StandardOutPath"], str(project_root / "output" / "tgcs-jobs-fast.log"))
         self.assertIn(["launchctl", "unload", "-w", str(plist_path)], calls)
         self.assertIn(["launchctl", "load", "-w", str(plist_path)], calls)
 
@@ -619,7 +661,7 @@ class DashboardSchedulerTests(unittest.TestCase):
 
             with patch.object(dashboard_server.sys, "platform", "darwin"):
                 with patch.object(dashboard_server.Path, "home", return_value=home):
-                    with patch.object(dashboard_server, "PROJECT_ROOT", project_root):
+                    with patch.object(dashboard_server, "PROJECT_ROOT", project_root), patch.object(dashboard_server, "CODE_ROOT", project_root):
                         with patch.object(dashboard_server, "_run_scheduler_command", return_value=completed) as run_mock:
                             status = dashboard_server.desk_scheduler_status()
 
@@ -648,7 +690,7 @@ class DashboardSchedulerTests(unittest.TestCase):
 
             with patch.object(dashboard_server.sys, "platform", "darwin"):
                 with patch.object(dashboard_server.Path, "home", return_value=home):
-                    with patch.object(dashboard_server, "PROJECT_ROOT", project_root):
+                    with patch.object(dashboard_server, "PROJECT_ROOT", project_root), patch.object(dashboard_server, "CODE_ROOT", project_root):
                         with patch.object(dashboard_server, "_run_scheduler_command", side_effect=fake_run):
                             status = dashboard_server.desk_scheduler_status()
 
@@ -676,7 +718,7 @@ class DashboardSchedulerTests(unittest.TestCase):
 
             with patch.object(dashboard_server.sys, "platform", "darwin"):
                 with patch.object(dashboard_server.Path, "home", return_value=home):
-                    with patch.object(dashboard_server, "PROJECT_ROOT", project_root):
+                    with patch.object(dashboard_server, "PROJECT_ROOT", project_root), patch.object(dashboard_server, "CODE_ROOT", project_root):
                         with patch.object(dashboard_server, "_run_scheduler_command", side_effect=fake_run):
                             result = dashboard_server.run_desk_action(
                                 "schedule_remove_dry_run",
@@ -706,7 +748,7 @@ class DashboardSchedulerTests(unittest.TestCase):
 
             with patch.object(dashboard_server.sys, "platform", "darwin"):
                 with patch.object(dashboard_server.Path, "home", return_value=home):
-                    with patch.object(dashboard_server, "PROJECT_ROOT", project_root):
+                    with patch.object(dashboard_server, "PROJECT_ROOT", project_root), patch.object(dashboard_server, "CODE_ROOT", project_root):
                         with patch.object(dashboard_server, "_run_scheduler_command", side_effect=fake_run):
                             result = dashboard_server.run_desk_action(
                                 "schedule_remove_dry_run",
@@ -740,7 +782,7 @@ class DashboardSchedulerTests(unittest.TestCase):
                         create=True,
                     ):
                         with patch.object(dashboard_server.Path, "home", return_value=home):
-                            with patch.object(dashboard_server, "PROJECT_ROOT", project_root):
+                            with patch.object(dashboard_server, "PROJECT_ROOT", project_root), patch.object(dashboard_server, "CODE_ROOT", project_root):
                                 with patch.object(dashboard_server, "_run_scheduler_command", side_effect=fake_run):
                                     result = dashboard_server.run_desk_action(
                                         "schedule_install_dry_run",
@@ -786,7 +828,7 @@ class DashboardSchedulerTests(unittest.TestCase):
                         create=True,
                     ):
                         with patch.object(dashboard_server.Path, "home", return_value=home):
-                            with patch.object(dashboard_server, "PROJECT_ROOT", project_root):
+                            with patch.object(dashboard_server, "PROJECT_ROOT", project_root), patch.object(dashboard_server, "CODE_ROOT", project_root):
                                 with patch.object(dashboard_server, "_run_scheduler_command", side_effect=fake_run):
                                     result = dashboard_server.run_desk_action(
                                         "schedule_remove_dry_run",
@@ -827,7 +869,7 @@ class DashboardSchedulerTests(unittest.TestCase):
                         create=True,
                     ):
                         with patch.object(dashboard_server.Path, "home", return_value=home):
-                            with patch.object(dashboard_server, "PROJECT_ROOT", project_root):
+                            with patch.object(dashboard_server, "PROJECT_ROOT", project_root), patch.object(dashboard_server, "CODE_ROOT", project_root):
                                 with patch.object(dashboard_server, "_run_scheduler_command", side_effect=fake_run):
                                     result = dashboard_server.run_desk_action(
                                         "schedule_remove_dry_run",

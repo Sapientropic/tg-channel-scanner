@@ -10,7 +10,7 @@ from typing import Any, Callable
 
 try:
     from scripts.monitor_artifacts import report_output_paths, report_title_for_profile
-    from scripts.monitor_config import PROJECT_ROOT, relative_to_root, root_path, source_input_args
+    from scripts.monitor_config import CODE_ROOT, PROJECT_ROOT, relative_to_root, root_path, source_input_args
     from scripts.monitor_prefilter import (
         keyword_prefilter_matches,
         prefilter_keywords,
@@ -27,7 +27,7 @@ except ModuleNotFoundError:
     if str(PROJECT_ROOT) not in sys.path:
         sys.path.insert(0, str(PROJECT_ROOT))
     from scripts.monitor_artifacts import report_output_paths, report_title_for_profile
-    from scripts.monitor_config import PROJECT_ROOT, relative_to_root, root_path, source_input_args
+    from scripts.monitor_config import CODE_ROOT, PROJECT_ROOT, relative_to_root, root_path, source_input_args
     from scripts.monitor_prefilter import (
         keyword_prefilter_matches,
         prefilter_keywords,
@@ -87,7 +87,7 @@ def report_command_for_scan_input(
     )
     cmd: list[str | Path] = [
         sys.executable,
-        PROJECT_ROOT / "scripts" / "report.py",
+        CODE_ROOT / "scripts" / "report.py",
         "--input",
         scan_input,
         "--profile",
@@ -129,7 +129,7 @@ def scan_command(
     scan_output = run_dir / "scan.jsonl"
     cmd: list[str | Path] = [
         sys.executable,
-        PROJECT_ROOT / "scripts" / "scan.py",
+        CODE_ROOT / "scripts" / "scan.py",
         *source_args,
         "--hours",
         str(hours),
@@ -180,7 +180,7 @@ def daily_report_command(
     )
     cmd: list[str | Path] = [
         sys.executable,
-        PROJECT_ROOT / "scripts" / "daily_report.py",
+        CODE_ROOT / "scripts" / "daily_report.py",
         *source_args,
         "--profile",
         profile_file,

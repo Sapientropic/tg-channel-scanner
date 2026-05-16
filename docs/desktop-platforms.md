@@ -15,6 +15,51 @@ tests.
 The expert path remains `./tgcs ...` on macOS/Linux and `tgcs.bat ...` on
 Windows.
 
+## macOS Packaged App Acceptance
+
+The macOS packaged-app path uses a Tauri shell that starts the local Signal Desk
+backend and serves the dashboard from app-owned state. Use the project-local
+runner as the single build/run entrypoint:
+
+```bash
+./script/build_and_run.sh --verify
+```
+
+The verification mode rebuilds the dashboard, rebuilds the Tauri app, syncs the
+backend runtime into `~/Library/Application Support/T-Sense/backend/`, copies
+that runtime into `T-Sense.app/Contents/Resources/backend/`, launches the app,
+and verifies the exact backend URL from the desktop log.
+
+For acceptance smoke checks, run:
+
+```bash
+./script/macos_acceptance_check.py
+```
+
+This command verifies the local app bundle, app data root, desktop backend log,
+health endpoint, loopback-only backend listener, action allowlist rejection,
+demo report generation, artifact serving, local profile preview, support
+diagnostics, app-owned user-state paths under
+`~/Library/Application Support/T-Sense/`, packaged/app-owned backend runtime
+paths, secret-free diagnostic export contents, the in-app real-scan readiness
+checklist, named data-boundary and recovery guidance, secret/settings status
+surfaces, saved-source surface, and dashboard state. It marks the real
+profile/Telegram/source/report loop as `MANUAL` when user setup, credentials,
+or authorized sources are not present.
+
+During a full user acceptance session, create or select a profile, finish
+Telegram login, add at least one authorized source, run one real report, then
+run:
+
+```bash
+./script/macos_acceptance_check.py --full
+```
+
+`--full` fails until Telegram credentials/session, saved sources, a saved
+profile, and at least one real run are present. Use the narrower flags
+`--require-telegram`, `--require-sources`, `--require-profile`, and
+`--require-run` when validating those gates one at a time.
+
 ## Requirements
 
 - Python 3.12+ is required.

@@ -18,6 +18,7 @@ try:
     )
     from scripts.monitor_config import (
         DEFAULT_DASHBOARD_URL,
+        CODE_ROOT,
         PROJECT_ROOT,
         PROFILE_RUN_CONFIG_SCHEMA_VERSION,
         RUN_MANIFEST_SCHEMA_VERSION,
@@ -49,6 +50,7 @@ except ModuleNotFoundError:
     )
     from scripts.monitor_config import (
         DEFAULT_DASHBOARD_URL,
+        CODE_ROOT,
         PROJECT_ROOT,
         PROFILE_RUN_CONFIG_SCHEMA_VERSION,
         RUN_MANIFEST_SCHEMA_VERSION,
@@ -133,6 +135,7 @@ MonitorCommandResult = monitor_execution.MonitorCommandResult
 
 def _sync_monitor_execution_project_root() -> None:
     monitor_execution.PROJECT_ROOT = PROJECT_ROOT
+    monitor_execution.CODE_ROOT = CODE_ROOT
 
 
 def report_command_for_scan_input(

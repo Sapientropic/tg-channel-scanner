@@ -104,6 +104,36 @@ class DashboardDeskActionCatalogTests(unittest.TestCase):
         self.assertEqual(result["next_action"], "Open dashboard.")
 
 
+    def test_run_desk_action_uses_code_root_script_from_app_state_root(self):
+        completed = subprocess.CompletedProcess(
+            ["python"],
+            0,
+            stdout=json.dumps({"ok": True, "data": {"status": "complete"}, "error": None}),
+            stderr="",
+        )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            code_root = root / "bundle-code"
+            state_root = root / "Application Support" / "T-Sense"
+            script_path = code_root / "scripts" / "tgcs.py"
+            script_path.parent.mkdir(parents=True)
+            script_path.write_text("# tgcs entry\n", encoding="utf-8")
+
+            with patch.object(dashboard_server, "CODE_ROOT", code_root, create=True):
+                with patch.object(dashboard_server, "PROJECT_ROOT", state_root):
+                    with patch.object(dashboard_server.subprocess, "run", return_value=completed) as run_mock:
+                        result = dashboard_server.run_desk_action("demo_render")
+
+        cmd = [str(part) for part in run_mock.call_args.args[0]]
+        self.assertEqual(Path(cmd[1]), script_path)
+        self.assertEqual(Path(run_mock.call_args.kwargs["cwd"]), state_root)
+        self.assertEqual(run_mock.call_args.kwargs["env"]["TGCS_PROJECT_ROOT"], str(state_root))
+        self.assertIn("--format", cmd)
+        self.assertEqual(cmd[cmd.index("--format") + 1], "json")
+        self.assertEqual(result["status"], "success")
+
+
     def test_run_desk_action_prefers_latest_desk_profile_over_packaged_jobs_fast(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

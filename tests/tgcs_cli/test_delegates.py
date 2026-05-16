@@ -52,9 +52,10 @@ class TgcsDelegateTests(unittest.TestCase):
             def fake_run(cmd, check=False):
                 return subprocess.CompletedProcess(cmd, 0)
 
-            with patch.object(tgcs, "PROJECT_ROOT", root):
-                with patch.object(tgcs.subprocess, "run", side_effect=fake_run) as run_mock:
-                    exit_code = tgcs.main(["dashboard", "--port", "8765"])
+            with patch.object(tgcs, "PACKAGE_ROOT", root):
+                with patch.object(tgcs, "PROJECT_ROOT", root):
+                    with patch.object(tgcs.subprocess, "run", side_effect=fake_run) as run_mock:
+                        exit_code = tgcs.main(["dashboard", "--port", "8765"])
 
         self.assertEqual(exit_code, 0)
         cmd = [str(part) for part in run_mock.call_args.args[0]]
@@ -74,9 +75,10 @@ class TgcsDelegateTests(unittest.TestCase):
             def fake_run(cmd, check=False):
                 return subprocess.CompletedProcess(cmd, 0)
 
-            with patch.object(tgcs, "PROJECT_ROOT", root):
-                with patch.object(tgcs.subprocess, "run", side_effect=fake_run) as run_mock:
-                    exit_code = tgcs.main(["dashboard", "--open"])
+            with patch.object(tgcs, "PACKAGE_ROOT", root):
+                with patch.object(tgcs, "PROJECT_ROOT", root):
+                    with patch.object(tgcs.subprocess, "run", side_effect=fake_run) as run_mock:
+                        exit_code = tgcs.main(["dashboard", "--open"])
 
         self.assertEqual(exit_code, 0)
         cmd = [str(part) for part in run_mock.call_args.args[0]]
@@ -97,9 +99,10 @@ class TgcsDelegateTests(unittest.TestCase):
                 stdout = "v22.12.0\n" if cmd[:2] == ["node", "--version"] else ""
                 return subprocess.CompletedProcess(cmd, 0, stdout=stdout)
 
-            with patch.object(tgcs, "PROJECT_ROOT", root):
-                with patch.object(tgcs.subprocess, "run", side_effect=fake_run):
-                    exit_code = tgcs.main(["dashboard"])
+            with patch.object(tgcs, "PACKAGE_ROOT", root):
+                with patch.object(tgcs, "PROJECT_ROOT", root):
+                    with patch.object(tgcs.subprocess, "run", side_effect=fake_run):
+                        exit_code = tgcs.main(["dashboard"])
 
         self.assertEqual(exit_code, 0)
         self.assertEqual([call[0][0] for call in calls], ["node", "npm", "npm", str(tgcs._python())])
@@ -119,9 +122,10 @@ class TgcsDelegateTests(unittest.TestCase):
                 calls.append((cmd, cwd))
                 return subprocess.CompletedProcess(cmd, 0)
 
-            with patch.object(tgcs, "PROJECT_ROOT", root):
-                with patch.object(tgcs.subprocess, "run", side_effect=fake_run):
-                    exit_code = tgcs.main(["dashboard", "--no-build"])
+            with patch.object(tgcs, "PACKAGE_ROOT", root):
+                with patch.object(tgcs, "PROJECT_ROOT", root):
+                    with patch.object(tgcs.subprocess, "run", side_effect=fake_run):
+                        exit_code = tgcs.main(["dashboard", "--no-build"])
 
         self.assertEqual(exit_code, 0)
         self.assertEqual(len(calls), 1)
@@ -134,10 +138,11 @@ class TgcsDelegateTests(unittest.TestCase):
             root = Path(tmp)
             stderr = io.StringIO()
 
-            with patch.object(tgcs, "PROJECT_ROOT", root):
-                with patch.object(tgcs.shutil, "which", return_value=None):
-                    with patch("sys.stderr", stderr):
-                        exit_code = tgcs.main(["dashboard"])
+            with patch.object(tgcs, "PACKAGE_ROOT", root):
+                with patch.object(tgcs, "PROJECT_ROOT", root):
+                    with patch.object(tgcs.shutil, "which", return_value=None):
+                        with patch("sys.stderr", stderr):
+                            exit_code = tgcs.main(["dashboard"])
 
         self.assertEqual(exit_code, 3)
         error = stderr.getvalue()

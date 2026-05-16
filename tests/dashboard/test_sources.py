@@ -105,7 +105,6 @@ class DashboardSourcesTests(unittest.TestCase):
         self.assertEqual(result["added_count"], 2)
         self.assertEqual(payload["sources"][0]["topics"], ["jobs"])
 
-
     def test_import_starter_sources_skips_packaged_example_placeholders(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -120,6 +119,28 @@ class DashboardSourcesTests(unittest.TestCase):
 
         self.assertEqual(result["added_count"], 1)
         self.assertEqual([source["username"] for source in payload["sources"]], ["real_remote_jobs"])
+
+
+    def test_import_starter_sources_falls_back_to_code_root_from_app_state_root(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            state_root = root / "Application Support" / "T-Sense"
+            code_root = root / "bundle-code"
+            starter = code_root / "channel_lists" / "jobs.txt"
+            starter.parent.mkdir(parents=True)
+            starter.write_text("remote_jobs\nfrontend_jobs\n", encoding="utf-8")
+
+            with patch.object(dashboard_server, "PROJECT_ROOT", state_root):
+                with patch.object(dashboard_server, "CODE_ROOT", code_root, create=True):
+                    result = dashboard_server.import_starter_sources({"topic": "jobs"})
+
+            registry = state_root / ".tgcs" / "sources.json"
+            payload = json.loads(registry.read_text(encoding="utf-8"))
+
+        self.assertTrue(result["written"])
+        self.assertEqual(result["added_count"], 2)
+        self.assertFalse((state_root / "channel_lists").exists())
+        self.assertEqual(payload["sources"][0]["topics"], ["jobs"])
 
 
     def test_desk_source_import_rejects_non_telegram_like_identifiers(self):

@@ -20,7 +20,9 @@ import { NotificationsPanel } from "./settings/notifications-panel";
 import { DeliveryTargetEditor } from "./settings/delivery-target-editor";
 import { SourceImportPanel } from "./settings/source-import-panel";
 import { SourceInsightsPanel } from "./settings/source-insights-panel";
-import type { DeliveryTarget, DeskBotIdentityResult, DeskBotGatewayStatus, DeskSource, Profile, SourceStat } from "../domain/types";
+import { SettingsTaskSwitch } from "./settings/task-switch";
+import { SupportPanel, supportSummary } from "./settings/support-panel";
+import type { DeliveryTarget, DeskBotIdentityResult, DeskBotGatewayStatus, DeskSource, DeskSupportStatus, Profile, SourceStat } from "../domain/types";
 
 function source(overrides: Partial<DeskSource>): DeskSource {
   return {
@@ -77,7 +79,129 @@ function deliveryTarget(overrides: Partial<DeliveryTarget> = {}): DeliveryTarget
   };
 }
 
+function supportStatus(overrides: Partial<DeskSupportStatus> = {}): DeskSupportStatus {
+  return {
+    schema_version: "desk_support_status_v1",
+    app_data_root: "/Users/example/Library/Application Support/T-Sense",
+    code_root: "/Applications/T-Sense.app/Contents/Resources",
+    database_path: "/Users/example/Library/Application Support/T-Sense/.tgcs/tgcs.db",
+    output_dir: "/Users/example/Library/Application Support/T-Sense/output",
+    source_registry_path: "/Users/example/Library/Application Support/T-Sense/.tgcs/sources.json",
+    telegram_config_dir: "/Users/example/Library/Application Support/T-Sense/.tgcs/telegram",
+    desktop_log_path: "/Users/example/Library/Logs/T-Sense/desktop-backend.log",
+    dashboard_url: "http://127.0.0.1:8766",
+    platform: "macOS-15.0-arm64",
+    checked_at: "2026-05-16T14:00:00Z",
+    paths: [
+      {
+        label: "Local data",
+        path: "/Users/example/Library/Application Support/T-Sense",
+        target: "app_data_root",
+        exists: true,
+        detail: "Profiles, sources, database, Telegram session, reports, and review choices live here.",
+      },
+      {
+        label: "Backend log",
+        path: "/Users/example/Library/Logs/T-Sense/desktop-backend.log",
+        target: "desktop_log",
+        exists: true,
+        detail: "Desktop launch and backend stderr.",
+      },
+    ],
+    data_boundaries: [
+      {
+        label: "Local state",
+        detail: "Profiles, source lists, review decisions, reports, and Telegram sessions stay on this Mac by default.",
+        external: false,
+      },
+      {
+        label: "AI requests",
+        detail: "Selected scan text can be sent to the chosen AI provider.",
+        external: true,
+      },
+    ],
+    recovery: [
+      {
+        label: "Backend will not start",
+        detail: "Check the backend log first.",
+        path: "/Users/example/Library/Logs/T-Sense/desktop-backend.log",
+      },
+    ],
+    readiness: {
+      schema_version: "desk_support_readiness_v1",
+      status: "needs_user",
+      ready_count: 2,
+      total_count: 5,
+      summary: "2/5 real-scan checks ready.",
+      items: [
+        {
+          label: "Demo report",
+          status: "ready",
+          detail: "A local sample report is available.",
+        },
+        {
+          label: "Telegram login",
+          status: "needs_user",
+          detail: "Telegram is not fully authorized on this Mac yet.",
+          next_action: "Finish Telegram setup before scanning private sources.",
+        },
+      ],
+    },
+    migration: {
+      schema_version: "desk_support_migration_v1",
+      status: "no_legacy_data",
+      detail: "No legacy project-local data was found from this app context.",
+      next_action: "No migration action is needed.",
+      legacy_locations: [],
+    },
+    ...overrides,
+  };
+}
+
 describe("Settings source topic editor", () => {
+  it("keeps updates and diagnostics behind the Advanced settings disclosure", () => {
+    const html = renderToStaticMarkup(
+      <SettingsTaskSwitch
+        activeTask="sources"
+        aiCount={1}
+        feedbackCount={0}
+        notificationCount={0}
+        onSelect={() => undefined}
+        sourceCount={3}
+        supportCount={2}
+        updateCount={0}
+      />,
+    );
+
+    expect(html).toContain("Sources");
+    expect(html).toContain("AI API");
+    expect(html).toContain("Alerts");
+    expect(html).toContain("Learning");
+    expect(html).toContain("<summary><span>Advanced</span>");
+    expect(html).toContain("Updates");
+    expect(html).toContain("Help");
+    expect(html).not.toContain("open=\"\"");
+  });
+
+  it("opens Advanced settings when a support shortcut is selected", () => {
+    const html = renderToStaticMarkup(
+      <SettingsTaskSwitch
+        activeTask="support"
+        aiCount={1}
+        feedbackCount={0}
+        notificationCount={0}
+        onSelect={() => undefined}
+        sourceCount={3}
+        supportCount={2}
+        updateCount={0}
+      />,
+    );
+
+    expect(html).toContain("<details class=\"settings-advanced-switch\" open=\"\">");
+    expect(html).toContain("aria-pressed=\"true\"");
+    expect(html).toContain("Diagnostics and recovery");
+  });
+
   it("normalizes and validates source topic edits", () => {
     expect(sourceTopicsEditState(["jobs"], "jobs")).toMatchObject({ canSave: false, topics: ["jobs"] });
     expect(sourceTopicsEditState(["jobs"], " Remote-Work, jobs, remote-work ")).toMatchObject({
@@ -435,5 +559,72 @@ describe("Settings source topic editor", () => {
     expect(html).toContain("Telegram chat ID");
     expect(html).toContain("Detect chat ID");
     expect(html).not.toContain("No notification channels set up");
+  });
+
+  it("renders support diagnostics with local paths and data boundaries", () => {
+    const status = supportStatus();
+    const html = renderToStaticMarkup(
+      <SupportPanel
+        error={null}
+        exportResult={null}
+        onExportDiagnostics={() => undefined}
+        onRevealTarget={() => undefined}
+        onRefresh={() => undefined}
+        status={status}
+      />,
+    );
+
+    expect(html).toContain("Support");
+    expect(html).toContain("http://127.0.0.1:8766");
+    expect(html).toContain("Local data");
+    expect(html).toContain("Backend log");
+    expect(html).toContain("Ready For Real Scan");
+    expect(html).toContain("2/5 real-scan checks ready.");
+    expect(html).toContain("Needs setup");
+    expect(html).toContain("Finish Telegram setup before scanning private sources.");
+    expect(html).toContain("Data Boundaries");
+    expect(html).toContain("AI requests");
+    expect(html).toContain("External when run");
+    expect(html).toContain("Copy path");
+    expect(html).toContain("Reveal");
+    expect(html).toContain("Open in Finder");
+    expect(html).toContain("Copy summary");
+    expect(html).toContain("Save snapshot");
+    expect(html).not.toContain("Copy command");
+    expect(html).not.toContain("123456:SECRET");
+    expect(supportSummary(status)).toContain("Desktop log: /Users/example/Library/Logs/T-Sense/desktop-backend.log");
+    expect(supportSummary(status)).toContain("Readiness: 2/5 real-scan checks ready.");
+  });
+
+  it("renders legacy project data diagnostics without promising automatic migration", () => {
+    const status = supportStatus({
+      migration: {
+        schema_version: "desk_support_migration_v1",
+        status: "manual_required",
+        detail: "Legacy project data was found outside the app data folder.",
+        next_action: "Use a user-selected source folder before migrating.",
+        legacy_locations: [
+          {
+            label: "Legacy reports",
+            path: "/Users/example/project/output",
+            exists: true,
+            detail: "Reports created before the macOS app moved state into Application Support.",
+          },
+        ],
+      },
+    });
+    const html = renderToStaticMarkup(
+      <SupportPanel
+        error={null}
+        onRevealTarget={() => undefined}
+        onRefresh={() => undefined}
+        status={status}
+      />,
+    );
+
+    expect(html).toContain("Legacy Data");
+    expect(html).toContain("Legacy reports");
+    expect(html).toContain("user-selected");
+    expect(html).not.toContain("automatic migration");
   });
 });

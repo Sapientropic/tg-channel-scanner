@@ -5,8 +5,6 @@ import type { GitUpdateStatus } from "../domain/types";
 
 type Notice = { tone: "success" | "error"; text: string } | null;
 
-export const GIT_AUTO_CHECK_INTERVAL_MS = 15 * 60 * 1000;
-
 export function useGitActions({ setNotice }: { setNotice: (notice: Notice) => void }) {
   const [gitBusy, setGitBusy] = useState(false);
   const [gitStatus, setGitStatus] = useState<GitUpdateStatus | null>(null);
@@ -51,15 +49,10 @@ export function useGitActions({ setNotice }: { setNotice: (notice: Notice) => vo
 
   useEffect(() => {
     mounted.current = true;
-    void runCheck({ manual: false });
-    const intervalId = window.setInterval(() => {
-      void runCheck({ manual: false });
-    }, GIT_AUTO_CHECK_INTERVAL_MS);
     return () => {
       mounted.current = false;
-      window.clearInterval(intervalId);
     };
-  }, [runCheck]);
+  }, []);
 
   function checkUpdates() {
     void runCheck({ manual: true });

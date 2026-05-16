@@ -21,6 +21,8 @@ def handle_operation_post_route(
     git_pull_latest: Callable[[], dict],
     git_confirmation_error: Callable[[str], Exception],
     write_feedback_export: Callable[[Any], dict],
+    reveal_support_target: Callable[..., dict] | None = None,
+    write_support_diagnostic_export: Callable[..., dict] | None = None,
 ) -> bool:
     if path.startswith("/api/desk/actions/") and path.endswith("/run"):
         require_loopback_access(handler, "Desk actions")
@@ -49,11 +51,40 @@ def handle_operation_post_route(
             result = monitor_state_module.clear_feedback_decisions(conn)
         handler._json(HTTPStatus.OK, {"ok": True, "feedback": result})
         return True
+    if path == "/api/desk/support/export":
+        require_loopback_access(handler, "Support diagnostics")
+        if write_support_diagnostic_export is None:
+            raise ValueError("Support diagnostic export is not available.")
+        server_host, server_port = getattr(getattr(handler, "server", None), "server_address", ("127.0.0.1", 0))[:2]
+        handler._json(
+            HTTPStatus.OK,
+            {
+                "ok": True,
+                "support": write_support_diagnostic_export(
+                    host=str(server_host),
+                    port=int(server_port),
+                    db_path=handler.db_path,
+                ),
+            },
+        )
+        return True
     if path == "/api/feedback/profile-suggestions":
         require_loopback_access(handler, "Feedback profile suggestions")
         with close_after_use(handler._connect()) as conn:
             result = monitor_state_module.create_feedback_profile_patch_suggestions(conn)
         handler._json(HTTPStatus.OK, {"ok": True, "suggestions": result})
+        return True
+    if path == "/api/desk/support/reveal":
+        require_loopback_access(handler, "Support diagnostics")
+        if reveal_support_target is None:
+            raise ValueError("Support path reveal is not available.")
+        handler._json(
+            HTTPStatus.OK,
+            {
+                "ok": True,
+                "support": reveal_support_target(body.get("target"), db_path=handler.db_path),
+            },
+        )
         return True
     if path.startswith("/api/review-cards/") and path.endswith("/undo"):
         require_loopback_access(handler, "Review card actions")

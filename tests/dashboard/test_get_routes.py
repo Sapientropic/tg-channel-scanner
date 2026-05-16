@@ -1,6 +1,7 @@
 import unittest
 from contextlib import contextmanager
 from http import HTTPStatus
+from pathlib import Path
 from unittest.mock import patch
 
 from scripts import dashboard_server, desk_get_routes
@@ -77,6 +78,47 @@ class DashboardGetRouteTests(unittest.TestCase):
         )
 
         self.assertFalse(handled)
+
+
+    def test_get_route_owner_handles_support_status_with_loopback_gate(self):
+        class FakeServer:
+            server_address = ("127.0.0.1", 8766)
+
+        class FakeHandler:
+            status = None
+            payload = None
+            server = FakeServer()
+            db_path = Path("/tmp/t-sense/.tgcs/tgcs.db")
+
+            def _json(self, status, payload):
+                self.status = status
+                self.payload = payload
+
+        features = []
+        handler = FakeHandler()
+        handled = desk_get_routes.handle_get_route(
+            handler,
+            "/api/desk/support-status",
+            require_loopback_access=lambda value, feature: features.append((value, feature)),
+            close_after_use=lambda conn: conn,
+            desk_health=lambda **kwargs: {},
+            desk_actions=lambda: {},
+            telegram_status=lambda: {},
+            desk_sources=lambda: {},
+            desk_scheduler_status=lambda: {},
+            desk_notification_token_status=lambda: {},
+            desk_bot_gateway_status=lambda conn: {},
+            desk_ai_settings_status=lambda: {},
+            desk_support_status=lambda **kwargs: {"schema_version": "desk_support_status_v1", **kwargs},
+            dashboard_state_payload=lambda conn: {},
+        )
+
+        self.assertTrue(handled)
+        self.assertEqual(features, [(handler, "Support diagnostics")])
+        self.assertEqual(handler.status, HTTPStatus.OK)
+        self.assertEqual(handler.payload["support"]["host"], "127.0.0.1")
+        self.assertEqual(handler.payload["support"]["port"], 8766)
+        self.assertEqual(handler.payload["support"]["db_path"], handler.db_path)
 
 
     def test_dashboard_handler_get_uses_facade_injected_actions_helper(self):
@@ -171,6 +213,34 @@ class DashboardGetRouteTests(unittest.TestCase):
         self.assertTrue(handler.conn.closed)
         self.assertEqual(handler.status, HTTPStatus.OK)
         self.assertEqual(handler.payload, {"ok": True, "bot_gateway": result})
+
+
+    def test_dashboard_handler_get_support_status_uses_facade_with_runtime_context(self):
+        class FakeServer:
+            server_address = ("127.0.0.1", 8766)
+
+        class FakeHandler:
+            path = "/api/desk/support-status"
+            status = None
+            payload = None
+            server = FakeServer()
+            db_path = Path("/tmp/t-sense/.tgcs/tgcs.db")
+
+            def _json(self, status, payload):
+                self.status = status
+                self.payload = payload
+
+            def _serve_static(self, path):
+                raise AssertionError("API route should not fall through to static assets")
+
+        result = {"schema_version": "patched_support_v1"}
+        with patch.object(dashboard_server, "desk_support_status", return_value=result) as support_mock:
+            handler = FakeHandler()
+            dashboard_server.DashboardHandler.do_GET(handler)
+
+        support_mock.assert_called_once_with(host="127.0.0.1", port=8766, db_path=handler.db_path)
+        self.assertEqual(handler.status, HTTPStatus.OK)
+        self.assertEqual(handler.payload, {"ok": True, "support": result})
 
 
     def test_dashboard_handler_get_artifact_route_uses_loopback_gate_and_handler_artifact_serving(self):

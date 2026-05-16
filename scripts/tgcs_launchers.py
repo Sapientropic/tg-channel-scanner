@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import re
 import shutil
 import subprocess
@@ -11,7 +12,10 @@ import tomllib
 from pathlib import Path
 from typing import Any
 
+from scripts import agent_cli
+
 PACKAGE_ROOT = Path(__file__).resolve().parent.parent
+PROJECT_ROOT_ENV = "TGCS_PROJECT_ROOT"
 
 
 
@@ -21,6 +25,9 @@ def _running_from_source_checkout() -> bool:
 
 
 def _default_project_root() -> Path:
+    explicit_root = os.environ.get(PROJECT_ROOT_ENV, "").strip()
+    if explicit_root:
+        return Path(explicit_root).expanduser()
     # A source checkout is both the code root and the workspace.  A wheel/pipx/uvx
     # install keeps read-only fixtures in site-packages, so mutable state and
     # outputs must follow the caller's cwd instead of the package directory.
@@ -80,6 +87,14 @@ def _python() -> str:
 def _root_path(value: str | Path) -> Path:
     path = Path(value)
     return path if path.is_absolute() else PROJECT_ROOT / path
+
+
+
+def _display_path(path: Path) -> str:
+    try:
+        return str(path.resolve().relative_to(PROJECT_ROOT.resolve())).replace("\\", "/")
+    except ValueError:
+        return str(path)
 
 
 
@@ -250,8 +265,22 @@ def run_demo(args: argparse.Namespace) -> int:
     )
     if code == 0:
         html_output = output.with_suffix(".html")
-        print(f"Demo report ready: {html_output}")
-        print("Next: open the HTML report, then run tgcs init when you are ready to scan real Telegram sources.")
+        next_step = "Open the HTML report, then run tgcs init when you are ready to scan real Telegram sources."
+        if agent_cli.is_json_format(args):
+            html_path = _display_path(html_output)
+            agent_cli.print_json(
+                agent_cli.envelope_success(
+                    {
+                        "status": "complete",
+                        "html_path": html_path,
+                        "output_path": html_path,
+                        "next_step": next_step,
+                    }
+                )
+            )
+        else:
+            print(f"Demo report ready: {html_output}")
+            print(f"Next: {next_step}")
     return code
 
 
@@ -320,7 +349,7 @@ def run_sources(args: argparse.Namespace) -> int:
     registry = _root_path(args.source_registry or f"{LOCAL_DIR}/sources.json")
     cmd: list[str | Path] = [_python(), _script("source_registry.py")]
     if args.sources_command == "import":
-        cmd.extend(["import-list", _root_path(args.channel_list), "--source-registry", registry])
+        cmd.extend(["import-list", _asset_path(args.channel_list), "--source-registry", registry])
         if args.dry_run:
             cmd.append("--dry-run")
         for topic in args.topic or []:
@@ -382,14 +411,14 @@ def run_monitor(args: argparse.Namespace) -> int:
 
 
 def run_dashboard(args: argparse.Namespace) -> int:
-    static_dir = _root_path(args.static_dir or "dashboard/dist")
+    static_dir = _asset_path(args.static_dir or "dashboard/dist")
     if not args.no_build and not static_dir.exists() and not args.static_dir:
         prereq_error = _dashboard_build_prerequisite_error()
         if prereq_error:
             print(f"Error: {prereq_error}", file=sys.stderr)
             print("Next: install Node.js, or run with a checkout that already includes dashboard/dist.", file=sys.stderr)
             return 3
-        dashboard_dir = PROJECT_ROOT / "dashboard"
+        dashboard_dir = PACKAGE_ROOT / "dashboard"
         code = _run(["npm", "ci"], cwd=dashboard_dir)
         if code != 0:
             return code
@@ -408,8 +437,7 @@ def run_dashboard(args: argparse.Namespace) -> int:
     ]
     if args.port is None:
         cmd.append("--auto-port")
-    if args.static_dir:
-        cmd.extend(["--static-dir", _root_path(args.static_dir)])
+    cmd.extend(["--static-dir", static_dir])
     if args.open:
         cmd.append("--open")
     return _run(cmd)
@@ -456,10 +484,9 @@ def run_delivery(args: argparse.Namespace) -> int:
 def run_bot(args: argparse.Namespace) -> int:
     cmd: list[str | Path] = [_python(), _script("bot_gateway.py"), args.bot_command]
     if args.bot_command == "run":
-        if args.db:
-            cmd.extend(["--db", _root_path(args.db)])
-        if args.state:
-            cmd.extend(["--state", _root_path(args.state)])
+        cmd.extend(["--db", _root_path(args.db or f"{LOCAL_DIR}/tgcs.db")])
+        cmd.extend(["--state", _root_path(args.state or f"{LOCAL_DIR}/bot-gateway-state.json")])
+        cmd.extend(["--lock", _root_path(args.lock or f"{LOCAL_DIR}/bot-gateway.lock")])
         for chat_id in args.allow_chat_id or []:
             cmd.extend(["--allow-chat-id", chat_id])
         if args.poll_timeout:

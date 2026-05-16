@@ -9,6 +9,13 @@ import type {
   DeskSchedulerStatus,
   DeskSource,
   DeskSourcesResult,
+  DeskSupportBoundary,
+  DeskSupportDiagnosticExportResult,
+  DeskSupportMigration,
+  DeskSupportPath,
+  DeskSupportReadiness,
+  DeskSupportRecovery,
+  DeskSupportStatus,
   DeskTelegramStatus,
   DeliveryChatDetectionResult,
   DeliveryTestResult,
@@ -647,6 +654,182 @@ export function sanitizeDeskAiSettingsStatus(value: unknown): DeskAiSettingsStat
     sanitized.local_store_label = localStoreLabel;
   }
   return sanitized;
+}
+
+export function sanitizeDeskSupportStatus(value: unknown): DeskSupportStatus | null {
+  if (!isRecord(value) || value.schema_version !== "desk_support_status_v1") {
+    return null;
+  }
+  const appDataRoot = optionalString(value.app_data_root);
+  const codeRoot = optionalString(value.code_root);
+  const databasePath = optionalString(value.database_path);
+  const outputDir = optionalString(value.output_dir);
+  const sourceRegistryPath = optionalString(value.source_registry_path);
+  const telegramConfigDir = optionalString(value.telegram_config_dir);
+  const desktopLogPath = optionalString(value.desktop_log_path);
+  const dashboardUrl = optionalString(value.dashboard_url);
+  const platform = optionalString(value.platform);
+  const checkedAt = optionalString(value.checked_at);
+  if (
+    !appDataRoot ||
+    !codeRoot ||
+    !databasePath ||
+    !outputDir ||
+    !sourceRegistryPath ||
+    !telegramConfigDir ||
+    !desktopLogPath ||
+    !dashboardUrl ||
+    !platform ||
+    !checkedAt
+  ) {
+    return null;
+  }
+  const sanitized: DeskSupportStatus = {
+    schema_version: "desk_support_status_v1",
+    app_data_root: appDataRoot,
+    code_root: codeRoot,
+    database_path: databasePath,
+    output_dir: outputDir,
+    source_registry_path: sourceRegistryPath,
+    telegram_config_dir: telegramConfigDir,
+    desktop_log_path: desktopLogPath,
+    dashboard_url: dashboardUrl,
+    platform,
+    checked_at: checkedAt,
+    paths: sanitizeDeskSupportPaths(value.paths),
+    data_boundaries: sanitizeDeskSupportBoundaries(value.data_boundaries),
+    recovery: sanitizeDeskSupportRecovery(value.recovery),
+  };
+  const migration = sanitizeDeskSupportMigration(value.migration);
+  if (migration) {
+    sanitized.migration = migration;
+  }
+  const readiness = sanitizeDeskSupportReadiness(value.readiness);
+  if (readiness) {
+    sanitized.readiness = readiness;
+  }
+  return sanitized;
+}
+
+export function sanitizeDeskSupportDiagnosticExportResult(value: unknown): DeskSupportDiagnosticExportResult | null {
+  if (!isRecord(value) || value.schema_version !== "desk_support_diagnostic_export_v1") {
+    return null;
+  }
+  const outputPath = optionalString(value.output_path);
+  const exportedAt = optionalString(value.exported_at);
+  if (!outputPath || !exportedAt) {
+    return null;
+  }
+  return {
+    schema_version: "desk_support_diagnostic_export_v1",
+    output_path: outputPath,
+    exported_at: exportedAt,
+  };
+}
+
+function sanitizeDeskSupportPaths(value: unknown): DeskSupportPath[] {
+  return sanitizeObjectArray(value, "desk_support.paths").flatMap((record) => {
+    const label = optionalString(record.label);
+    const path = optionalString(record.path);
+    const detail = optionalString(record.detail);
+    return label && path && detail
+      ? [
+          {
+            label,
+            path,
+            target: optionalString(record.target),
+            exists: record.exists === true,
+            detail,
+          },
+        ]
+      : [];
+  });
+}
+
+function sanitizeDeskSupportMigration(value: unknown): DeskSupportMigration | null {
+  if (!isRecord(value) || value.schema_version !== "desk_support_migration_v1") {
+    return null;
+  }
+  const status = optionalString(value.status);
+  const detail = optionalString(value.detail);
+  const nextAction = optionalString(value.next_action);
+  if (!status || !detail || !nextAction) {
+    return null;
+  }
+  return {
+    schema_version: "desk_support_migration_v1",
+    status,
+    detail,
+    next_action: nextAction,
+    legacy_locations: sanitizeDeskSupportPaths(value.legacy_locations),
+  };
+}
+
+function sanitizeDeskSupportReadiness(value: unknown): DeskSupportReadiness | null {
+  if (!isRecord(value) || value.schema_version !== "desk_support_readiness_v1") {
+    return null;
+  }
+  const status = optionalString(value.status);
+  const summary = optionalString(value.summary);
+  const readyCount = nonNegativeInteger(value.ready_count);
+  const totalCount = nonNegativeInteger(value.total_count);
+  if (!status || !summary || readyCount === null || totalCount === null) {
+    return null;
+  }
+  return {
+    schema_version: "desk_support_readiness_v1",
+    status,
+    ready_count: readyCount,
+    total_count: totalCount,
+    summary,
+    items: sanitizeObjectArray(value.items, "desk_support.readiness.items").flatMap((record) => {
+      const label = optionalString(record.label);
+      const itemStatus = optionalString(record.status);
+      const detail = optionalString(record.detail);
+      if (!label || !itemStatus || !detail) {
+        return [];
+      }
+      const item = {
+        label,
+        status: itemStatus,
+        detail,
+      };
+      const nextAction = optionalString(record.next_action);
+      return nextAction ? [{ ...item, next_action: nextAction }] : [item];
+    }),
+  };
+}
+
+function sanitizeDeskSupportBoundaries(value: unknown): DeskSupportBoundary[] {
+  return sanitizeObjectArray(value, "desk_support.data_boundaries").flatMap((record) => {
+    const label = optionalString(record.label);
+    const detail = optionalString(record.detail);
+    return label && detail
+      ? [
+          {
+            label,
+            detail,
+            external: record.external === true,
+          },
+        ]
+      : [];
+  });
+}
+
+function sanitizeDeskSupportRecovery(value: unknown): DeskSupportRecovery[] {
+  return sanitizeObjectArray(value, "desk_support.recovery").flatMap((record) => {
+    const label = optionalString(record.label);
+    const detail = optionalString(record.detail);
+    if (!label || !detail) {
+      return [];
+    }
+    const item: DeskSupportRecovery = { label, detail };
+    const path = optionalString(record.path);
+    if (path) {
+      item.path = path;
+    }
+    return [item];
+  });
 }
 
 function sanitizeDeskAiProviders(value: unknown): DeskAiProviderStatus[] {

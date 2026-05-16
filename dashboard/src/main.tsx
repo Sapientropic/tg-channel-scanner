@@ -43,7 +43,7 @@ const tabShell: Array<{ tab: Tab; icon: ReactNode; label: string }> = [
   { tab: "runs", icon: <Play size={17} />, label: "Runs" },
   { tab: "settings", icon: <Settings size={17} />, label: "Settings" },
 ];
-const startStepCount = 6;
+const startStepCount = 7;
 
 type DeskActionConfirmation = {
   actionId: string;
@@ -79,8 +79,14 @@ function App() {
     aiSettingsError,
     deskSchedulerStatus,
     deskSchedulerError,
+    deskSupportStatus,
+    deskSupportError,
+    deskSupportExportResult,
     refreshStatusSurfaces,
     refreshDeskSchedulerStatus,
+    refreshDeskSupportStatus,
+    revealDeskSupportTarget,
+    exportDeskSupportDiagnostics,
     saveAiApiKey,
     clearAiApiKey,
   } = useStatusSurfaces({ setBusy, setNotice });
@@ -180,6 +186,9 @@ function App() {
     () => deskActions.find((action) => action.group === "Run" && action.run_mode === "execute")?.action_id ?? "",
     [deskActions],
   );
+  const headerReportActionId = state.setup_status?.has_profiles ? "monitor_jobs_dry_run" : "demo_render";
+  const headerReportLabel = state.setup_status?.has_profiles ? "New report" : "Demo report";
+  const headerReportTitle = state.setup_status?.has_profiles ? "Generate a fresh report" : "Generate a local sample report";
 
   useEffect(() => {
     // Mobile bottom navigation can otherwise carry the previous tab's scroll
@@ -306,8 +315,10 @@ function App() {
       <div className="pixel-grid" aria-hidden="true" />
       <ConsoleHeader
         busy={headerBusy}
-        onNewScan={() => void runDeskAction("monitor_jobs_dry_run")}
-        onOpenUpdates={() => openSettings("updates")}
+        primaryActionLabel={headerReportLabel}
+        primaryActionTitle={headerReportTitle}
+        onNewScan={() => void runDeskAction(headerReportActionId)}
+        onOpenUpdates={() => openSettings(updateAvailableCount > 0 ? "updates" : "sources")}
         updateAvailableCount={updateAvailableCount}
       />
 
@@ -479,6 +490,20 @@ function App() {
                     gitBusy,
                     checkUpdates,
                     pullLatest,
+                  }}
+                  support={{
+                    status: deskSupportStatus,
+                    error: deskSupportError,
+                    exportResult: deskSupportExportResult,
+                    refresh: () => {
+                      void refreshDeskSupportStatus().catch((error) => setNotice({ tone: "error", text: errorMessage(error) }));
+                    },
+                    exportDiagnostics: () => {
+                      void exportDeskSupportDiagnostics();
+                    },
+                    revealTarget: (target: string) => {
+                      void revealDeskSupportTarget(target);
+                    },
                   }}
                   busy={busy}
                   focusTarget={settingsFocusTarget}

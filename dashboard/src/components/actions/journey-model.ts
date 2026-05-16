@@ -51,7 +51,9 @@ export function buildJourneySteps(
   const needsAiKey = stage === "needs_ai_key";
   const hasRuns = Boolean(setupStatus?.has_runs);
   const telegramReady = Boolean(telegramStatus?.credentials_ready && telegramStatus?.session_ready);
-  const workspaceDone = Boolean(setupStatus?.has_profiles && !["needs_ai_key", "needs_profiles", "needs_enabled_profile"].includes(stage));
+  const hasProfiles = Boolean(setupStatus?.has_profiles);
+  const workspaceDone = Boolean(hasProfiles && !["needs_profiles", "needs_enabled_profile"].includes(stage));
+  const aiNeededForReview = needsAiKey && workspaceDone && telegramReady;
   const sourceAttention = stage === "needs_source_access";
   const ready = stage === "ready";
   const sourceAccessCheck = setupCheckById(setupStatus, "source_access");
@@ -64,6 +66,9 @@ export function buildJourneySteps(
   const sourceNeedsCleanup = sourceAttention || (workspaceDone && (sourceAccessHasInaccessible || sourceAccessHasQuiet));
 
   const hasSuccess = (actionId: string) => results[actionId]?.status === "success";
+  const demoRendered = hasSuccess("demo_render");
+  const demoShouldLead = !demoRendered && !hasRuns && !hasProfiles;
+  const demoState: JourneyState = demoRendered ? "done" : demoShouldLead ? "active" : "ready";
   const automationNeedsAttention = schedulerNeedsAttention(scheduler);
   const dryRunScheduleOn = Boolean(scheduler?.installed) || (hasSuccess("schedule_install_dry_run") && results.schedule_remove_dry_run?.status !== "success");
   const notifications = notificationReadiness(targets);
@@ -97,11 +102,22 @@ export function buildJourneySteps(
 
   return [
     {
+      key: "demo",
+      title: "Preview demo",
+      detail: "Render a local sample brief before connecting Telegram or AI.",
+      state: demoState,
+      stateLabel: demoRendered ? "Ready" : demoShouldLead ? "Start here" : "Optional",
+      buttons: availableButtons([
+        { actionId: "demo_render", label: demoRendered ? "Refresh demo" : "Render demo", variant: hasRuns ? "secondary" : "primary" },
+      ]),
+      advancedActionIds: availableAdvanced(["demo_render"]),
+    },
+    {
       key: "ai",
       title: "Connect AI matching",
-      detail: "Save an AI API key first. Profile generation, source selection, and Review cards all depend on AI matching.",
-      state: needsAiKey ? "active" : "done",
-      stateLabel: needsAiKey ? "Start here" : "Ready",
+      detail: "Save an AI API key before running AI review or AI source assistance. Demo, local files, profile setup, and Telegram login can continue without it.",
+      state: needsAiKey ? (aiNeededForReview ? "active" : "ready") : "done",
+      stateLabel: needsAiKey ? "Before review" : "Ready",
       buttons: availableButtons([
         {
           actionId: "settings_ai",
@@ -132,8 +148,8 @@ export function buildJourneySteps(
         sourceAccessHasQuiet,
       }),
       detailTitle: sourceStepDetail || undefined,
-      state: workspaceState(stage, workspaceDone, sourceAttention),
-      stateLabel: workspaceStateLabel(stage, workspaceDone, sourceAttention),
+      state: workspaceState(stage, workspaceDone, sourceAttention, hasProfiles),
+      stateLabel: workspaceStateLabel(stage, workspaceDone, sourceAttention, hasProfiles),
       buttons: availableButtons([
         { actionId: "init_jobs", label: workspaceDone ? "Refresh files" : "Prepare files", variant: workspaceDone ? "secondary" : "primary" },
         { actionId: "sources_import_jobs", label: "Fix channels", variant: sourceAttention ? "primary" : "secondary" },
@@ -312,28 +328,22 @@ function setupCheckById(setupStatus: DashboardState["setup_status"] | undefined,
   return setupStatus?.checks?.find((item) => item.check_id === checkId);
 }
 
-function workspaceState(stage: string, workspaceDone: boolean, sourceAttention: boolean): JourneyState {
-  if (stage === "needs_ai_key") {
-    return "blocked";
-  }
-  if (sourceAttention || stage === "needs_profiles" || stage === "needs_enabled_profile") {
+function workspaceState(stage: string, workspaceDone: boolean, sourceAttention: boolean, hasProfiles: boolean): JourneyState {
+  if (sourceAttention || stage === "needs_profiles" || stage === "needs_enabled_profile" || !hasProfiles) {
     return "active";
   }
   return workspaceDone ? "done" : "ready";
 }
 
-function workspaceStateLabel(stage: string, workspaceDone: boolean, sourceAttention: boolean) {
+function workspaceStateLabel(stage: string, workspaceDone: boolean, sourceAttention: boolean, hasProfiles: boolean) {
   if (sourceAttention) {
     return "Needs source fix";
   }
-  if (stage === "needs_enabled_profile") {
+  if (stage === "needs_enabled_profile" && hasProfiles) {
     return "Enable profile";
   }
-  if (stage === "needs_profiles") {
+  if (stage === "needs_profiles" || !hasProfiles) {
     return "Start here";
-  }
-  if (stage === "needs_ai_key") {
-    return "AI first";
   }
   return workspaceDone ? "Ready" : "Create first";
 }

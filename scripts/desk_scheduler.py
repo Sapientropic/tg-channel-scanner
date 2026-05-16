@@ -21,6 +21,10 @@ except ModuleNotFoundError:
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
+CODE_ROOT = PROJECT_ROOT
+PROJECT_ROOT_ENV = "TGCS_PROJECT_ROOT"
+TG_SCANNER_CONFIG_DIR_ENV = "TG_SCANNER_CONFIG_DIR"
+TGCLI_CONFIG_DIR_ENV = "TGCLI_CONFIG_DIR"
 DESK_BOT_GATEWAY_STATE_FILENAME = "bot-gateway-state.json"
 DESK_BOT_GATEWAY_STALE_SECONDS = 120
 DESK_BOT_SUPPORTED_COMMANDS = ["/status", "/latest", "/sources", "/profiles", "/scan"]
@@ -108,6 +112,7 @@ def _sync_bot_gateway_context() -> None:
     # and fixed launcher argv. Keep this sync layer so dashboard_server remains
     # the monkeypatch surface for tests and local callers after the split.
     desk_bot_gateway_background.PROJECT_ROOT = PROJECT_ROOT
+    desk_bot_gateway_background.CODE_ROOT = CODE_ROOT
     desk_bot_gateway_background.DESK_BOT_GATEWAY_STATE_FILENAME = DESK_BOT_GATEWAY_STATE_FILENAME
     desk_bot_gateway_background.DESK_BOT_GATEWAY_STALE_SECONDS = DESK_BOT_GATEWAY_STALE_SECONDS
     desk_bot_gateway_background.DESK_BOT_SUPPORTED_COMMANDS = DESK_BOT_SUPPORTED_COMMANDS
@@ -311,11 +316,11 @@ def systemd_unit_paths() -> list[tuple[str, Path, Path]]:
 
 
 def posix_tgcs_entry() -> Path:
-    return PROJECT_ROOT / "tgcs"
+    return CODE_ROOT / "tgcs"
 
 
 def tgcs_script_path() -> Path:
-    return PROJECT_ROOT / "scripts" / "tgcs.py"
+    return CODE_ROOT / "scripts" / "tgcs.py"
 
 
 def bot_gateway_script_path() -> Path:
@@ -364,6 +369,24 @@ def fixed_monitor_python_argv(python_entry: Path | None = None, *, profile_id: s
 
 def windows_task_action(argv: list[str]) -> str:
     return " ".join(f'"{part}"' if " " in part or "\\" in part else part for part in argv)
+
+
+def _telegram_config_dir() -> Path:
+    return PROJECT_ROOT / ".tgcs" / "telegram"
+
+
+def app_runtime_environment() -> dict[str, str]:
+    telegram_dir = _telegram_config_dir()
+    return {
+        PROJECT_ROOT_ENV: str(PROJECT_ROOT),
+        TG_SCANNER_CONFIG_DIR_ENV: str(telegram_dir),
+        TGCLI_CONFIG_DIR_ENV: str(telegram_dir),
+    }
+
+
+def systemd_env_assignment(key: str, value: str) -> str:
+    escaped = f"{key}={value}".replace("\\", "\\\\").replace('"', '\\"')
+    return f'"{escaped}"'
 
 
 def windows_scheduler_task_names() -> list[str]:
@@ -724,6 +747,8 @@ def write_launchd_plist(path: Path, python_entry: Path, *, profile_id: str | Non
         "ProgramArguments": fixed_monitor_python_argv(python_entry, profile_id=selected_profile_id),
         "RunAtLoad": True,
         "StartInterval": DESK_SCHEDULER_INTERVAL_MINUTES * 60,
+        "WorkingDirectory": str(PROJECT_ROOT),
+        "EnvironmentVariables": app_runtime_environment(),
         "StandardOutPath": str(output_dir / f"tgcs-{selected_profile_id}.log"),
         "StandardErrorPath": str(output_dir / f"tgcs-{selected_profile_id}.err.log"),
     }
@@ -755,6 +780,10 @@ def write_systemd_units(service_path: Path, timer_path: Path, entry: Path, *, pr
                 "[Service]",
                 "Type=oneshot",
                 f"WorkingDirectory={PROJECT_ROOT}",
+                *[
+                    f"Environment={systemd_env_assignment(key, value)}"
+                    for key, value in app_runtime_environment().items()
+                ],
                 f"ExecStart={exec_start}",
                 "",
             ]
@@ -804,7 +833,7 @@ def run_desk_scheduler_action(action_id: str, *, body: dict | None = None) -> di
             display_command=display_command,
         )
 
-    tgcs_entry = PROJECT_ROOT / "tgcs.bat" if backend == "windows_schtasks" else posix_tgcs_entry()
+    tgcs_entry = CODE_ROOT / "tgcs.bat" if backend == "windows_schtasks" else posix_tgcs_entry()
     macos_tgcs_script = tgcs_script_path()
     required_entries = [macos_tgcs_script] if backend in {"windows_schtasks", "macos_launchd"} else [tgcs_entry]
     if action_id == "schedule_install_dry_run" and any(not entry.exists() for entry in required_entries):

@@ -138,6 +138,28 @@ def git_update_status(
     repairable_dirty = dirty_count > 0 and len(repairable_dirty_paths) == dirty_count
     fetch_error = ""
 
+    if dirty_completed.returncode != 0 and branch == "unknown" and not upstream and not remote_url:
+        return {
+            "schema_version": "git_update_status_v1",
+            "status": "not_git_repository",
+            "message": "This app runtime is not a Git checkout. Install a newer app build, or use a development checkout for Git-based updates.",
+            "branch": branch,
+            "upstream": None,
+            "repo_url": None,
+            "head": None,
+            "remote_head": None,
+            "ahead": 0,
+            "behind": 0,
+            "dirty": False,
+            "dirty_count": 0,
+            "dirty_paths": [],
+            "repairable_dirty": False,
+            "repairable_dirty_count": 0,
+            "pull_allowed": False,
+            "fetched": False,
+            "checked_at": utc_now_fn(),
+        }
+
     if fetch:
         completed = run_git_fn(["fetch", "--prune", "origin"], timeout=45)
         if completed.returncode != 0:

@@ -1,11 +1,11 @@
-import { ArrowRight, Play } from "lucide-react";
+import { ArrowRight, Play, UserRoundCog } from "lucide-react";
 
 import type { DeskActiveAction } from "../../domain/types";
 import type { JourneyStep } from "./journey-model";
 import { ActiveActionProgress } from "./journey-step-card";
 
 export type PrimaryReadyAction = {
-  kind: "review" | "scan";
+  kind: "profile" | "review" | "scan";
   title: string;
   detail: string;
   label: string;
@@ -39,6 +39,7 @@ export function StartPrimaryActionCard({
   activeActions,
   anyBusy,
   busyActionId,
+  onOpenProfiles,
   onOpenReview,
   onRun,
 }: {
@@ -46,6 +47,7 @@ export function StartPrimaryActionCard({
   activeActions: DeskActiveAction[];
   anyBusy: boolean;
   busyActionId: string;
+  onOpenProfiles?: () => void;
   onOpenReview?: () => void;
   onRun: (actionId: string) => Promise<void>;
 }) {
@@ -67,13 +69,17 @@ export function StartPrimaryActionCard({
             onOpenReview?.();
             return;
           }
+          if (action.kind === "profile") {
+            onOpenProfiles?.();
+            return;
+          }
           if (action.actionId) {
             void onRun(action.actionId);
           }
         }}
         type="button"
       >
-        {action.kind === "review" ? <ArrowRight size={16} /> : <Play size={16} />}
+        {action.kind === "review" ? <ArrowRight size={16} /> : action.kind === "profile" ? <UserRoundCog size={16} /> : <Play size={16} />}
         <span>{busy ? "Working" : action.label}</span>
       </button>
     </article>

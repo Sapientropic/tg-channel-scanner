@@ -6,6 +6,7 @@ import {
   createProfileFromBrief,
   errorMessage,
   detectDeskDeliveryChatId,
+  exportDeskSupportDiagnostics,
   exportFeedback,
   generateFeedbackProfileSuggestions,
   clearDeskNotificationToken,
@@ -400,6 +401,29 @@ describe("dashboard API contract validation", () => {
     });
 
     await expect(clearFeedbackDecisions()).rejects.toThrow("Invalid feedback clear response");
+  });
+
+  it("validates support diagnostic export responses", async () => {
+    mockJsonResponse({
+      support: {
+        schema_version: "desk_support_diagnostic_export_v1",
+        output_path: "/Users/example/Library/Application Support/T-Sense/output/diagnostics/t-sense-support.json",
+        exported_at: "2026-05-16T14:00:00Z",
+      },
+    });
+
+    await expect(exportDeskSupportDiagnostics()).resolves.toMatchObject({
+      schema_version: "desk_support_diagnostic_export_v1",
+      output_path: "/Users/example/Library/Application Support/T-Sense/output/diagnostics/t-sense-support.json",
+    });
+
+    mockJsonResponse({
+      support: {
+        output_path: "/Users/example/Library/Application Support/T-Sense/output/diagnostics/t-sense-support.json",
+      },
+    });
+
+    await expect(exportDeskSupportDiagnostics()).rejects.toThrow("Invalid support diagnostic export response");
   });
 
   it("throws on schema-less profile creation results instead of trusting profile-shaped payloads", async () => {

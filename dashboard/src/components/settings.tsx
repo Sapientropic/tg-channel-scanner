@@ -7,6 +7,7 @@ import { SourceImportPanel } from "./settings/source-import-panel";
 import { SourceInsightsPanel } from "./settings/source-insights-panel";
 import { SourceLibraryPanel } from "./settings/source-library-panel";
 import { SettingsTaskSwitch, type SettingsTask } from "./settings/task-switch";
+import { SupportPanel } from "./settings/support-panel";
 import { UpdatesPanel } from "./settings/updates-panel";
 import type {
   DashboardState,
@@ -15,6 +16,8 @@ import type {
   DeskBotIdentityResult,
   DeskNotificationTokenStatus,
   DeskSourcesResult,
+  DeskSupportDiagnosticExportResult,
+  DeskSupportStatus,
   DeliveryChatDetectionResult,
   DeliveryTestResult,
   DeliveryTarget,
@@ -127,12 +130,22 @@ export type SettingsUpdatesController = {
   pullLatest: () => void;
 };
 
+export type SettingsSupportController = {
+  status: DeskSupportStatus | null;
+  error: string | null;
+  exportResult: DeskSupportDiagnosticExportResult | null;
+  refresh: () => void;
+  exportDiagnostics: () => void;
+  revealTarget: (target: string) => void;
+};
+
 export function SettingsView({
   sources,
   notifications,
   ai,
   learning,
   updates,
+  support,
   busy,
   focusTarget,
   onFocusHandled,
@@ -142,6 +155,7 @@ export function SettingsView({
   ai: SettingsAiController;
   learning: SettingsLearningController;
   updates: SettingsUpdatesController;
+  support: SettingsSupportController;
   busy: boolean;
   focusTarget?: SettingsTask | null;
   onFocusHandled?: () => void;
@@ -204,6 +218,14 @@ export function SettingsView({
     createProfileMatchingPreferencesDraft,
   } = learning;
   const { gitStatus, gitBusy, checkUpdates, pullLatest } = updates;
+  const {
+    status: supportStatus,
+    error: supportError,
+    exportResult: supportExportResult,
+    refresh: refreshSupport,
+    exportDiagnostics: exportSupportDiagnostics,
+    revealTarget: revealSupportTarget,
+  } = support;
   const notificationsPanelRef = useRef<HTMLDivElement | null>(null);
   const aiPanelRef = useRef<HTMLDivElement | null>(null);
   const [activeTask, setActiveTask] = useState<SettingsTask>("sources");
@@ -236,6 +258,7 @@ export function SettingsView({
         onSelect={setActiveTask}
         sourceCount={trackedSourceCount}
         sourceDetail={sourceTaskDetail}
+        supportCount={supportStatus?.recovery.length ?? 0}
       />
       <section
         className="settings-section settings-section-sources"
@@ -344,6 +367,21 @@ export function SettingsView({
         data-active={activeTask === "updates" ? "true" : "false"}
       >
         <UpdatesPanel gitBusy={gitBusy} gitStatus={gitStatus} onCheckUpdates={checkUpdates} onPullLatest={pullLatest} />
+      </section>
+
+      <section
+        className="settings-section settings-section-support"
+        aria-label="Support settings"
+        data-active={activeTask === "support" ? "true" : "false"}
+      >
+        <SupportPanel
+          error={supportError}
+          exportResult={supportExportResult}
+          onExportDiagnostics={exportSupportDiagnostics}
+          onRefresh={refreshSupport}
+          onRevealTarget={revealSupportTarget}
+          status={supportStatus}
+        />
       </section>
     </section>
   );

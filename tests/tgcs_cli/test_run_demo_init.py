@@ -1,5 +1,6 @@
 import io
 import json
+import os
 import subprocess
 import tempfile
 import unittest
@@ -10,6 +11,16 @@ from tests.tgcs_cli import load_tgcs_module
 
 
 class TgcsRunDemoInitTests(unittest.TestCase):
+    def test_default_project_root_uses_explicit_app_state_root(self):
+        tgcs = load_tgcs_module(self)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            state_root = Path(tmp) / "Application Support" / "T-Sense"
+
+            with patch.dict(os.environ, {"TGCS_PROJECT_ROOT": str(state_root)}):
+                self.assertEqual(tgcs._default_project_root(), state_root)
+
+
     def test_run_defaults_to_market_news_html_registry_and_state(self):
         tgcs = load_tgcs_module(self)
 
@@ -85,6 +96,56 @@ class TgcsRunDemoInitTests(unittest.TestCase):
         self.assertIn("Demo report ready", output)
         self.assertIn("output", output)
         self.assertIn("tgcs init", output)
+
+
+    def test_demo_json_reports_openable_html_path(self):
+        tgcs = load_tgcs_module(self)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            stdout = io.StringIO()
+
+            def fake_run(cmd, check=False):
+                return subprocess.CompletedProcess(cmd, 0)
+
+            with patch.object(tgcs, "PROJECT_ROOT", root):
+                with patch.object(tgcs.subprocess, "run", side_effect=fake_run):
+                    with patch("sys.stdout", stdout):
+                        exit_code = tgcs.main(["demo", "--format", "json"])
+
+        self.assertEqual(exit_code, 0)
+        payload = json.loads(stdout.getvalue())
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["data"]["status"], "complete")
+        self.assertEqual(payload["data"]["html_path"], "output/demo-report.html")
+        self.assertEqual(payload["data"]["output_path"], "output/demo-report.html")
+        self.assertIn("tgcs init", payload["data"]["next_step"])
+
+
+    def test_dashboard_state_root_keeps_static_assets_on_package_root(self):
+        tgcs = load_tgcs_module(self)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            state_root = root / "Application Support" / "T-Sense"
+            package_root = root / "package"
+            static_dir = package_root / "dashboard" / "dist"
+            static_dir.mkdir(parents=True)
+
+            def fake_run(cmd, check=False, cwd=None):
+                return subprocess.CompletedProcess(cmd, 0)
+
+            with patch.object(tgcs, "PACKAGE_ROOT", package_root):
+                with patch.object(tgcs, "PROJECT_ROOT", state_root):
+                    with patch.object(tgcs.subprocess, "run", side_effect=fake_run) as run_mock:
+                        exit_code = tgcs.main(["dashboard", "--no-build"])
+
+        self.assertEqual(exit_code, 0)
+        cmd = [str(part) for part in run_mock.call_args.args[0]]
+        self.assertIn("--db", cmd)
+        self.assertIn(str(state_root / ".tgcs" / "tgcs.db"), cmd)
+        self.assertIn("--static-dir", cmd)
+        self.assertIn(str(static_dir), cmd)
 
     def test_packaged_runtime_uses_packaged_scripts_even_from_source_checkout_cwd(self):
         tgcs = load_tgcs_module(self)
@@ -199,6 +260,34 @@ class TgcsRunDemoInitTests(unittest.TestCase):
         self.assertIn(str(root / "channel_lists" / "jobs.txt"), cmd)
         self.assertIn("--source-registry", cmd)
         self.assertIn(str(root / ".tgcs" / "sources.json"), cmd)
+        self.assertIn("--topic", cmd)
+        self.assertIn("jobs", cmd)
+
+    def test_sources_import_falls_back_to_packaged_channel_list_from_app_state_root(self):
+        tgcs = load_tgcs_module(self)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            state_root = root / "Application Support" / "T-Sense"
+            package_root = root / "package"
+            package_jobs = package_root / "channel_lists" / "jobs.txt"
+            package_jobs.parent.mkdir(parents=True)
+            package_jobs.write_text("jobs_in_it_remoute\n", encoding="utf-8")
+
+            def fake_run(cmd, check=False):
+                return subprocess.CompletedProcess(cmd, 0)
+
+            with patch.object(tgcs, "PACKAGE_ROOT", package_root):
+                with patch.object(tgcs, "PROJECT_ROOT", state_root):
+                    with patch.object(tgcs.subprocess, "run", side_effect=fake_run) as run_mock:
+                        exit_code = tgcs.main(["sources", "import", "channel_lists/jobs.txt", "--topic", "jobs"])
+
+        self.assertEqual(exit_code, 0)
+        cmd = [str(part) for part in run_mock.call_args.args[0]]
+        self.assertIn("source_registry.py", cmd[1])
+        self.assertIn("import-list", cmd)
+        self.assertEqual(Path(cmd[cmd.index("import-list") + 1]), package_jobs)
+        self.assertEqual(Path(cmd[cmd.index("--source-registry") + 1]), state_root / ".tgcs" / "sources.json")
         self.assertIn("--topic", cmd)
         self.assertIn("jobs", cmd)
 

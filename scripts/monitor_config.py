@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import tomllib
 import uuid
 from dataclasses import dataclass
@@ -12,7 +13,17 @@ from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
+PACKAGE_ROOT = Path(__file__).resolve().parent.parent
+CODE_ROOT = PACKAGE_ROOT
+PROJECT_ROOT_ENV = "TGCS_PROJECT_ROOT"
+
+
+def _default_project_root() -> Path:
+    explicit_root = os.environ.get(PROJECT_ROOT_ENV, "").strip()
+    return Path(explicit_root).expanduser() if explicit_root else PACKAGE_ROOT
+
+
+PROJECT_ROOT = _default_project_root()
 PROFILE_RUN_CONFIG_SCHEMA_VERSION = "profile_run_config_v1"
 RUN_MANIFEST_SCHEMA_VERSION = "run_manifest_v1"
 DEFAULT_PROFILE_ID = "market-news"
@@ -98,6 +109,19 @@ def root_path(value: str | Path, root: Path | None = None) -> Path:
     base = PROJECT_ROOT if root is None else root
     path = Path(value)
     return path if path.is_absolute() else base / path
+
+
+def asset_path(value: str | Path, root: Path | None = None, code_root: Path | None = None) -> Path:
+    path = Path(value)
+    if path.is_absolute():
+        return path
+    local_path = root_path(path, root)
+    if local_path.exists():
+        return local_path
+    packaged_path = (CODE_ROOT if code_root is None else code_root) / path
+    if packaged_path.exists():
+        return packaged_path
+    return local_path
 
 
 
@@ -249,7 +273,7 @@ def load_config(config_path: Path, root: Path | None = None) -> MonitorConfig:
 
 
 def profile_path(profile: dict[str, Any], root: Path | None = None) -> Path:
-    return root_path(profile.get("path") or f"profiles/templates/{profile['id']}.md", root)
+    return asset_path(profile.get("path") or f"profiles/templates/{profile['id']}.md", root)
 
 
 
@@ -258,7 +282,7 @@ def source_input_args(profile: dict[str, Any], run_dir: Path, root: Path | None 
     if registry.exists():
         filtered = filter_source_registry(registry, run_dir, profile)
         return ["--source-registry", str(filtered)]
-    channel_list = root_path(profile.get("channel_list") or "channel_lists/example.txt", root)
+    channel_list = asset_path(profile.get("channel_list") or "channel_lists/example.txt", root)
     return [str(channel_list)] if channel_list.exists() else []
 
 

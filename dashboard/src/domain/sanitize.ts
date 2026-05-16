@@ -10,6 +10,8 @@ export {
   sanitizeDeskNotificationTokenStatus,
   sanitizeDeskSchedulerStatus,
   sanitizeDeskSourcesResult,
+  sanitizeDeskSupportDiagnosticExportResult,
+  sanitizeDeskSupportStatus,
   sanitizeDeskTelegramStatus,
   sanitizeFeedbackClearResult,
   sanitizeFeedbackExportResult,

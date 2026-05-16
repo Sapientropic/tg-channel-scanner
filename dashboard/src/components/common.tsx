@@ -120,11 +120,13 @@ export function CopyableCommand({
   label,
   compact = false,
   iconOnly = false,
+  copyLabel = "Copy command",
 }: {
   command: string;
   label: string;
   compact?: boolean;
   iconOnly?: boolean;
+  copyLabel?: string;
 }) {
   const [status, setStatus] = useState<CopyStatus>("idle");
   const resetTimer = useRef<number | null>(null);
@@ -162,8 +164,8 @@ export function CopyableCommand({
   }
   const copied = status === "copied";
   const failed = status === "failed";
-  const title = copied ? "Copied" : failed ? "Copy failed" : compact ? command : "Copy command";
-  const ariaLabel = failed ? `Copy ${label} command failed` : `Copy ${label} command`;
+  const title = copied ? "Copied" : failed ? "Copy failed" : compact ? command : copyLabel;
+  const ariaLabel = failed ? `${copyLabel} failed: ${label}` : `${copyLabel}: ${label}`;
   const icon = failed ? <AlertTriangle size={14} /> : copied ? <Check size={14} /> : <Copy size={14} />;
   const compactClassName = ["copy-command-button", iconOnly ? "icon-only" : "", failed ? "copy-failed" : ""]
     .filter(Boolean)
@@ -178,7 +180,7 @@ export function CopyableCommand({
         type="button"
       >
         {icon}
-        {!iconOnly && <span>{copied ? "Copied" : failed ? "Copy failed" : "Copy command"}</span>}
+        {!iconOnly && <span>{copied ? "Copied" : failed ? "Copy failed" : copyLabel}</span>}
       </button>
     );
   }

@@ -29,6 +29,10 @@ def _project_root() -> Path:
     return Path(_facade_attr("PROJECT_ROOT", PROJECT_ROOT))
 
 
+def _code_root() -> Path:
+    return Path(_facade_attr("CODE_ROOT", PROJECT_ROOT))
+
+
 def _utc_now() -> str:
     now_fn = _facade_attr("_utc_now", None)
     if callable(now_fn) and now_fn is not _utc_now:
@@ -253,9 +257,13 @@ def _desk_sources_from_body(body: dict) -> tuple[list[str], str]:
 def import_starter_sources(body: dict) -> dict:
     _reject_unexpected_source_starter_fields(body)
     topic = _clean_source_topic(body.get("topic"))
-    starter_path = _project_root() / "channel_lists" / "jobs.txt"
-    if not starter_path.exists():
-        starter_path = _project_root() / "channel_lists" / "example.txt"
+    starter_candidates = [
+        _project_root() / "channel_lists" / "jobs.txt",
+        _project_root() / "channel_lists" / "example.txt",
+        _code_root() / "channel_lists" / "jobs.txt",
+        _code_root() / "channel_lists" / "example.txt",
+    ]
+    starter_path = next((candidate for candidate in starter_candidates if candidate.exists()), starter_candidates[0])
     if not starter_path.exists():
         raise ValueError("Starter source list is missing from this checkout.")
     channels = [

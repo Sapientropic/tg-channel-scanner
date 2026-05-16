@@ -11,12 +11,15 @@ function updateHeadline(status: GitUpdateStatus | null) {
   if (!status) {
     return {
       tone: "unchecked",
-      title: "Automatic checks are on",
-      detail: "Desk checks while this page is open.",
+      title: "Manual update check",
+      detail: "Check only when you ask. Packaged app updates are handled outside this panel.",
     };
   }
+  if (status.status === "not_git_repository") {
+    return { tone: "blocked", title: "Packaged runtime", detail: "This app copy is not a Git checkout." };
+  }
   if (status.status === "fetch_failed") {
-    return { tone: "blocked", title: "Could not check updates", detail: "Try again when the connection is back." };
+    return { tone: "blocked", title: "Could not check Git updates", detail: "Check the network or Git remote, then try again." };
   }
   if (status.behind > 0 && status.ahead > 0) {
     return { tone: "blocked", title: "Manual update needed", detail: "Local and remote changes both exist." };
@@ -60,14 +63,15 @@ function localEditsLabel(status: GitUpdateStatus | null) {
 }
 
 function repositoryMessage(status: GitUpdateStatus | null) {
-  if (!status) return "Checks run every 15 minutes while Desk is open.";
+  if (!status) return "Use Check now in a development checkout. Packaged app builds update through a new app download.";
   if (status.desk_build_status === "success") return "Update installed. Desk will refresh this page.";
   if (status.desk_build_status === "failed") return status.desk_build_message || "Update downloaded, but Desk could not rebuild.";
-  if (status.status === "fetch_failed") return "Update source could not be reached.";
+  if (status.status === "not_git_repository") return status.message || "This app runtime is not connected to Git.";
+  if (status.status === "fetch_failed") return "Git update source could not be reached.";
   if (status.dirty && status.behind > 0 && status.repairable_dirty) return "Update app will repair generated Desk metadata, then install the new version.";
   if (status.dirty && status.behind > 0) return "Save or discard local edits before updating the app.";
   if (status.behind > 0) return "Use Update app to install and refresh Desk.";
-  return "Automatic checks stay on while this page is open.";
+  return "Use Check now when you want to compare this development checkout with its Git remote.";
 }
 
 export function StatusRail({
@@ -91,7 +95,7 @@ export function StatusRail({
           <strong>{headline.title}</strong>
           <span>{headline.detail}</span>
         </div>
-        <span className="repository-auto-chip">Auto check</span>
+        <span className="repository-auto-chip">{gitStatus?.status === "not_git_repository" ? "Dev only" : "Manual check"}</span>
       </div>
       <div className="repository-toolbar">
         <StatusLine label="Current" value={versionLabel(gitStatus?.head)} />

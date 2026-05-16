@@ -49,6 +49,7 @@ try:
         desk_settings_routes,
         desk_source_routes,
         desk_state_payload,
+        desk_support,
         desk_sources as _desk_sources_module,
         local_credentials as local_credentials,
         monitor_state,
@@ -85,6 +86,7 @@ except ModuleNotFoundError:
         desk_settings_routes,
         desk_source_routes,
         desk_state_payload,
+        desk_support,
         desk_sources as _desk_sources_module,
         local_credentials as local_credentials,
         monitor_state,
@@ -100,8 +102,10 @@ except ModuleNotFoundError:
         render_markdown_artifact,
     )
 
+sys.modules.setdefault("scripts.dashboard_server", sys.modules[__name__])
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
+CODE_ROOT = Path(__file__).resolve().parent.parent
+PROJECT_ROOT = Path(os.environ.get("TGCS_PROJECT_ROOT") or CODE_ROOT).expanduser()
 DESK_HEALTH_SCHEMA_VERSION = desk_server_selection.DESK_HEALTH_SCHEMA_VERSION
 DESK_APP_ID = desk_server_selection.DESK_APP_ID
 DESK_VERSION = desk_server_selection.DESK_VERSION
@@ -225,6 +229,65 @@ def desk_health(*, host: str, port: int) -> dict:
     return desk_server_selection.desk_health(host=host, port=port)
 
 
+def desk_support_status(*, host: str, port: int, db_path: Path) -> dict:
+    return desk_support.desk_support_status(
+        project_root=PROJECT_ROOT,
+        code_root=CODE_ROOT,
+        db_path=db_path,
+        telegram_config_dir=TELEGRAM_CONFIG_DIR,
+        dashboard_url=dashboard_url(host, port),
+        source_registry_path=PROJECT_ROOT / source_registry.DEFAULT_REGISTRY_RELATIVE_PATH,
+        desktop_log_path=Path(os.environ["TSENSE_DESKTOP_LOG"]).expanduser() if os.environ.get("TSENSE_DESKTOP_LOG") else None,
+        readiness=_support_real_scan_readiness(db_path),
+    )
+
+
+def _support_real_scan_readiness(db_path: Path) -> dict:
+    try:
+        with close_after_use(monitor_state.connect(db_path)) as conn:
+            state = dashboard_state_payload(conn)
+    except Exception:
+        state = {}
+    try:
+        telegram = telegram_status()
+    except Exception:
+        telegram = {}
+    try:
+        sources = desk_sources()
+    except Exception:
+        sources = {}
+    return desk_support.real_scan_readiness(
+        telegram_status=telegram,
+        sources_result=sources,
+        dashboard_state=state,
+        demo_report_exists=(PROJECT_ROOT / "output" / "demo-report.html").exists(),
+    )
+
+
+def reveal_support_target(target: object, *, db_path: Path) -> dict:
+    return desk_support.reveal_support_target(
+        target,
+        project_root=PROJECT_ROOT,
+        db_path=db_path,
+        telegram_config_dir=TELEGRAM_CONFIG_DIR,
+        source_registry_path=PROJECT_ROOT / source_registry.DEFAULT_REGISTRY_RELATIVE_PATH,
+        desktop_log_path=Path(os.environ["TSENSE_DESKTOP_LOG"]).expanduser() if os.environ.get("TSENSE_DESKTOP_LOG") else None,
+    )
+
+
+def write_support_diagnostic_export(*, host: str, port: int, db_path: Path) -> dict:
+    return desk_support.write_support_diagnostic_export(
+        project_root=PROJECT_ROOT,
+        code_root=CODE_ROOT,
+        db_path=db_path,
+        telegram_config_dir=TELEGRAM_CONFIG_DIR,
+        dashboard_url=dashboard_url(host, port),
+        source_registry_path=PROJECT_ROOT / source_registry.DEFAULT_REGISTRY_RELATIVE_PATH,
+        desktop_log_path=Path(os.environ["TSENSE_DESKTOP_LOG"]).expanduser() if os.environ.get("TSENSE_DESKTOP_LOG") else None,
+        readiness=_support_real_scan_readiness(db_path),
+    )
+
+
 def fetch_compatible_desk_health(host: str, port: int, *, timeout_seconds: float = 0.25) -> dict | None:
     return desk_server_selection.fetch_compatible_desk_health(
         host,
@@ -285,7 +348,7 @@ def _utc_now() -> str:
 
 
 def _run_git(args: list[str], *, timeout: int = GIT_TIMEOUT_SECONDS) -> subprocess.CompletedProcess[str]:
-    return desk_git.run_git(args, project_root=PROJECT_ROOT, timeout=timeout, subprocess_module=subprocess)
+    return desk_git.run_git(args, project_root=CODE_ROOT, timeout=timeout, subprocess_module=subprocess)
 
 
 def _git_value(args: list[str]) -> str | None:
@@ -313,7 +376,7 @@ def _run_dashboard_npm(args: list[str], *, timeout: int = DESK_DASHBOARD_BUILD_T
     try:
         return subprocess.run(
             [npm, *args],
-            cwd=PROJECT_ROOT / "dashboard",
+            cwd=CODE_ROOT / "dashboard",
             check=False,
             capture_output=True,
             text=True,
@@ -458,6 +521,7 @@ def _sync_desk_scheduler_context() -> None:
     # mutable dependencies at wrapper call time so patches to PROJECT_ROOT,
     # shutil, token status, or _run_scheduler_command keep their old effect.
     desk_scheduler.PROJECT_ROOT = PROJECT_ROOT
+    desk_scheduler.CODE_ROOT = CODE_ROOT
     desk_scheduler.DESK_BOT_GATEWAY_STATE_FILENAME = DESK_BOT_GATEWAY_STATE_FILENAME
     desk_scheduler.DESK_BOT_GATEWAY_STALE_SECONDS = DESK_BOT_GATEWAY_STALE_SECONDS
     desk_scheduler.DESK_BOT_SUPPORTED_COMMANDS = DESK_BOT_SUPPORTED_COMMANDS
@@ -875,6 +939,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 desk_notification_token_status=desk_notification_token_status,
                 desk_bot_gateway_status=desk_bot_gateway_status,
                 desk_ai_settings_status=desk_ai_settings_status,
+                desk_support_status=desk_support_status,
                 dashboard_state_payload=dashboard_state_payload,
                 profile_template_catalog=profile_template_catalog,
             ):
@@ -938,6 +1003,8 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 git_pull_latest=_git_pull_latest,
                 git_confirmation_error=DashboardGitError,
                 write_feedback_export=write_feedback_export,
+                reveal_support_target=reveal_support_target,
+                write_support_diagnostic_export=write_support_diagnostic_export,
             ):
                 return
             if desk_profile_post_routes.handle_profile_post_route(
@@ -1046,7 +1113,7 @@ def main(argv: list[str] | None = None) -> int:
         db_path = PROJECT_ROOT / db_path
     static_dir = Path(args.static_dir)
     if not static_dir.is_absolute():
-        static_dir = PROJECT_ROOT / static_dir
+        static_dir = CODE_ROOT / static_dir
     DashboardHandler.db_path = db_path
     DashboardHandler.static_dir = static_dir
     try:

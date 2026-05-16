@@ -8,11 +8,15 @@ export type TabCount = number | string;
 
 export function ConsoleHeader({
   busy,
+  primaryActionLabel = "New report",
+  primaryActionTitle = "Generate a fresh report",
   onNewScan,
   onOpenUpdates,
   updateAvailableCount = 0,
 }: {
   busy: boolean;
+  primaryActionLabel?: string;
+  primaryActionTitle?: string;
   onNewScan: () => void;
   onOpenUpdates: () => void;
   updateAvailableCount?: number;
@@ -20,7 +24,7 @@ export function ConsoleHeader({
   const hasUpdate = updateAvailableCount > 0;
   const updateLabel = hasUpdate
     ? `${updateAvailableCount} Signal Desk update${updateAvailableCount === 1 ? "" : "s"} available`
-    : "Open updates";
+    : "Open settings";
   return (
     <header className="console-header">
       <div className="brand-station">
@@ -44,9 +48,9 @@ export function ConsoleHeader({
           </div>
         </div>
       </div>
-      <button className="refresh-button" onClick={onNewScan} disabled={busy} title="Run fresh AI review" type="button">
+      <button className="refresh-button" onClick={onNewScan} disabled={busy} title={primaryActionTitle} type="button">
         <Play size={18} />
-        <span>New scan</span>
+        <span>{primaryActionLabel}</span>
       </button>
     </header>
   );

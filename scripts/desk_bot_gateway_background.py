@@ -14,6 +14,10 @@ from typing import Any
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
+CODE_ROOT = PROJECT_ROOT
+PROJECT_ROOT_ENV = "TGCS_PROJECT_ROOT"
+TG_SCANNER_CONFIG_DIR_ENV = "TG_SCANNER_CONFIG_DIR"
+TGCLI_CONFIG_DIR_ENV = "TGCLI_CONFIG_DIR"
 DESK_BOT_GATEWAY_STATE_FILENAME = "bot-gateway-state.json"
 DESK_BOT_GATEWAY_STALE_SECONDS = 120
 DESK_BOT_SUPPORTED_COMMANDS = ["/status", "/latest", "/sources", "/profiles", "/scan"]
@@ -161,7 +165,7 @@ def desk_bot_gateway_status(conn, *, now: datetime | None = None) -> dict:
 
 
 def bot_gateway_script_path() -> Path:
-    return PROJECT_ROOT / "scripts" / "bot_gateway.py"
+    return CODE_ROOT / "scripts" / "bot_gateway.py"
 
 
 def pythonw_entry() -> Path:
@@ -181,9 +185,33 @@ def fixed_bot_gateway_argv(python_entry: Path | None = None) -> list[str]:
         str(python_entry or pythonw_entry()),
         str(bot_gateway_script_path()),
         "run",
+        "--db",
+        str(PROJECT_ROOT / ".tgcs" / "tgcs.db"),
+        "--state",
+        str(PROJECT_ROOT / ".tgcs" / DESK_BOT_GATEWAY_STATE_FILENAME),
+        "--lock",
+        str(PROJECT_ROOT / ".tgcs" / "bot-gateway.lock"),
         "--poll-timeout",
         str(DESK_BOT_GATEWAY_POLL_TIMEOUT_SECONDS),
     ]
+
+
+def _telegram_config_dir() -> Path:
+    return PROJECT_ROOT / ".tgcs" / "telegram"
+
+
+def app_runtime_environment() -> dict[str, str]:
+    telegram_dir = _telegram_config_dir()
+    return {
+        PROJECT_ROOT_ENV: str(PROJECT_ROOT),
+        TG_SCANNER_CONFIG_DIR_ENV: str(telegram_dir),
+        TGCLI_CONFIG_DIR_ENV: str(telegram_dir),
+    }
+
+
+def systemd_env_assignment(key: str, value: str) -> str:
+    escaped = f"{key}={value}".replace("\\", "\\\\").replace('"', '\\"')
+    return f'"{escaped}"'
 
 
 def bot_gateway_launchd_plist_path() -> Path:
@@ -393,6 +421,7 @@ def write_bot_gateway_launchd_plist(path: Path, python_entry: Path) -> None:
         "RunAtLoad": True,
         "KeepAlive": {"Crashed": True},
         "WorkingDirectory": str(PROJECT_ROOT),
+        "EnvironmentVariables": app_runtime_environment(),
         "StandardOutPath": str(output_dir / "tsense-bot-gateway.log"),
         "StandardErrorPath": str(output_dir / "tsense-bot-gateway.err.log"),
     }
@@ -416,6 +445,10 @@ def write_bot_gateway_systemd_service(path: Path, python_entry: Path) -> None:
                 "[Service]",
                 "Type=simple",
                 f"WorkingDirectory={PROJECT_ROOT}",
+                *[
+                    f"Environment={systemd_env_assignment(key, value)}"
+                    for key, value in app_runtime_environment().items()
+                ],
                 f"ExecStart={exec_start}",
                 "Restart=on-failure",
                 "RestartSec=30",

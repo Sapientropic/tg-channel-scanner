@@ -8,6 +8,8 @@ import {
   sanitizeDeskNotificationTokenStatus,
   sanitizeDeskSchedulerStatus,
   sanitizeDeskSourcesResult,
+  sanitizeDeskSupportDiagnosticExportResult,
+  sanitizeDeskSupportStatus,
   sanitizeDeskTelegramStatus,
   sanitizeDeliveryChatDetectionResult,
   sanitizeDeliveryTestResult,
@@ -31,6 +33,9 @@ import type {
   DeskNotificationTokenStatus,
   DeskSchedulerStatus,
   DeskSourcesResult,
+  DeskSupportStatus,
+  DeskSupportDiagnosticExportResult,
+  DeskSupportRevealResult,
   DeskTelegramStatus,
   DeliveryChatDetectionResult,
   DeliveryTarget,
@@ -304,6 +309,31 @@ export async function loadDeskAiSettingsStatus(signal?: AbortSignal): Promise<De
   const result = sanitizeDeskAiSettingsStatus(payload.ai);
   if (!result) {
     throw new Error("Invalid AI API settings response");
+  }
+  return result;
+}
+
+export async function loadDeskSupportStatus(signal?: AbortSignal): Promise<DeskSupportStatus> {
+  const response = await fetch("/api/desk/support-status", { signal });
+  const payload = await readJson(response);
+  const result = sanitizeDeskSupportStatus(payload.support);
+  if (!result) {
+    throw new Error("Invalid support diagnostics response");
+  }
+  return result;
+}
+
+export async function revealDeskSupportTarget(target: string): Promise<DeskSupportRevealResult> {
+  const payload = await postJson("/api/desk/support/reveal", { target });
+  assertSchemaVersion(payload.support, "desk_support_reveal_result_v1", "Invalid support reveal response");
+  return payload.support as DeskSupportRevealResult;
+}
+
+export async function exportDeskSupportDiagnostics(): Promise<DeskSupportDiagnosticExportResult> {
+  const payload = await postJson("/api/desk/support/export", {});
+  const result = sanitizeDeskSupportDiagnosticExportResult(payload.support);
+  if (!result) {
+    throw new Error("Invalid support diagnostic export response");
   }
   return result;
 }

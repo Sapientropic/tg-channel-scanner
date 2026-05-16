@@ -1,13 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import { buildJourneySteps, buildStartSummary, notificationReadiness } from "./actions";
+import { ActionsView, buildJourneySteps, buildStartSummary, notificationReadiness } from "./actions";
 import {
   buildJourneySteps as buildJourneyStepsFromModel,
   buildStartSummary as buildStartSummaryFromModel,
   notificationReadiness as notificationReadinessFromModel,
 } from "./actions/journey-model";
 import { JourneyStepCard } from "./actions/journey-step-card";
+import { JourneyResults } from "./actions/journey-results";
 import { StartManagementStrip } from "./actions/start-management-strip";
 import type { DeliveryTarget, DeskAction, DeskActionResult, DeskSchedulerStatus } from "../domain/types";
 
@@ -138,22 +139,207 @@ describe("Signal Desk journey", () => {
     expect(firstRun?.state).toBe("blocked");
   });
 
-  it("starts with AI API setup before profile or source work", () => {
+  it("starts with the demo before AI API setup or source work", () => {
     const steps = buildJourneySteps(actions, {}, { stage: "needs_ai_key", has_profiles: false, has_runs: false }, telegramReady);
     const summary = buildStartSummary(steps, { stage: "needs_ai_key", has_profiles: false, has_runs: false }, telegramReady);
 
     expect(steps[0]).toMatchObject({
-      key: "ai",
-      title: "Connect AI matching",
+      key: "demo",
+      title: "Preview demo",
       state: "active",
       stateLabel: "Start here",
     });
-    expect(steps.find((step) => step.key === "workspace")?.state).toBe("blocked");
+    expect(steps.find((step) => step.key === "ai")).toMatchObject({
+      key: "ai",
+      title: "Connect AI matching",
+      state: "ready",
+      stateLabel: "Before review",
+    });
+    expect(steps.find((step) => step.key === "workspace")?.state).toBe("active");
+    expect(summary.find((item) => item.label === "Next")).toMatchObject({
+      value: "Preview demo",
+      actionId: "demo_render",
+      actionLabel: "Render demo",
+    });
+  });
+
+  it("does not let a missing AI key block local profile and Telegram setup", () => {
+    const setup = { stage: "needs_ai_key", has_profiles: false, has_runs: false };
+    const steps = buildJourneySteps(actions, { demo_render: result("demo_render", "success") }, setup, {
+      ...telegramReady,
+      session_ready: false,
+      credentials_ready: false,
+    });
+    const summary = buildStartSummary(steps, setup, {
+      ...telegramReady,
+      session_ready: false,
+      credentials_ready: false,
+    });
+
+    expect(steps.find((step) => step.key === "ai")).toMatchObject({
+      state: "ready",
+      stateLabel: "Before review",
+    });
+    expect(steps.find((step) => step.key === "workspace")).toMatchObject({
+      state: "active",
+      stateLabel: "Start here",
+    });
+    expect(steps.find((step) => step.key === "telegram")).toMatchObject({
+      state: "active",
+    });
+    expect(steps.find((step) => step.key === "first-run")).toMatchObject({
+      state: "blocked",
+      stateLabel: "Connect Telegram first",
+    });
+    expect(summary.find((item) => item.label === "Next")).toMatchObject({
+      value: "Connect Telegram",
+    });
+  });
+
+  it("asks for AI only after local setup and Telegram are ready for review", () => {
+    const setup = { stage: "needs_ai_key", has_profiles: true, has_runs: false };
+    const steps = buildJourneySteps(actions, { demo_render: result("demo_render", "success") }, setup, telegramReady);
+    const summary = buildStartSummary(steps, setup, telegramReady);
+
+    expect(steps.find((step) => step.key === "ai")).toMatchObject({
+      state: "active",
+      stateLabel: "Before review",
+    });
+    expect(steps.find((step) => step.key === "workspace")).toMatchObject({
+      state: "done",
+    });
+    expect(steps.find((step) => step.key === "first-run")).toMatchObject({
+      state: "blocked",
+      stateLabel: "Add AI key first",
+    });
     expect(summary.find((item) => item.label === "Next")).toMatchObject({
       value: "Connect AI matching",
       actionId: "settings_ai",
       actionLabel: "Add AI API key",
     });
+  });
+
+  it("keeps profile creation visible on first-run setup", () => {
+    let settingsTarget = "";
+    const html = renderToStaticMarkup(
+      <ActionsView
+        actions={actions}
+        busyActionId=""
+        loadError=""
+        onRun={async () => undefined}
+        results={{}}
+        setupStatus={{ stage: "needs_ai_key", has_profiles: false, has_runs: false }}
+        telegram={{
+          status: telegramReady,
+          busy: "",
+          error: "",
+          saveCredentials: async () => telegramReady,
+          sendCode: async () => telegramReady,
+          verifyCode: async () => telegramReady,
+          refresh: async () => telegramReady,
+          cancelLogin: async () => telegramReady,
+        }}
+        onOpenProfiles={() => undefined}
+        onOpenSettings={(target) => {
+          settingsTarget = target ?? "";
+        }}
+      />,
+    );
+
+    expect(html).toContain("Generate demo report");
+    expect(html).toContain("<details class=\"start-setup-drawer start-real-setup\" aria-label=\"Set up real sources\">");
+    expect(html).toContain("<summary><span>Set up real sources</span>");
+    expect(html).toContain("Create profile guidance");
+    expect(html).toContain("Create a monitor in plain language");
+    expect(html).toContain("Create profile");
+    expect(html).toContain("Local privacy and Telegram boundary");
+    expect(html).toContain("third-party Telegram API client");
+    expect(html).toContain("Data boundaries");
+    expect(settingsTarget).toBe("");
+  });
+
+  it("keeps the demo result openable from the journey", () => {
+    const demoResult = {
+      ...result("demo_render"),
+      artifact_path: "output/demo-report.html",
+    };
+    const steps = buildJourneySteps(
+      actions,
+      { demo_render: demoResult },
+      { stage: "needs_ai_key", has_profiles: false, has_runs: false },
+      telegramReady,
+    );
+    const demoStep = steps.find((step) => step.key === "demo");
+    const markup = renderToStaticMarkup(<JourneyResults actionIds={["demo_render"]} results={{ demo_render: demoResult }} />);
+
+    expect(demoStep).toMatchObject({
+      state: "done",
+      stateLabel: "Ready",
+      buttons: [{ actionId: "demo_render", label: "Refresh demo" }],
+      advancedActionIds: ["demo_render"],
+    });
+    expect(markup).toContain("Open result");
+    expect(markup).toContain("/artifacts/output/demo-report.html");
+  });
+
+  it("promotes setup instead of refreshing the demo after the sample report is ready", () => {
+    const html = renderToStaticMarkup(
+      <ActionsView
+        actions={actions}
+        busyActionId=""
+        loadError=""
+        onRun={async () => undefined}
+        results={{ demo_render: result("demo_render") }}
+        setupStatus={{ stage: "needs_ai_key", has_profiles: false, has_runs: false }}
+        telegram={{
+          status: telegramReady,
+          busy: "",
+          error: "",
+          saveCredentials: async () => telegramReady,
+          sendCode: async () => telegramReady,
+          verifyCode: async () => telegramReady,
+          refresh: async () => telegramReady,
+          cancelLogin: async () => telegramReady,
+        }}
+      />,
+    );
+
+    expect(html).toContain("Set up local files");
+    expect(html).toContain("Prepare files");
+    expect(html).not.toContain("Refresh sample report");
+  });
+
+  it("promotes profile creation before Telegram after the demo is ready", () => {
+    const html = renderToStaticMarkup(
+      <ActionsView
+        actions={actions}
+        busyActionId=""
+        loadError=""
+        onRun={async () => undefined}
+        results={{ demo_render: result("demo_render") }}
+        setupStatus={{ stage: "needs_ai_key", has_profiles: false, has_runs: false }}
+        telegram={{
+          status: {
+            ...telegramReady,
+            credentials_ready: false,
+            session_ready: false,
+            login_state: "credentials_missing",
+          },
+          busy: "",
+          error: "",
+          saveCredentials: async () => telegramReady,
+          sendCode: async () => telegramReady,
+          verifyCode: async () => telegramReady,
+          refresh: async () => telegramReady,
+          cancelLogin: async () => telegramReady,
+        }}
+        onOpenProfiles={() => undefined}
+      />,
+    );
+
+    expect(html).toContain("start-next-card is-profile");
+    expect(html).toContain("<h3>Create your monitor</h3>");
+    expect(html).toContain("<span>Create profile</span>");
   });
 
   it("promotes first scan after workspace exists", () => {
@@ -170,6 +356,7 @@ describe("Signal Desk journey", () => {
     const steps = buildJourneySteps(actions, {}, { stage: "ready", has_profiles: true, has_runs: true }, telegramReady);
 
     expect(steps.map((step) => step.key)).toEqual([
+      "demo",
       "ai",
       "telegram",
       "workspace",
@@ -177,12 +364,15 @@ describe("Signal Desk journey", () => {
       "automation",
       "feedback",
     ]);
+    expect(steps.find((step) => step.key === "demo")).toMatchObject({
+      state: "ready",
+      stateLabel: "Optional",
+    });
     expect(steps.find((step) => step.key === "feedback")?.buttons[0]).toMatchObject({
       label: "Suggest rules",
     });
     expect(steps.find((step) => step.key === "telegram")?.detail).toContain("Telegram is ready");
     expect(steps.find((step) => step.key === "telegram")?.detail).not.toContain("Connect Telegram first");
-    expect(steps.find((step) => step.key === "demo")).toBeUndefined();
     expect(steps.find((step) => step.key === "ai")?.buttons[0]).toMatchObject({
       actionId: "settings_ai",
       label: "AI API settings",

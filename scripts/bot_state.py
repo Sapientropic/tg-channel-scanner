@@ -21,7 +21,17 @@ except ModuleNotFoundError:
     from scripts import monitor_state
     from scripts.bot_api import BotGatewayError
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
+PROJECT_ROOT_ENV = "TGCS_PROJECT_ROOT"
+
+
+def _default_project_root() -> Path:
+    explicit_root = os.environ.get(PROJECT_ROOT_ENV, "").strip()
+    if explicit_root:
+        return Path(explicit_root).expanduser()
+    return Path(__file__).resolve().parent.parent
+
+
+PROJECT_ROOT = _default_project_root()
 DEFAULT_DB_PATH = PROJECT_ROOT / ".tgcs" / "tgcs.db"
 DEFAULT_BOT_STATE_PATH = PROJECT_ROOT / ".tgcs" / "bot-gateway-state.json"
 DEFAULT_BOT_LOCK_PATH = PROJECT_ROOT / ".tgcs" / "bot-gateway.lock"

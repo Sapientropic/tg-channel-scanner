@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any
 
 try:
+    from scripts import agent_cli
     from scripts import tgcs_launchers as _launchers
     from scripts import tgcs_quickstart as _quickstart
     from scripts import tgcs_schedule as _schedule
@@ -24,6 +25,7 @@ except ModuleNotFoundError:
     _PROJECT_ROOT = Path(__file__).resolve().parent.parent
     if str(_PROJECT_ROOT) not in sys.path:
         sys.path.insert(0, str(_PROJECT_ROOT))
+    from scripts import agent_cli
     from scripts import tgcs_launchers as _launchers
     from scripts import tgcs_quickstart as _quickstart
     from scripts import tgcs_schedule as _schedule
@@ -296,6 +298,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     demo = subparsers.add_parser("demo", help="Render the offline demo report.")
     demo.add_argument("--output", help="HTML output path. Defaults to output/demo-report.html.")
+    agent_cli.add_format_argument(demo)
     demo.set_defaults(func=run_demo)
 
     init = subparsers.add_parser("init", help="Create .tgcs defaults and import the example sources.")
@@ -431,6 +434,7 @@ def build_parser() -> argparse.ArgumentParser:
     bot_run = bot_subparsers.add_parser("run", help="Poll Telegram Bot updates and run safe local actions.")
     bot_run.add_argument("--db")
     bot_run.add_argument("--state")
+    bot_run.add_argument("--lock")
     bot_run.add_argument("--allow-chat-id", action="append", default=[])
     bot_run.add_argument("--poll-timeout", type=int, default=0)
     bot_run.add_argument("--install-menu", action="store_true", help="Install the bot command menu before polling; this is now the default.")

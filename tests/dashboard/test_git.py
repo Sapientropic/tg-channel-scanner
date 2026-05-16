@@ -140,6 +140,26 @@ class DashboardGitTests(unittest.TestCase):
         self.assertNotIn("['git','fetch']", rendered)
 
 
+    def test_git_update_status_reports_packaged_runtime_without_raw_git_error(self):
+        def fake_run(args, *, timeout=dashboard_server.GIT_TIMEOUT_SECONDS):
+            return subprocess.CompletedProcess(
+                args,
+                128,
+                stdout="",
+                stderr="fatal: not a git repository (or any of the parent directories): .git",
+            )
+
+        with patch.object(dashboard_server, "_run_git", side_effect=fake_run):
+            status = dashboard_server._git_update_status(fetch=True)
+
+        self.assertEqual(status["status"], "not_git_repository")
+        self.assertEqual(status["branch"], "unknown")
+        self.assertFalse(status["pull_allowed"])
+        self.assertFalse(status["fetched"])
+        self.assertIn("not a Git checkout", status["message"])
+        self.assertNotIn("fatal:", json.dumps(status))
+
+
     def test_pull_latest_uses_fast_forward_only_after_clean_check(self):
         before = {
             "dirty": False,

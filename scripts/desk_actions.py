@@ -38,6 +38,10 @@ def _project_root() -> Path:
     return Path(_facade_attr("PROJECT_ROOT", PROJECT_ROOT))
 
 
+def _code_root() -> Path:
+    return Path(_facade_attr("CODE_ROOT", _project_root()))
+
+
 def _utc_now() -> str:
     now_fn = _facade_attr("_utc_now", None)
     if callable(now_fn) and now_fn is not _utc_now:
@@ -55,7 +59,9 @@ def _is_dashboard_openable_artifact_path(path: str) -> bool:
 
 def _desk_action_env() -> dict[str, str]:
     helper = _facade_attr("desk_action_env", None)
-    return helper() if callable(helper) else dict()
+    env = helper() if callable(helper) else dict()
+    env["TGCS_PROJECT_ROOT"] = str(_project_root())
+    return env
 
 
 def _subprocess_module():
@@ -211,7 +217,7 @@ DESK_ACTIONS: tuple[dict, ...] = (
         "detail": "Build output/demo-report.html without Telegram login or LLM keys.",
         "run_mode": "execute",
         "display_command": "tgcs demo",
-        "argv": ["demo", "--output", "output/demo-report.html"],
+        "argv": ["demo", "--output", "output/demo-report.html", "--format", "json"],
         "artifact_keys": ["html_path", "output_path"],
         "next_action": "Open the demo report, then initialize real sources.",
     },
@@ -707,7 +713,7 @@ def _run_desk_action_unlocked(action_id: str, *, action: dict, body: dict | None
     # argv allowlist so Signal Desk cannot become a localhost shell proxy.
     argv = _argv_for_action(action_id, action, body)
     display_command = _display_command_for_argv(action, argv)
-    cmd = [sys.executable, str(_project_root() / "scripts" / "tgcs.py"), *argv]
+    cmd = [sys.executable, str(_code_root() / "scripts" / "tgcs.py"), *argv]
     if action_id == "monitor_jobs_dry_run":
         _desk_update_action_progress(
             action_id,

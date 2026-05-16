@@ -25,6 +25,71 @@ function gitStatus(overrides: Partial<GitUpdateStatus> = {}): GitUpdateStatus {
 }
 
 describe("StatusRail", () => {
+  it("describes updates as manual before a check runs", () => {
+    const html = renderToStaticMarkup(
+      <StatusRail
+        gitBusy={false}
+        gitStatus={null}
+        onCheckUpdates={() => undefined}
+        onPullLatest={() => undefined}
+      />,
+    );
+
+    expect(html).toContain("Manual update check");
+    expect(html).toContain("Manual check");
+    expect(html).toContain("Packaged app builds update through a new app download.");
+    expect(html).not.toContain("Automatic checks are on");
+    expect(html).not.toContain("Auto check");
+  });
+
+  it("explains packaged runtimes that are not Git checkouts", () => {
+    const html = renderToStaticMarkup(
+      <StatusRail
+        gitBusy={false}
+        gitStatus={gitStatus({
+          status: "not_git_repository",
+          message: "This app runtime is not a Git checkout.",
+          branch: "unknown",
+          upstream: null,
+          repo_url: null,
+          head: null,
+          remote_head: null,
+          behind: 0,
+          pull_allowed: false,
+          fetched: false,
+        })}
+        onCheckUpdates={() => undefined}
+        onPullLatest={() => undefined}
+      />,
+    );
+
+    expect(html).toContain("Packaged runtime");
+    expect(html).toContain("This app copy is not a Git checkout.");
+    expect(html).toContain("Dev only");
+    expect(html).toContain("This app runtime is not a Git checkout.");
+  });
+
+  it("does not promise automatic checks for current development checkouts", () => {
+    const html = renderToStaticMarkup(
+      <StatusRail
+        gitBusy={false}
+        gitStatus={gitStatus({
+          status: "current",
+          message: "Already current.",
+          remote_head: "abc123",
+          behind: 0,
+          pull_allowed: false,
+        })}
+        onCheckUpdates={() => undefined}
+        onPullLatest={() => undefined}
+      />,
+    );
+
+    expect(html).toContain("Signal Desk is current");
+    expect(html).toContain("Manual check");
+    expect(html).not.toContain("Automatic checks");
+  });
+
   it("lets ordinary users update through repairable Desk dependency metadata churn", () => {
     const html = renderToStaticMarkup(
       <StatusRail

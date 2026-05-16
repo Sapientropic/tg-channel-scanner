@@ -1,12 +1,13 @@
 import inspect
 import json
+import os
 import tempfile
 import unittest
 from argparse import Namespace
 from pathlib import Path
 from unittest.mock import patch
 
-from scripts import monitor, monitor_delivery, monitor_execution, monitor_runner, monitor_state
+from scripts import monitor, monitor_config, monitor_delivery, monitor_execution, monitor_runner, monitor_state
 
 
 class MonitorConfigHelperTests(unittest.TestCase):
@@ -27,6 +28,12 @@ class MonitorConfigHelperTests(unittest.TestCase):
                     str(inspect.signature(getattr(monitor_execution, helper_name))),
                 )
 
+    def test_monitor_config_default_project_root_uses_explicit_app_state_env(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            state_root = Path(tmp) / "Application Support" / "T-Sense"
+            with patch.dict(os.environ, {"TGCS_PROJECT_ROOT": str(state_root)}):
+                self.assertEqual(monitor_config._default_project_root(), state_root)
+
     def test_command_helpers_respect_monitor_facade_project_root_patch(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -37,36 +44,37 @@ class MonitorConfigHelperTests(unittest.TestCase):
             state_dir = root / ".tgcs" / "state"
 
             with patch.object(monitor, "PROJECT_ROOT", root):
-                report_cmd = monitor.report_command_for_scan_input(
-                    scan_input=root / "scan.jsonl",
-                    profile_file=profile_file,
-                    run_dir=run_dir,
-                    state_dir=state_dir,
-                    source_registry=None,
-                    items_json=None,
-                    profile_id="jobs-fast",
-                    run_id="run-command",
-                )
-                scan_cmd = monitor.scan_command(
-                    run_dir=run_dir,
-                    source_args=["--source-registry", str(root / ".tgcs" / "sources.json")],
-                    hours=2,
-                    allow_incomplete=False,
-                    allow_partial_failures=True,
-                )
-                daily_cmd = monitor.daily_report_command(
-                    profile={},
-                    profile_file=profile_file,
-                    run_dir=run_dir,
-                    state_dir=state_dir,
-                    source_args=["--source-registry", str(root / ".tgcs" / "sources.json")],
-                    hours=2,
-                    items_json=None,
-                    allow_incomplete=False,
-                    profile_id="jobs-fast",
-                    run_id="run-command",
-                    allow_partial_failures=True,
-                )
+                with patch.object(monitor, "CODE_ROOT", root, create=True):
+                    report_cmd = monitor.report_command_for_scan_input(
+                        scan_input=root / "scan.jsonl",
+                        profile_file=profile_file,
+                        run_dir=run_dir,
+                        state_dir=state_dir,
+                        source_registry=None,
+                        items_json=None,
+                        profile_id="jobs-fast",
+                        run_id="run-command",
+                    )
+                    scan_cmd = monitor.scan_command(
+                        run_dir=run_dir,
+                        source_args=["--source-registry", str(root / ".tgcs" / "sources.json")],
+                        hours=2,
+                        allow_incomplete=False,
+                        allow_partial_failures=True,
+                    )
+                    daily_cmd = monitor.daily_report_command(
+                        profile={},
+                        profile_file=profile_file,
+                        run_dir=run_dir,
+                        state_dir=state_dir,
+                        source_args=["--source-registry", str(root / ".tgcs" / "sources.json")],
+                        hours=2,
+                        items_json=None,
+                        allow_incomplete=False,
+                        profile_id="jobs-fast",
+                        run_id="run-command",
+                        allow_partial_failures=True,
+                    )
 
         self.assertEqual(Path(report_cmd[1]), root / "scripts" / "report.py")
         self.assertEqual(Path(scan_cmd[1]), root / "scripts" / "scan.py")
@@ -74,6 +82,57 @@ class MonitorConfigHelperTests(unittest.TestCase):
         self.assertIn("--allow-partial-failures", scan_cmd)
         self.assertIn("--allow-partial-failures", daily_cmd)
         self.assertEqual(monitor_execution.PROJECT_ROOT, root)
+
+    def test_monitor_facade_splits_code_root_and_state_root_for_packaged_app(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            state_root = root / "Application Support" / "T-Sense"
+            code_root = root / "bundle-code"
+            profile_file = code_root / "profiles" / "templates" / "jobs.md"
+            channel_list = code_root / "channel_lists" / "example.txt"
+            for script_name in ("report.py", "scan.py", "daily_report.py"):
+                script_path = code_root / "scripts" / script_name
+                script_path.parent.mkdir(parents=True, exist_ok=True)
+                script_path.write_text("# script\n", encoding="utf-8")
+            profile_file.parent.mkdir(parents=True)
+            profile_file.write_text("# Jobs", encoding="utf-8")
+            channel_list.parent.mkdir(parents=True)
+            channel_list.write_text("remote_jobs\n", encoding="utf-8")
+            run_dir = state_root / "output" / "runs" / "run-command"
+            state_dir = state_root / ".tgcs" / "state"
+            profile = {
+                "id": "jobs-fast",
+                "path": "profiles/templates/jobs.md",
+                "channel_list": "channel_lists/example.txt",
+            }
+
+            with patch.object(monitor, "PROJECT_ROOT", state_root):
+                with patch.object(monitor, "CODE_ROOT", code_root, create=True):
+                    resolved_profile = monitor.profile_path(profile)
+                    source_args = monitor.source_input_args(profile, run_dir)
+                    report_cmd = monitor.report_command_for_scan_input(
+                        scan_input=run_dir / "scan.jsonl",
+                        profile_file=resolved_profile,
+                        run_dir=run_dir,
+                        state_dir=state_dir,
+                        source_registry=None,
+                        items_json=None,
+                        profile_id="jobs-fast",
+                        run_id="run-command",
+                    )
+                    scan_cmd = monitor.scan_command(
+                        run_dir=run_dir,
+                        source_args=source_args,
+                        hours=2,
+                        allow_incomplete=False,
+                    )
+
+        self.assertEqual(resolved_profile, profile_file)
+        self.assertEqual(source_args, [str(channel_list)])
+        self.assertEqual(Path(report_cmd[1]), code_root / "scripts" / "report.py")
+        self.assertEqual(Path(scan_cmd[1]), code_root / "scripts" / "scan.py")
+        self.assertEqual(monitor_execution.PROJECT_ROOT, state_root)
+        self.assertEqual(monitor_execution.CODE_ROOT, code_root)
 
     def test_default_config_includes_fast_jobs_monitor(self):
         config = monitor.default_config(Path(".tgcs/profiles.toml"))

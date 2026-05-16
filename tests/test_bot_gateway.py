@@ -11,7 +11,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from unittest.mock import patch
 
-from scripts import bot_gateway, monitor_state, source_registry
+from scripts import bot_gateway, bot_state, monitor_state, source_registry
 
 
 class FakeTelegramBotHandler(BaseHTTPRequestHandler):
@@ -901,19 +901,34 @@ class BotGatewayTests(unittest.TestCase):
 
         tgcs = load_tgcs_module(self)
 
-        def fake_run(cmd, check=False, cwd=None):
-            return subprocess.CompletedProcess(cmd, 0)
+        with tempfile.TemporaryDirectory() as tmp:
+            state_root = Path(tmp)
 
-        with patch.object(tgcs.subprocess, "run", side_effect=fake_run) as run_mock:
-            exit_code = tgcs.main(["bot", "run", "--allow-chat-id", "12345", "--no-llm", "--install-menu"])
+            def fake_run(cmd, check=False, cwd=None):
+                return subprocess.CompletedProcess(cmd, 0)
+
+            with patch.object(tgcs, "PROJECT_ROOT", state_root):
+                with patch.object(tgcs.subprocess, "run", side_effect=fake_run) as run_mock:
+                    exit_code = tgcs.main(["bot", "run", "--allow-chat-id", "12345", "--no-llm", "--install-menu"])
 
         cmd = [str(part) for part in run_mock.call_args.args[0]]
         self.assertEqual(exit_code, 0)
         self.assertIn("bot_gateway.py", cmd[1])
         self.assertIn("run", cmd)
+        self.assertEqual(Path(cmd[cmd.index("--db") + 1]), state_root / ".tgcs" / "tgcs.db")
+        self.assertEqual(Path(cmd[cmd.index("--state") + 1]), state_root / ".tgcs" / "bot-gateway-state.json")
+        self.assertEqual(Path(cmd[cmd.index("--lock") + 1]), state_root / ".tgcs" / "bot-gateway.lock")
         self.assertIn("--allow-chat-id", cmd)
         self.assertIn("--no-llm", cmd)
         self.assertIn("--install-menu", cmd)
+
+    def test_bot_state_defaults_follow_explicit_app_state_root(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            state_root = Path(tmp) / "Application Support" / "T-Sense"
+
+            with patch.dict(os.environ, {"TGCS_PROJECT_ROOT": str(state_root)}):
+                self.assertEqual(bot_state._default_project_root(), state_root)
+
 
     def test_tgcs_bot_run_can_skip_default_menu_installation(self):
         from tests.tgcs_cli import load_tgcs_module

@@ -282,6 +282,82 @@ export type DeskAiSettingsStatus = {
   checked_at?: string;
 };
 
+export type DeskSupportPath = {
+  label: string;
+  path: string;
+  target?: string;
+  exists: boolean;
+  detail: string;
+};
+
+export type DeskSupportBoundary = {
+  label: string;
+  detail: string;
+  external: boolean;
+};
+
+export type DeskSupportRecovery = {
+  label: string;
+  detail: string;
+  path?: string;
+};
+
+export type DeskSupportMigration = {
+  schema_version?: "desk_support_migration_v1";
+  status: string;
+  detail: string;
+  next_action: string;
+  legacy_locations: DeskSupportPath[];
+};
+
+export type DeskSupportReadinessItem = {
+  label: string;
+  status: string;
+  detail: string;
+  next_action?: string;
+};
+
+export type DeskSupportReadiness = {
+  schema_version?: "desk_support_readiness_v1";
+  status: string;
+  ready_count: number;
+  total_count: number;
+  summary: string;
+  items: DeskSupportReadinessItem[];
+};
+
+export type DeskSupportStatus = {
+  schema_version: "desk_support_status_v1";
+  app_data_root: string;
+  code_root: string;
+  database_path: string;
+  output_dir: string;
+  source_registry_path: string;
+  telegram_config_dir: string;
+  desktop_log_path: string;
+  dashboard_url: string;
+  platform: string;
+  checked_at: string;
+  paths: DeskSupportPath[];
+  data_boundaries: DeskSupportBoundary[];
+  recovery: DeskSupportRecovery[];
+  migration?: DeskSupportMigration;
+  readiness?: DeskSupportReadiness;
+};
+
+export type DeskSupportRevealResult = {
+  schema_version: "desk_support_reveal_result_v1";
+  target: string;
+  path: string;
+  opened: boolean;
+};
+
+export type DeskSupportDiagnosticExportResult = {
+  schema_version: "desk_support_diagnostic_export_v1";
+  output_path: string;
+  exported_at: string;
+};
+
 export type DashboardNextAction = {
   label?: string;
   detail?: string;

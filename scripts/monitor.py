@@ -35,6 +35,7 @@ except ModuleNotFoundError:
 
 MonitorConfig = _monitor_config.MonitorConfig
 
+CODE_ROOT = _monitor_config.CODE_ROOT
 PROJECT_ROOT = _monitor_config.PROJECT_ROOT
 PROFILE_RUN_CONFIG_SCHEMA_VERSION = _monitor_config.PROFILE_RUN_CONFIG_SCHEMA_VERSION
 RUN_MANIFEST_SCHEMA_VERSION = _monitor_config.RUN_MANIFEST_SCHEMA_VERSION
@@ -108,9 +109,12 @@ write_latest_pointer = _monitor_runner.write_latest_pointer
 def _sync_modules() -> None:
     """Propagate facade monkeypatches into split modules before delegated calls."""
 
+    _monitor_config.CODE_ROOT = CODE_ROOT
     _monitor_config.PROJECT_ROOT = PROJECT_ROOT
     _monitor_artifacts.PROJECT_ROOT = PROJECT_ROOT
+    _monitor_execution.CODE_ROOT = CODE_ROOT
     _monitor_execution.PROJECT_ROOT = PROJECT_ROOT
+    _monitor_runner.CODE_ROOT = CODE_ROOT
     _monitor_runner.PROJECT_ROOT = PROJECT_ROOT
     _monitor_runner.run_json_command = run_json_command
 

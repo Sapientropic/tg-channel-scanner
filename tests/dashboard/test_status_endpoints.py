@@ -57,6 +57,7 @@ class DashboardStatusEndpointTests(unittest.TestCase):
         self.assertEqual(handler.payload["app"], "tgcs-signal-desk")
         self.assertIn("desk_notification_token_v1", handler.payload["capabilities"])
         self.assertIn("desk_bot_gateway_status_v1", handler.payload["capabilities"])
+        self.assertIn("desk_support_status_v1", handler.payload["capabilities"])
 
 
     def test_notification_token_status_endpoint_requires_loopback_and_returns_status(self):
@@ -283,6 +284,35 @@ class DashboardStatusEndpointTests(unittest.TestCase):
         self.assertEqual(handler.status, HTTPStatus.OK)
         self.assertEqual(handler.payload["suggestions"]["created_count"], 1)
 
+
+    def test_support_reveal_endpoint_uses_allowlisted_target(self):
+        class FakeHandler:
+            path = "/api/desk/support/reveal"
+            client_address = ("127.0.0.1", 12345)
+            status = None
+            payload = None
+            db_path = dashboard_server.PROJECT_ROOT / ".tgcs" / "tgcs.db"
+
+            def _read_json_body(self):
+                return {"target": "output_dir", "path": "/tmp/ignored"}
+
+            def _json(self, status, payload):
+                self.status = status
+                self.payload = payload
+
+        result = {
+            "schema_version": "desk_support_reveal_result_v1",
+            "target": "output_dir",
+            "path": "output",
+            "opened": True,
+        }
+        with patch.object(dashboard_server, "reveal_support_target", return_value=result) as reveal_mock:
+            handler = FakeHandler()
+            dashboard_server.DashboardHandler.do_POST(handler)
+
+        reveal_mock.assert_called_once_with("output_dir", db_path=handler.db_path)
+        self.assertEqual(handler.status, HTTPStatus.OK)
+        self.assertEqual(handler.payload, {"ok": True, "support": result})
 
 
 if __name__ == "__main__":

@@ -173,6 +173,11 @@
       "yield";
   }
 
+  .settings-task-switch,
+  .settings-task-switch.advanced {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .sources-settings-grid,
   .settings-evidence-grid {
     grid-template-columns: 1fr;
@@ -1062,7 +1067,8 @@
   }
 
   .profile-delete-zone[data-confirming="true"],
-  .start-profile-guide {
+  .start-profile-guide,
+  .start-boundary-note {
     grid-template-columns: 1fr;
   }
 

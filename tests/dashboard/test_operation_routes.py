@@ -87,6 +87,54 @@ class DashboardOperationRouteTests(unittest.TestCase):
         self.assertEqual(handler.payload, {"ok": True, "export": {"conn": True}})
 
 
+    def test_operation_route_owner_handles_support_diagnostic_export(self):
+        class FakeHandler:
+            status = None
+            payload = None
+            db_path = "/tmp/tgcs.db"
+            server = type("FakeServer", (), {"server_address": ("127.0.0.1", 8766)})()
+
+            def _json(self, status, payload):
+                self.status = status
+                self.payload = payload
+
+        features = []
+        handler = FakeHandler()
+        handled = desk_operation_routes.handle_operation_post_route(
+            handler,
+            "/api/desk/support/export",
+            {},
+            require_loopback_access=lambda value, feature: features.append((value, feature)),
+            close_after_use=lambda conn: conn,
+            monitor_state_module=dashboard_server.monitor_state,
+            run_desk_action=lambda action_id, *, body=None: {},
+            git_update_status=lambda *, fetch: {},
+            git_pull_latest=lambda: {},
+            git_confirmation_error=dashboard_server.DashboardGitError,
+            write_feedback_export=lambda conn: {},
+            write_support_diagnostic_export=lambda *, host, port, db_path: {
+                "schema_version": "desk_support_diagnostic_export_v1",
+                "output_path": "/tmp/support.json",
+                "dashboard": f"{host}:{port}",
+            },
+        )
+
+        self.assertTrue(handled)
+        self.assertEqual(features, [(handler, "Support diagnostics")])
+        self.assertEqual(handler.status, HTTPStatus.OK)
+        self.assertEqual(
+            handler.payload,
+            {
+                "ok": True,
+                "support": {
+                    "schema_version": "desk_support_diagnostic_export_v1",
+                    "output_path": "/tmp/support.json",
+                    "dashboard": "127.0.0.1:8766",
+                },
+            },
+        )
+
+
     def test_operation_route_owner_handles_review_card_action_with_decoded_card_id(self):
         class FakeConnection:
             closed = False

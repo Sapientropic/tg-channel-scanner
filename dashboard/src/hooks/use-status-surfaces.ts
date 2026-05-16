@@ -3,11 +3,14 @@ import { useEffect, useState, type Dispatch, type SetStateAction } from "react";
 import {
   clearDeskAiApiKey as clearDeskAiApiKeyRequest,
   errorMessage,
+  exportDeskSupportDiagnostics as exportDeskSupportDiagnosticsRequest,
   loadDeskAiSettingsStatus,
   loadDeskSchedulerStatus,
+  loadDeskSupportStatus,
+  revealDeskSupportTarget as revealDeskSupportTargetRequest,
   saveDeskAiApiKey as saveDeskAiApiKeyRequest,
 } from "../api/client";
-import type { DeskAiSettingsStatus, DeskSchedulerStatus } from "../domain/types";
+import type { DeskAiSettingsStatus, DeskSchedulerStatus, DeskSupportDiagnosticExportResult, DeskSupportStatus } from "../domain/types";
 
 type Notice = { tone: "success" | "error"; text: string };
 
@@ -21,6 +24,9 @@ export function useStatusSurfaces({ setBusy, setNotice }: UseStatusSurfacesOptio
   const [aiSettingsError, setAiSettingsError] = useState<string | null>(null);
   const [deskSchedulerStatus, setDeskSchedulerStatus] = useState<DeskSchedulerStatus | null>(null);
   const [deskSchedulerError, setDeskSchedulerError] = useState<string | null>(null);
+  const [deskSupportStatus, setDeskSupportStatus] = useState<DeskSupportStatus | null>(null);
+  const [deskSupportError, setDeskSupportError] = useState<string | null>(null);
+  const [deskSupportExportResult, setDeskSupportExportResult] = useState<DeskSupportDiagnosticExportResult | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -52,6 +58,21 @@ export function useStatusSurfaces({ setBusy, setNotice }: UseStatusSurfacesOptio
     return () => controller.abort();
   }, []);
 
+  useEffect(() => {
+    const controller = new AbortController();
+    loadDeskSupportStatus(controller.signal)
+      .then((status) => {
+        setDeskSupportStatus(status);
+        setDeskSupportError(null);
+      })
+      .catch((error) => {
+        if (!controller.signal.aborted) {
+          setDeskSupportError(errorMessage(error));
+        }
+      });
+    return () => controller.abort();
+  }, []);
+
   async function refreshDeskSchedulerStatus() {
     const scheduler = await loadDeskSchedulerStatus();
     setDeskSchedulerStatus(scheduler);
@@ -66,10 +87,53 @@ export function useStatusSurfaces({ setBusy, setNotice }: UseStatusSurfacesOptio
     return status;
   }
 
+  async function refreshDeskSupportStatus() {
+    const status = await loadDeskSupportStatus();
+    setDeskSupportStatus(status);
+    setDeskSupportError(null);
+    return status;
+  }
+
+  async function revealDeskSupportTarget(target: string) {
+    setBusy(true);
+    setNotice(null);
+    try {
+      await revealDeskSupportTargetRequest(target);
+      setNotice({ tone: "success", text: "Opened support path in Finder" });
+    } catch (error) {
+      const message = errorMessage(error);
+      setDeskSupportError(message);
+      setNotice({ tone: "error", text: message });
+      throw error;
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function exportDeskSupportDiagnostics() {
+    setBusy(true);
+    setNotice(null);
+    try {
+      const result = await exportDeskSupportDiagnosticsRequest();
+      setDeskSupportExportResult(result);
+      setDeskSupportError(null);
+      setNotice({ tone: "success", text: "Support snapshot saved" });
+      return result;
+    } catch (error) {
+      const message = errorMessage(error);
+      setDeskSupportError(message);
+      setNotice({ tone: "error", text: message });
+      throw error;
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function refreshStatusSurfaces() {
     await Promise.all([
       refreshDeskSchedulerStatus().catch((error) => setDeskSchedulerError(errorMessage(error))),
       refreshAiSettingsStatus().catch((error) => setAiSettingsError(errorMessage(error))),
+      refreshDeskSupportStatus().catch((error) => setDeskSupportError(errorMessage(error))),
     ]);
   }
 
@@ -114,8 +178,14 @@ export function useStatusSurfaces({ setBusy, setNotice }: UseStatusSurfacesOptio
     aiSettingsError,
     deskSchedulerStatus,
     deskSchedulerError,
+    deskSupportStatus,
+    deskSupportError,
+    deskSupportExportResult,
     refreshStatusSurfaces,
     refreshDeskSchedulerStatus,
+    refreshDeskSupportStatus,
+    revealDeskSupportTarget,
+    exportDeskSupportDiagnostics,
     saveAiApiKey,
     clearAiApiKey,
   };
