@@ -2,6 +2,7 @@ import os
 import shutil
 import subprocess
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
@@ -100,6 +101,9 @@ class PosixLauncherTests(unittest.TestCase):
             )
 
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            deadline = time.monotonic() + 2
+            while not (root / "tgcs.calls").exists() and time.monotonic() < deadline:
+                time.sleep(0.05)
             self.assertTrue((root / "tgcs.calls").exists())
             self.assertIn("dashboard --open", (root / "tgcs.calls").read_text(encoding="utf-8"))
 
