@@ -126,12 +126,12 @@ tgcs bot run
 `tgcs demo` renders the offline fixture report to `output/demo-report.html`
 without Telegram login or LLM provider keys. It is the preferred first
 activation check before asking a human to configure credentials.
-`tgcs init --starter jobs` uses `channel_lists/jobs.txt`, writes the human
-facade default profile as `jobs`, and imports those sources with `--topic jobs`
-so the `jobs-fast` monitor lane is usable without first landing on placeholder
-example sources. If `.tgcs/sources.json` already exists, the jobs starter keeps
-the existing registry and non-destructively merges `channel_lists/jobs.txt` with
-the `jobs` topic tag.
+`tgcs init --starter jobs` uses the packaged public-source starter, writes the
+human facade default profile as `jobs`, and imports those sources with `--topic
+jobs` so the `jobs-fast` monitor lane is usable without first landing on
+placeholder example sources. If `.tgcs/sources.json` already exists, the jobs
+starter keeps real sources, prunes legacy `example_*` placeholders, and
+non-destructively merges the packaged starter with the `jobs` topic tag.
 `tgcs quickstart jobs` is read-only and prints one current expert command plus
 one app-first next step for the Developer Opportunity starter: init, Settings >
 Sources, doctor, login, first dry-run, or dashboard. It never starts login,
@@ -152,6 +152,11 @@ uses `/api/desk/health` to reuse an existing compatible Signal Desk on 8765 or
 auto-select the next free port through 8799. An explicit `--port` is strict and
 fails with a human-readable error when occupied. `--no-build` skips asset
 building for packaged/offline environments or custom static asset handling.
+`--miniapp-only` serves only `/miniapp`, static assets, and `/api/miniapp/*`;
+it must be used for public HTTPS tunnels instead of exposing the full dashboard.
+In `--miniapp-only` mode, no-initData loopback preview is disabled by default so
+public tunnels cannot depend on proxy headers for safety. Use
+`--miniapp-allow-loopback-preview` only for local QA.
 `--open` opens Signal Desk in the default browser after the server starts.
 `tgcs bot install-menu` registers the Telegram Bot command menu with the saved
 bot token. `tgcs bot run` installs that menu by default and starts a local
@@ -159,6 +164,14 @@ long-polling gateway. Bot messages are mapped to fixed local actions only:
 status, latest, profiles, sources summary, Source assistant preview/apply, and
 dry-run monitor scans. The gateway never accepts shell, file paths, argv,
 tokens, raw Telegram message text, or live delivery commands from Telegram.
+`tgcs bot install-miniapp-menu --url <https-url> [--text Review]` installs a
+Telegram Mini App menu button. The URL must be public HTTPS and cannot be
+localhost, loopback, or a private IP address. This command only registers the
+Bot API menu URL; it does not provide hosting, webhook delivery, or a public
+ingress. Add `--dry-run` to validate the URL/text and print the planned result
+without loading the bot token or calling Bot API. The Mini App review shell is a
+companion surface for already-created Review cards; it does not scan Telegram,
+hold MTProto sessions, or serve raw message evidence.
 Allowed chats come from
 `TGCS_BOT_ALLOWED_CHAT_IDS`, explicit `--allow-chat-id`, or enabled Signal Desk
 delivery targets in `.tgcs/tgcs.db`.
@@ -224,8 +237,13 @@ action API for human-friendly wrappers around fixed local commands:
   `/api/desk/sources/preview` validates and previews the default
   `.tgcs/sources.json` import, while `/api/desk/sources/import` writes to that
   fixed registry only.
-- `POST /api/desk/sources/starter` installs the fixed packaged starter list
-  into `.tgcs/sources.json`. It accepts only an optional `topic`.
+- `POST /api/desk/sources/starter` installs the fixed packaged public-source
+  starter list into `.tgcs/sources.json`. Packaged builds prefer
+  `channel_lists/jobs.public-candidates.json` so safe recommendation metadata is
+  preserved, while `channel_lists/jobs.txt` remains the handle-only CLI/fallback
+  mirror. The endpoint accepts only an optional `topic`, prunes legacy
+  `example_*` placeholder rows before adding starter sources, and must never
+  degrade into a 0-source placeholder install.
 - `POST /api/desk/sources/assistant` accepts a bounded natural-language
   instruction plus optional topic and `dry_run`; it extracts explicit Telegram
   handles/links locally, previews add/pause/resume/remove operations, then
@@ -309,10 +327,16 @@ python scripts/monitor.py run --profile-id market-news --delivery-mode dry-run -
 python scripts/monitor.py feedback-export --db .tgcs/tgcs.db --output output/feedback/review-feedback.jsonl --format json
 ```
 
-`doctor.py` reports `dashboard_assets` as pass/warn only; missing dashboard
-static files are not a hard failure because the human `tgcs dashboard` facade
-can build `dashboard/dist` automatically when npm and Node.js 20.19+ or 22.12+
-are available. Channel-list
+`doctor.py` reports `dashboard_assets` and `miniapp_acceptance` as pass/warn
+only; missing dashboard static files are not a hard failure because the human
+`tgcs dashboard` facade can build `dashboard/dist` automatically when npm and
+Node.js 20.19+ or 22.12+ are available. A built desktop `index.html` without the
+Mini App `miniapp.html` entry is still a warning, and
+`tgcs dashboard --miniapp-only` auto-builds when that Mini App entry is missing
+from the default static bundle. `miniapp_acceptance` adds the local `/miniapp`
+preview path, the miniapp-only tunnel command, and the menu-button dry-run
+command so Mini App acceptance has an explicit no-side-effect checklist.
+Channel-list
 checks warn on duplicates and `t.me/+...` / `joinchat` invite-link references
 so the human can replace them with usernames, numeric ids, or Telegram folder
 import before the first real scan. Source-registry checks warn when all enabled
@@ -705,9 +729,40 @@ Signal Desk may detect the default private chat id from Telegram Bot
 Telegram session user id. High-level summaries must continue to avoid rendering
 raw chat ids.
 The local Bot Gateway also uses `getUpdates` for ordinary desktop operation.
-Webhook and Mini App flows are intentionally out of this local contract until
-the hosted HTTPS boundary is designed. Signal Desk's Bot Gateway status
-projection includes only safe setup/run hints: whether a token is configured,
+Webhook delivery remains outside this local contract until the hosted HTTPS
+boundary is designed. The current Mini App contract is intentionally narrow:
+`GET /api/miniapp/state` validates Telegram Mini App init data when present,
+checks the saved chat/user allowlist, and returns `miniapp_review_state_v1`
+with sanitized Review card projections only. Each card may include
+`item.source_excerpt`, a short source/original-text excerpt with URLs replaced by
+`[link]`; raw Telegram message fields remain outside the Mini App contract.
+Card links use safe Telegram `source_refs` and must render as labeled actions,
+not visible bare URLs. State may also include
+`source_recommendations`, a metadata-only view of packaged public starter
+sources with source id, channel, label, topic, reason, and whether that source is
+already installed. Signed Telegram users do not receive local artifact paths;
+loopback preview may include safe report links for desktop inspection.
+State may include `learning_summary`, a Mini App-safe projection of Review
+learning counts and next-action copy. It intentionally excludes local export
+paths, raw recent-impact cards, profile text, and private feedback payloads, so
+the Mini App can explain whether choices are ready for a profile draft without
+becoming a profile editor.
+`POST /api/miniapp/review-cards/<card_id>/action` accepts only `action` and
+`note`, delegates to the existing `monitor_state.set_card_action()` or
+`undo_card_action()` allowlist, and returns the same Mini App card projection
+rather than the full local review-card row. `POST /api/miniapp/sources/starter`
+accepts only `topic` and delegates to the same packaged starter-source import
+used by Signal Desk, giving mobile users a one-tap way to refresh/add recommended
+channels for the next local run.
+If a public HTTPS tunnel is used, it must terminate at `tgcs dashboard
+--miniapp-only`; ordinary dashboard APIs, artifacts, and local state routes are
+not part of the public Mini App boundary. Mini-App-only mode requires signed
+Telegram init data by default; `--miniapp-allow-loopback-preview` is reserved for
+local QA. Forwarded remote clients without signed Telegram init data are
+rejected even when the direct TCP peer is loopback, so a local tunnel cannot
+silently fall back to preview authorization.
+Signal Desk's Bot Gateway status projection includes only safe setup/run hints:
+whether a token is configured,
 allowed-chat counts and labels, background/autostart state, sanitized last
 update/error text, and a `safe_next_action` string. It must not expose token
 text, raw chat ids, raw Telegram message text, session paths, command strings,
@@ -715,19 +770,63 @@ or argv. Monitor live delivery may restart an already-installed background Bot
 Gateway before attaching alert action buttons, but it must not create new
 scheduler/autostart state without the user using Settings > Alerts.
 
-Signal Desk `Settings` can also install starter sources, import pasted sources,
-and apply bounded source assistant plans. Preview responses include a sanitized
-resolved source plan; Apply posts that resolved plan back so the confirmed
-change is the same change the user reviewed, even when AI source planning helped
-choose saved sources. The browser body is limited to the documented fields;
-source registry paths are fixed to `.tgcs/sources.json`, preview is no-write,
-and import reuses `source_registry.py` normalization, topic merge, duplicate
-handling, and validation. The same Settings view can list saved sources, filter
-them by topic, toggle only their `enabled` state, retag sources, and remove
-validated source ids. External AI source planning is opt-in and can only return
-existing source ids to pause/resume/remove. Signal Desk writes only the fixed
-workspace-local registry and never accepts command strings, argv, registry
-paths, raw Telegram message data, or tokens from the browser.
+Signal Desk `Settings` can also install starter sources, import pasted public
+source links/handles or `public_source_candidates_v1` candidate JSON, and apply
+bounded source assistant plans. Preview responses include a sanitized resolved
+source plan; Apply posts that resolved plan back so the confirmed change is the
+same change the user reviewed, even when AI source planning helped choose
+sources. The browser body is limited to the documented fields; source registry
+paths are fixed to `.tgcs/sources.json`, preview is no-write, and import reuses
+`source_registry.py` normalization, topic merge, duplicate handling, and
+validation. Candidate JSON is metadata-only: candidates may include channel,
+handle, username, URL, title, language, topic, recommendation source, quality
+hints, and notes. Import preserves safe title/language/recommendation metadata
+as source label, expected language, and notes, and Settings displays/searches
+that metadata. Message/post/raw text fields are rejected before preview or
+import. The same Settings view can list saved sources, filter them by topic,
+toggle only their `enabled` state, retag sources, and remove validated source
+ids.
+
+Source assistant has two planning lanes. Explicit pasted/import instructions may
+add normalized Telegram channels from user-provided links or handles and may
+pause/resume/remove only validated saved source ids. Local Telegram discovery
+may enumerate visible user-session channels from all dialogs or one named/id
+folder, sanitize that list to channel/title/label/folder metadata, and only
+after `confirm_external_ai=true` send that metadata plus a bounded profile text
+slice to the configured model. In discovery mode, AI `add` outputs are accepted
+only when copied from `candidate_sources.channel`; existing-source operations
+are accepted only when copied from saved `source_id` values. Signal Desk writes
+only the fixed workspace-local registry and never accepts command strings, argv,
+registry paths, raw Telegram message data, local paths, tokens, or Telegram
+session material from the browser.
+
+## Review Learning Paths
+
+There are four related learning paths, and agents must keep them distinct:
+
+- Review feedback events are the local source of truth for user judgement.
+  `keep`, `skip`, `false_positive`, and `follow_up` are written to
+  `feedback_events`; ordinary lifecycle actions such as `applied`, `saved`, and
+  `dismissed` update the opportunity status but do not by themselves create
+  profile-learning evidence.
+- Profile patch suggestions are reviewable text diffs against the user's
+  Markdown profile. They are created from sanitized feedback context, stay
+  pending until approved, snapshot the current profile before apply, and can be
+  reverted without hiding the generated profile text.
+- Profile Coach is a preview layer. It may use the configured LLM only after the
+  user asks for suggestions, otherwise it falls back to local rules. Its output
+  is advice and candidate matching rules; it does not mutate a profile until the
+  user creates and approves a draft.
+- Feedback JSONL export is a private backup/decision-memory path, not the normal
+  dashboard happy path. Exports should avoid raw note bodies and raw Telegram
+  message text. Dashboard learning should prefer profile drafts and calibration
+  evidence over asking users to inspect JSONL.
+
+LLM matching in the current contract is prompt/structured-output semantic
+extraction against the active profile. It is not an embeddings or vector-search
+layer yet. Embeddings remain a future option only if post-review evidence shows
+that prompt-based profile matching cannot separate recurring false positives
+from high-value cards at acceptable cost.
 
 ## Human Login Boundary
 

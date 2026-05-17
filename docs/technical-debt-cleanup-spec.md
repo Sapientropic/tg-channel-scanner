@@ -22,15 +22,16 @@ and contract tests that prevent silent product regressions.
 
 ## Current Baseline
 
-Observed from the 2026-05-15 local workspace:
+Observed from the current local workspace history:
 
-- Current branch: `master`; the worktree was clean before this doc/graph cleanup
-  slice and local `HEAD` was one commit ahead of `origin/master`.
-- The dirty checkpoint backlog from the documentation handoff has been split,
-  verified, and committed through packaging, report, scan, monitor, Bot Gateway,
-  dashboard server tests, and dashboard settings UI slices.
-- Future cleanup should start from a fresh focused slice instead of treating the
-  old dirty handoff as still active.
+- `master` remains the release-hardening branch. The previous documentation and
+  Graphify cleanup was synchronized to `origin/master`; do not treat its old
+  branch-ahead handoff as active debt.
+- The prior dirty checkpoint backlog from the documentation handoff has been
+  split, verified, and committed through packaging, report, scan, monitor, Bot
+  Gateway, dashboard server tests, and dashboard settings UI slices.
+- Future cleanup should start from a fresh focused slice and record active state
+  only in `docs/quality/task-state.md`, not by appending long session logs here.
 - Each implementation checkpoint used focused mixed-tree verification first and
   staged snapshot verification before commit. Docker packaging smoke was later
   verified locally after Docker Desktop became reachable.
@@ -63,6 +64,33 @@ Guardrails for future splits and refactors:
   time to first explainable keep/skip/follow-up action, plus evidence that
   feedback changes a later scan, matters more than the polish of the generated
   digest.
+
+## Product Guardrails From 2026-05-17 Source/Learning Refresh
+
+`ROADMAP.md` and `docs/agent-cli-contract.md` own the product and route
+contracts. The cleanup consequence is that source discovery and profile learning
+are now protected user-facing paths, not incidental Settings helpers.
+
+Guardrails for future splits and refactors:
+
+- Preserve the three source-intake lanes in Settings: starter recommendations,
+  pasted public links/handles or metadata-only candidate JSON, and opt-in local
+  Telegram all-channel/folder discovery. Do not hide the non-AI pasted/starter
+  path while improving AI discovery.
+- Preserve the discovery privacy gate. Local Telegram discovery may send only
+  sanitized channel/title/label/folder metadata plus a bounded profile text
+  slice to the configured model after explicit confirmation; no message bodies,
+  session material, registry paths, command strings, or tokens cross the
+  browser/API boundary.
+- Keep AI source additions bounded to discovered candidates and existing-source
+  operations bounded to validated saved source ids. New catalog integrations
+  should feed metadata-only candidate lists before they feed registry writes.
+- Keep candidate-source imports metadata-only. Candidate JSON can carry handles,
+  URLs, labels, language/topic hints, recommendation source, quality hints, and
+  notes, but not Telegram message/post/raw text.
+- Preserve the feedback-to-profile loop. Keep, skip, false-positive, and
+  follow-up Review events should remain available to profile drafts and Profile
+  Coach without storing reusable raw note bodies in exported decision memory.
 
 ## Recently Resolved Product Debt From Issue #7
 
@@ -1128,8 +1156,10 @@ These constraints must survive every cleanup phase:
   exposes a real UX regression.
 - Do not remove legacy behavior just because it is old. Remove it only when the
   product no longer needs the migration path and tests prove the replacement.
-- Do not add hosted, team, webhook, Mini App, or public bot infrastructure as
-  part of this debt cleanup.
+- Do not add hosted, team, webhook, or public bot infrastructure as part of
+  this debt cleanup. The local Telegram Mini App review companion is now a
+  separate product slice; keep it local-first unless a later hosted boundary is
+  explicitly designed.
 
 ## Recommended Strategy
 

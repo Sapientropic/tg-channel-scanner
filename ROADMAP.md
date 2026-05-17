@@ -1,6 +1,6 @@
 # T-Sense Roadmap
 
-Last researched: 2026-05-15
+Last researched: 2026-05-17
 
 This roadmap is market-informed, but it is still a product plan, not a
 commitment log. Review note: product pages, Telegram platform rules, and
@@ -22,8 +22,9 @@ today, and why can I trust that answer?"
 
 Telegram-native surfaces should support that loop, not replace the local
 engine. The near-term path is a reliable private Bot Gateway for status and
-safe commands; a Mini App is a later companion card surface for review,
-approval, and lightweight settings.
+safe commands plus a narrow Mini App companion for reviewing already-generated
+cards. Neither surface should become the scanner, Telegram session holder, or
+raw evidence store.
 
 ## Market Snapshot
 
@@ -139,6 +140,31 @@ The Mini App review confirmed the surface split:
   TypeScript/Rust local-first shape and can keep bundles smaller; Electron
   remains a fallback if webview consistency, mature desktop APIs, or updater
   needs outweigh footprint.
+
+### 2026-05-17 Source And Learning Refresh
+
+The latest implementation pass changed the practical next step:
+
+- The Mini App card shell has moved from "later companion" to a local-first
+  review companion prototype. The product rule stays the same: it can review
+  and write allowlisted card actions, but it must not scan Telegram, hold
+  sessions, or expose the full dashboard through a public tunnel.
+- Source intake now has three safe lanes: pasted public links/handles or
+  metadata-only candidate JSON, packaged starter recommendations, and local
+  Telegram visible-channel or folder discovery filtered by an opt-in AI planner.
+  The AI planner may add only channels copied from the discovered candidate
+  list, and existing-source operations may touch only validated saved source
+  ids.
+- Public-channel catalog and analytics tools validate demand for source
+  discovery, alerts, and channel-market intelligence. T-Sense should use that
+  category as inspiration for candidate-source metadata, not as a reason to
+  ingest public message bodies or build a hosted public Telegram index.
+- The matching loop remains profile-first. Current LLM work extracts/ranks
+  against profile text and can draft durable profile preferences from Review
+  feedback; it is not yet an embedding/vector semantic matcher.
+- Near-term learning work should make feedback effects visible: accepted or
+  reverted profile drafts, false-positive/high-value counts, and next-run
+  evidence that shows whether the profile actually changed behavior.
 
 ## User Pain Points
 
@@ -354,6 +380,9 @@ Already in scope or recently addressed:
 - Add decision-state explanations for novelty, rating, urgency, source priority,
   and negative evidence.
 - Support profile-specific report templates without changing scanner internals.
+- Keep LLM matching profile-first and structured-output based for now; evaluate
+  embeddings only after Review calibration evidence shows prompt/profile rules
+  cannot separate recurring false positives from high-value items.
 
 Planned work:
 
@@ -406,10 +435,13 @@ Remaining work before calling v0.5 done:
 - Harden the local Telegram Bot Gateway as the no-dashboard control surface:
   command menu, dry-run scans, latest results, source assistant, and authorized
   chat handling should survive ordinary desktop use.
-- Keep the Mini App card-review prototype out of the v0.5 done gate unless it
-  is explicitly used as a demo/latest-run interaction test. Bot reliability
-  comes first; rich cards come after the gateway can carry status and handoff
-  without CLI recovery.
+- Keep the Mini App review companion narrow and coherent: fixed-size mobile
+  controls, signed-initData public boundary, local QA preview, and only
+  allowlisted Review card mutations. Bot reliability still comes first for
+  status, setup, and command handoff.
+- Make source setup feel complete without scanning every folder: keep pasted
+  public links/handles, starter recommendations, and opt-in local channel/folder
+  discovery visible in Settings, then require a preview before applying changes.
 - Continue hardening follow-up-to-profile UX around already-collected local
   notes: make it obvious which accepted diff affected the next run and keep
   rollback/reapply boundaries visible.
@@ -429,7 +461,8 @@ Deferred from v0.5 unless user evidence requires it:
 - Snooze and mute-similar review actions.
 - Rich source-health trend analysis beyond actionable warnings.
 - Hosted, team, or multi-user dashboard features.
-- Cloud Telegram webhook, Telegram Mini App, and hosted HTTPS bot control.
+- Cloud Telegram webhook, hosted HTTPS bot control, and any Mini App behavior
+  beyond a signed review companion.
 - True per-source scan watermarks.
 
 Exit criteria:
@@ -460,8 +493,12 @@ Planned work:
   storage, and a clean handoff from local Signal Desk state. It must not become
   a hosted raw-message scanner by default.
 - Explore bounded public-channel discovery as source intake, not message
-  indexing: discover links and metadata, then let the user join/authorize before
-  local scanning.
+  indexing: external catalog data may suggest links, labels, language, topic,
+  and quality hints, then the user joins/authorizes before local scanning.
+- Add a metadata-only public-source candidate schema
+  (`docs/public-source-candidates.example.json`) so recommendations, pasted
+  links, and future catalog imports share one reviewable shape without storing
+  Telegram message bodies.
 - Add encrypted config/session guidance and backup/restore docs.
 - Support multi-profile batch runs from the same channel registry.
 - Add team-safe runbooks for shared profiles, local deployment, and third-party
@@ -490,6 +527,10 @@ Exit criteria:
    scraping/content licensing rules before any public release.
 7. Test whether source health and pruning hints are more valuable than a full
    dashboard for early users.
+8. Benchmark public-source discovery UX against Telegram catalog/analytics and
+   ad-marketplace tools: time to find candidate channels, trust in the
+   recommendation, and whether users still need to join/authorize before local
+   scanning.
 
 ## Success Metrics
 
@@ -525,8 +566,9 @@ Exit criteria:
   and [Make Telegram Bot integrations](https://www.make.com/en/integrations/telegram)
   represent the no-code automation category.
 - [TGStat alerts](https://by.tgstat.com/en/alerts), [TGStat](https://tgstat.org/),
-  and [Telemetrio](https://telemetr.io/en) represent public Telegram monitoring,
-  search, advertising, and analytics tools.
+  [Telemetrio](https://telemetr.io/en), [Telega.io](https://telega.io/catalog),
+  and [Combot](https://combot.org/) represent public Telegram monitoring,
+  search, catalog, advertising, moderation, and analytics tools.
 - [Junction Bot Digests](https://www.junctionbot.io/documentation/digests) and
   [Aggregaat](https://aggregaat.bot/) validate demand for scheduled Telegram
   digests, unified feeds, forwarding, templates, and team-oriented monitoring.

@@ -77,10 +77,22 @@ launcher traceback.
 Signal Desk should not require a normal user to create source files by hand.
 The app path is:
 
-- `Use starter set` installs the packaged Developer Opportunity starter into
-  `.tgcs/sources.json`.
+- `Use starter set` installs the packaged public Developer Opportunity starter
+  into `.tgcs/sources.json`. Packaged builds prefer metadata-only
+  `jobs.public-candidates.json` and keep `jobs.txt` as a handle-only fallback;
+  the import prunes legacy `example_*` placeholder sources while preserving real
+  user sources. Users should review and prune noisy channels from Settings before
+  treating the list as production-quality.
+- `Known public sources` accepts pasted public `t.me` links/handles or
+  `public_source_candidates_v1` JSON. Candidate JSON is metadata-only and is
+  rejected if it includes Telegram message/post/raw text fields; safe
+  title/language/recommendation metadata is preserved in the source registry
+  and shown in Saved Sources.
 - `Source assistant` accepts short instructions such as `add @remote_jobs` or
   `remove @old_jobs` and previews the local registry change before applying it.
+- `Source assistant` can also discover visible local Telegram channels from all
+  dialogs or a named/id folder, then let the configured AI select channels
+  against the active profile after explicit confirmation.
 - Saved sources can be paused, resumed, retagged, or removed from Settings.
 - `Check source syntax` validates the registry file only. `Check source access`
   uses the local Telegram session to run a bounded, no-message-text probe and
@@ -91,10 +103,14 @@ The app path is:
   confirmation and only disable sources; they never delete them.
 
 External AI planning is opt-in because source names can be private. The offline
-parser handles explicit Telegram handles and `t.me` links locally; when the user
-enables AI planning, Signal Desk sends only saved source ids, labels, channels,
-topics, and enabled state to the configured provider, then validates the returned
-plan against the existing registry before applying anything.
+parser handles explicit Telegram handles, `t.me` links, and candidate-source
+JSON locally. When the user enables AI planning for saved-source operations,
+Signal Desk sends only saved source ids, labels, channels, topics, and enabled
+state to the configured provider, then validates returned operations against the
+existing registry. When the user enables AI planning for local channel/folder
+discovery, Signal Desk sends only sanitized channel/title/label/folder metadata
+plus a bounded profile text slice; AI additions are accepted only when copied
+from the discovered candidate channel list.
 
 ## Local Secret Storage
 
@@ -140,6 +156,42 @@ handle callbacks. During monitor delivery, T-Sense may restart an already
 installed background gateway before sending those buttons; if that cannot be
 confirmed, the alert still includes the original Telegram message link and asks
 the user to update the card from Signal Desk Review.
+
+## Telegram Mini App Review Shell
+
+The Mini App is a companion review surface, not a new scanner. It reads
+sanitized Review cards from the local monitor database, then writes only the
+existing review actions back through the same `monitor_state` allowlist used by
+Signal Desk. It never stores bot tokens, MTProto sessions, raw Telegram message
+text, command strings, argv, or local file paths.
+
+Local preview is available from the dashboard static bundle at `/miniapp` and
+from Settings > Alerts via "Open Mini App preview". Telegram itself requires a
+public HTTPS URL. The menu command only registers that URL with Bot API; it does
+not host the app. Public tunnels must target the Mini-App-only boundary, not the
+full Signal Desk dashboard:
+
+```bash
+./tgcs dashboard --miniapp-only --port 8778
+./tgcs bot install-miniapp-menu --url https://example.com/miniapp --text Review
+```
+
+The Mini App API validates Telegram `initData` when present and checks the
+saved bot chat/user allowlist. Full dashboard `/miniapp` loopback preview is
+allowed for local development only. The `--miniapp-only` public boundary
+requires signed Telegram init data by default; `--miniapp-allow-loopback-preview`
+is reserved for local QA. Both state reads and action responses use the Mini App
+card projection, so local row ids, run ids, timestamps used only for storage, and
+raw decision explanations stay out of the mobile API. Signed Telegram users do
+not receive local report artifact paths; those links are limited to full local
+dashboard loopback preview. Forwarded remote clients still need signed Telegram
+init data even if a tunnel connects to the local server over `127.0.0.1`.
+Mobile cards include a safe `Original text` excerpt when available and show
+Telegram source links as labeled "Open in Telegram" actions rather than visible
+raw URLs. The same Mini App state includes packaged public source
+recommendations, and `/api/miniapp/sources/starter` can add or refresh those
+recommended channels for the next local run through the existing starter-source
+import path.
 
 ## Signal Desk Restart and Ports
 

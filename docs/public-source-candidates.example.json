@@ -1,0 +1,23 @@
+{
+  "schema_version": "public_source_candidates_v1",
+  "generated_at": "2026-05-17T00:00:00Z",
+  "topic": "jobs",
+  "profile_id": "jobs-fast",
+  "privacy_note": "Metadata-only candidate source list. Do not include Telegram message bodies, private invite links, session data, or scraped post text.",
+  "candidates": [
+    {
+      "handle": "@remote_jobs_example",
+      "url": "https://t.me/remote_jobs_example",
+      "title": "Remote Jobs Example",
+      "language": "en",
+      "topics": ["jobs", "remote"],
+      "source_of_recommendation": "starter",
+      "quality_hints": {
+        "public_catalog_rank": null,
+        "recent_posting_cadence": "unknown",
+        "expected_noise": "unknown"
+      },
+      "notes": "Review the channel manually, then join or authorize it before scanning messages through the local source registry."
+    }
+  ]
+}

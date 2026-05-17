@@ -69,7 +69,7 @@ normal user does not have to edit TOML, copy JSON, or remember CLI commands.
 | `Review` | Triage the newest/highest-priority cards first, mark opportunity state with Applied / Saved / Contacted / Duplicate / Dismissed, then tune future matching with Prefer similar / Deprioritize / Wrong match. |
 | `Profiles` | Create profiles from plain language or files, edit matching rules, tune scan window and post limits. |
 | `Runs` | See whether recent scans are healthy and open generated report artifacts. |
-| `Settings` | Add or prune sources with starter sets or Source assistant, set AI/OCR keys, configure notifications, manage learning data, and check repository state. |
+| `Settings` | Add or prune sources with starter sets, pasted public links/handles, candidate JSON, or Source assistant, set AI/OCR keys, configure notifications, manage learning data, and check repository state. |
 
 Signal Desk is still local-first. It does not store raw Telegram messages,
 sessions, API keys, or bot tokens in dashboard state.
@@ -84,6 +84,23 @@ local Bot Gateway:
 The bot can show status, run dry scans, summarize the latest results, and
 preview source changes. It installs its Telegram command menu on start, and
 source changes still require an Apply confirmation.
+
+T-Sense also includes a Telegram Mini App review companion shell. It reuses
+already-generated local Review cards for Applied / Save / Not a fit / Feedback
+actions; it does not scan Telegram, hold sessions, or store raw message text.
+The local dashboard can preview it at `/miniapp`, and Settings > Alerts includes
+an "Open Mini App preview" shortcut. Installing the Telegram menu button only
+registers a URL; it does not host the app. If you expose a local server through
+a public HTTPS tunnel, run a Mini-App-only boundary and tunnel that port, not
+the full Signal Desk dashboard. The Mini-App-only boundary requires signed
+Telegram init data by default; `--miniapp-allow-loopback-preview` is only for
+local QA, not public tunnels:
+
+```bash
+./tgcs dashboard --miniapp-only --port 8778
+./tgcs bot install-miniapp-menu --url https://example.com/miniapp --text Review --dry-run
+./tgcs bot install-miniapp-menu --url https://example.com/miniapp --text Review
+```
 
 Background mode only means the local scheduler is allowed to start the gateway.
 If Settings shows the gateway as stale or not detected, use
@@ -131,7 +148,10 @@ Platform-specific notes for local key storage and auto-scan setup live in
    login or an LLM key.
 2. Connect Telegram using your `api_id` and `api_hash` from
    [my.telegram.org/apps](https://my.telegram.org/apps).
-3. Add and check sources from `Start` / `Settings -> Sources` with the starter set, pasted handles, or Source assistant.
+3. Add and check sources from `Start` / `Settings -> Sources` with the curated
+   public starter set, pasted public links/handles, metadata-only candidate
+   JSON, or Source assistant. Source assistant can preview local Telegram
+   folder/all-channel discovery before applying any registry change.
 4. Run a dry scan from `Start`; if access fails, use the source access repair buttons before scanning again.
 5. Review cards in `Review`, then tune the profile when the results are too
    broad or too narrow.
@@ -150,6 +170,13 @@ You can create and adjust profiles from Signal Desk:
 - import a Markdown, text, or PDF profile note;
 - edit matching rules directly;
 - apply profile suggestions generated from confirmed review feedback.
+
+Review choices are part of the learning loop. Applied, Save, Not a fit, and
+Feedback actions can produce a reviewable profile draft; applying or reverting
+that draft changes future matching without hiding the profile text from you.
+Today the semantic matcher is profile-first LLM extraction, not a vector index:
+Review feedback tunes the Markdown profile and calibration evidence shows
+whether the next run improved.
 
 Built-in templates cover market/news tracking, airdrops, research leads,
 competitor monitoring, and developer opportunities. `market-news` is the default
