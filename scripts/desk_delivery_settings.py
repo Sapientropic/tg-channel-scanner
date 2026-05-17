@@ -254,7 +254,11 @@ def detect_desk_delivery_chat_id(target_id: str, body: dict) -> dict:
         }
     token = delivery.resolve_telegram_bot_token()
     if token.token:
-        detail = "Send any message to the bot, then retry detection. Telegram has not returned a chat for this bot yet."
+        detail = (
+            "Send /start or any message to the bot, then retry detection. If another T-Sense device or Bot Gateway "
+            "is already polling this bot token, it may consume the update before this Mac can detect it; finish "
+            "Telegram login to use the private-chat fallback, or paste the chat ID manually."
+        )
     else:
         detail = "Save a Telegram bot token, send the bot a message, then retry detection. If you use Telegram login, finish Start login first."
     return {

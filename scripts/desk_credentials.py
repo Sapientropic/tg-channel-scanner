@@ -152,19 +152,22 @@ def _telegram_session_ready(*, session_path: Path | None = None) -> bool:
     return desk_telegram_login._telegram_session_ready(session_path=session_path)
 
 
-def _telegram_login_snapshot() -> dict[str, str]:
+def _telegram_login_snapshot(*, config_path: Path | None = None) -> dict[str, str]:
     _sync_telegram_login_context()
-    return desk_telegram_login._telegram_login_snapshot()
+    config_path = _telegram_config_path(config_path)
+    return desk_telegram_login._telegram_login_snapshot(config_path=config_path)
 
 
-def _telegram_login_set(payload: dict[str, str]) -> None:
+def _telegram_login_set(payload: dict[str, str], *, config_path: Path | None = None) -> None:
     _sync_telegram_login_context()
-    desk_telegram_login._telegram_login_set(payload)
+    config_path = _telegram_config_path(config_path)
+    desk_telegram_login._telegram_login_set(payload, config_path=config_path)
 
 
-def _telegram_login_clear() -> None:
+def _telegram_login_clear(*, config_path: Path | None = None) -> None:
     _sync_telegram_login_context()
-    desk_telegram_login._telegram_login_clear()
+    config_path = _telegram_config_path(config_path)
+    desk_telegram_login._telegram_login_clear(config_path=config_path)
 
 
 def _parse_utc_timestamp(value: object):
@@ -297,10 +300,12 @@ def telegram_verify_code(
 
 def telegram_cancel_login() -> dict:
     _sync_telegram_login_context()
-    desk_telegram_login._telegram_login_clear()
+    config_path = _telegram_config_path()
+    session_path = _telegram_session_path()
+    desk_telegram_login._telegram_login_clear(config_path=config_path)
     return desk_telegram_login.telegram_status(
-        config_path=_telegram_config_path(),
-        session_path=_telegram_session_path(),
+        config_path=config_path,
+        session_path=session_path,
     )
 
 

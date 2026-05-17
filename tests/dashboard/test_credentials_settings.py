@@ -3,6 +3,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import types
 import unittest
 from datetime import UTC, datetime, timedelta
 from http import HTTPStatus
@@ -260,32 +261,36 @@ print(json.dumps({
                     "phone": "+15551234567",
                     "phone_code_hash": "hash",
                     "sent_at": old_sent_at,
-                }
+                },
+                config_path=config_path,
             )
 
             status = dashboard_server.telegram_status(config_path=config_path, session_path=session_path)
 
         self.assertEqual(status["login_state"], "ready_for_code")
         self.assertIn("expired", status["detail"].lower())
-        self.assertEqual(dashboard_server._telegram_login_snapshot(), {})
+        self.assertEqual(dashboard_server._telegram_login_snapshot(config_path=config_path), {})
 
 
     def test_telegram_verify_rejects_expired_code_state_before_network(self):
         old_sent_at = (datetime.now(UTC) - timedelta(seconds=dashboard_server.TELEGRAM_LOGIN_CODE_TTL_SECONDS + 1)).isoformat().replace("+00:00", "Z")
-        dashboard_server._telegram_login_set(
-            {
-                "state": "code_sent",
-                "phone": "+15551234567",
-                "phone_code_hash": "hash",
-                "sent_at": old_sent_at,
-            }
-        )
+        with tempfile.TemporaryDirectory() as tmp:
+            config_path = Path(tmp) / "config.toml"
+            dashboard_server._telegram_login_set(
+                {
+                    "state": "code_sent",
+                    "phone": "+15551234567",
+                    "phone_code_hash": "hash",
+                    "sent_at": old_sent_at,
+                },
+                config_path=config_path,
+            )
 
-        with self.assertRaises(ValueError) as raised:
-            dashboard_server.telegram_verify_code("12345")
+            with self.assertRaises(ValueError) as raised:
+                dashboard_server.telegram_verify_code("12345", config_path=config_path)
 
-        self.assertIn("expired", str(raised.exception).lower())
-        self.assertEqual(dashboard_server._telegram_login_snapshot(), {})
+            self.assertIn("expired", str(raised.exception).lower())
+            self.assertEqual(dashboard_server._telegram_login_snapshot(config_path=config_path), {})
 
 
     def test_telegram_send_code_converts_provider_errors_to_user_readable_error(self):
@@ -301,24 +306,105 @@ print(json.dumps({
 
 
     def test_telegram_verify_converts_provider_errors_to_user_readable_error(self):
-        dashboard_server._telegram_login_set(
-            {
-                "state": "code_sent",
-                "phone": "+15551234567",
-                "phone_code_hash": "hash",
-                "sent_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
-            }
-        )
         provider_error = type("PhoneCodeInvalidError", (Exception,), {})
-        with patch.object(
-            dashboard_server,
-            "_telegram_verify_code_async",
-            side_effect=provider_error("bad code"),
-        ):
-            with self.assertRaises(ValueError) as raised:
-                dashboard_server.telegram_verify_code("12345")
+        with tempfile.TemporaryDirectory() as tmp:
+            config_path = Path(tmp) / "config.toml"
+            dashboard_server._telegram_login_set(
+                {
+                    "state": "code_sent",
+                    "phone": "+15551234567",
+                    "phone_code_hash": "hash",
+                    "sent_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+                },
+                config_path=config_path,
+            )
+            with patch.object(
+                dashboard_server,
+                "_telegram_verify_code_async",
+                side_effect=provider_error("bad code"),
+            ):
+                with self.assertRaises(ValueError) as raised:
+                    dashboard_server.telegram_verify_code("12345", config_path=config_path)
 
         self.assertIn("rejected the verification code", str(raised.exception))
+
+
+    def test_telegram_login_reuses_pending_session_across_backend_restart(self):
+        class FakeSession:
+            def __init__(self, value: str):
+                self.value = value
+
+        class FakeStringSession:
+            def __new__(cls, value: str = ""):
+                return FakeSession(value)
+
+            @staticmethod
+            def save(session: FakeSession) -> str:
+                return session.value
+
+        class FakeTelegramClient:
+            def __init__(self, session: FakeSession, api_id: int, api_hash: str):
+                self.session = session
+
+            async def connect(self):
+                return None
+
+            async def disconnect(self):
+                return None
+
+            async def is_user_authorized(self):
+                return self.session.value == "authorized-session"
+
+            async def send_code_request(self, phone: str):
+                self.session.value = "pending-session"
+                return types.SimpleNamespace(phone_code_hash="fresh-hash")
+
+            async def sign_in(self, *, phone=None, code=None, phone_code_hash=None, password=None):
+                if self.session.value != "pending-session" or phone_code_hash != "fresh-hash":
+                    raise type("PhoneCodeExpiredError", (Exception,), {})("expired")
+                self.session.value = "authorized-session"
+
+        fake_telethon = types.ModuleType("telethon")
+        fake_telethon.TelegramClient = FakeTelegramClient
+        fake_sessions = types.ModuleType("telethon.sessions")
+        fake_sessions.StringSession = FakeStringSession
+        fake_errors = types.ModuleType("telethon.errors")
+        fake_errors.SessionPasswordNeededError = type("SessionPasswordNeededError", (Exception,), {})
+
+        with tempfile.TemporaryDirectory() as tmp:
+            config_path = Path(tmp) / "config.toml"
+            session_path = Path(tmp) / "session"
+            dashboard_server.save_telegram_credentials("12345", "a" * 32, config_path=config_path, session_path=session_path)
+            with patch.dict(
+                sys.modules,
+                {
+                    "telethon": fake_telethon,
+                    "telethon.sessions": fake_sessions,
+                    "telethon.errors": fake_errors,
+                },
+            ):
+                sent = dashboard_server.telegram_send_code(
+                    "+15551234567",
+                    config_path=config_path,
+                    session_path=session_path,
+                )
+                with desk_telegram_login._DESK_TELEGRAM_LOGIN_LOCK:
+                    desk_telegram_login._DESK_TELEGRAM_LOGIN.clear()
+                verified = dashboard_server.telegram_verify_code(
+                    "12345",
+                    config_path=config_path,
+                    session_path=session_path,
+                )
+                session_text = session_path.read_text(encoding="utf-8")
+                login_state_exists = (config_path.parent / "login-state.json").exists()
+
+        self.assertEqual(sent["login_state"], "code_sent")
+        self.assertFalse(sent["session_ready"])
+        self.assertNotIn("pending-session", json.dumps(sent))
+        self.assertEqual(verified["login_state"], "authorized")
+        self.assertTrue(verified["session_ready"])
+        self.assertEqual(session_text, "authorized-session")
+        self.assertFalse(login_state_exists)
 
 
     def test_telegram_login_http_endpoint_uses_specialized_api(self):
@@ -577,6 +663,19 @@ print(json.dumps({
         self.assertTrue(result["ok"])
         self.assertEqual(result["chat_id"], "456789")
         self.assertEqual(result["source"], "telegram_session")
+
+
+    def test_delivery_chat_id_detection_explains_consumed_bot_updates(self):
+        token = dashboard_server.delivery.TelegramBotToken(token="123456:secret_token", source="keyring")
+        with patch.object(dashboard_server.delivery, "resolve_telegram_bot_token", return_value=token):
+            with patch.object(dashboard_server, "_detect_chat_id_from_bot_updates", return_value=None):
+                with patch.object(dashboard_server, "_telegram_current_user_chat_id", return_value=None):
+                    result = dashboard_server.detect_desk_delivery_chat_id("telegram-bot-default", {})
+
+        self.assertFalse(result["ok"])
+        self.assertIn("another T-Sense device", result["detail"])
+        self.assertIn("Telegram login", result["detail"])
+        self.assertNotIn("secret_token", json.dumps(result, ensure_ascii=False))
 
 
     def test_bot_gateway_status_uses_sanitized_state_and_authorized_count(self):

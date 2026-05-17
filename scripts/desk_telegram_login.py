@@ -24,6 +24,7 @@ TELEGRAM_CONFIG_DIR = Path(
 )
 TELEGRAM_CONFIG_PATH = TELEGRAM_CONFIG_DIR / "config.toml"
 TELEGRAM_SESSION_PATH = TELEGRAM_CONFIG_DIR / "session"
+TELEGRAM_LOGIN_STATE_FILENAME = "login-state.json"
 TELEGRAM_LOGIN_CODE_TTL_SECONDS = 300
 _DESK_TELEGRAM_LOGIN: dict[str, str] = {}
 _DESK_TELEGRAM_LOGIN_LOCK = Lock()
@@ -55,6 +56,10 @@ def _telegram_config_path(config_path: Path | None = None) -> Path:
 
 def _telegram_session_path(session_path: Path | None = None) -> Path:
     return Path(session_path) if session_path is not None else TELEGRAM_SESSION_PATH
+
+
+def _telegram_login_state_path(config_path: Path | None = None) -> Path:
+    return _telegram_config_path(config_path).parent / TELEGRAM_LOGIN_STATE_FILENAME
 
 
 def _load_telegram_credentials(*, config_path: Path | None = None) -> tuple[int, str]:
@@ -107,20 +112,64 @@ def _telegram_session_ready(*, session_path: Path | None = None) -> bool:
         return False
 
 
-def _telegram_login_snapshot() -> dict[str, str]:
+def _telegram_login_storage_payload(payload: dict[str, str]) -> dict[str, str]:
+    allowed = {"state", "phone", "phone_code_hash", "sent_at", "pending_session"}
+    return {key: str(value) for key, value in payload.items() if key in allowed and str(value)}
+
+
+def _telegram_login_read_disk(*, config_path: Path | None = None) -> dict[str, str]:
+    state_path = _telegram_login_state_path(config_path)
+    try:
+        payload = json.loads(state_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    if not isinstance(payload, dict):
+        return {}
+    return _telegram_login_storage_payload(payload)
+
+
+def _telegram_login_write_disk(payload: dict[str, str], *, config_path: Path | None = None) -> None:
+    state_path = _telegram_login_state_path(config_path)
+    try:
+        state_path.parent.mkdir(parents=True, exist_ok=True)
+        state_path.write_text(json.dumps(_telegram_login_storage_payload(payload), sort_keys=True), encoding="utf-8")
+    except OSError:
+        # Keep the in-memory login flow usable if the transient state file cannot
+        # be written. The final authorized session still reports write errors via
+        # the session save path.
+        return
+
+
+def _telegram_login_snapshot(*, config_path: Path | None = None) -> dict[str, str]:
     with _DESK_TELEGRAM_LOGIN_LOCK:
-        return dict(_DESK_TELEGRAM_LOGIN)
+        login = dict(_DESK_TELEGRAM_LOGIN)
+    if login:
+        return login
+    login = _telegram_login_read_disk(config_path=config_path)
+    if login:
+        with _DESK_TELEGRAM_LOGIN_LOCK:
+            _DESK_TELEGRAM_LOGIN.clear()
+            _DESK_TELEGRAM_LOGIN.update(login)
+    return login
 
 
-def _telegram_login_set(payload: dict[str, str]) -> None:
+def _telegram_login_set(payload: dict[str, str], *, config_path: Path | None = None) -> None:
+    payload = _telegram_login_storage_payload(payload)
     with _DESK_TELEGRAM_LOGIN_LOCK:
         _DESK_TELEGRAM_LOGIN.clear()
         _DESK_TELEGRAM_LOGIN.update(payload)
+    _telegram_login_write_disk(payload, config_path=config_path)
 
 
-def _telegram_login_clear() -> None:
+def _telegram_login_clear(*, config_path: Path | None = None) -> None:
     with _DESK_TELEGRAM_LOGIN_LOCK:
         _DESK_TELEGRAM_LOGIN.clear()
+    try:
+        _telegram_login_state_path(config_path).unlink()
+    except FileNotFoundError:
+        pass
+    except OSError:
+        pass
 
 
 def _parse_utc_timestamp(value: object) -> datetime | None:
@@ -169,6 +218,7 @@ def save_telegram_credentials(
         f"api_id = {clean_api_id}\napi_hash = {json.dumps(clean_api_hash)}\n",
         encoding="utf-8",
     )
+    _telegram_login_clear(config_path=config_path)
     return telegram_status(config_path=config_path, session_path=session_path)
 
 
@@ -188,10 +238,10 @@ def telegram_status(
         if session_ready
         else "saved_unverified"
     )
-    login = _telegram_login_snapshot()
+    login = _telegram_login_snapshot(config_path=config_path)
     expired_login = _telegram_login_expired(login)
     if expired_login:
-        _telegram_login_clear()
+        _telegram_login_clear(config_path=config_path)
         login = {}
     if session_ready and credentials_ready:
         state = "authorized"
@@ -275,16 +325,22 @@ async def _telegram_send_code_async(
             try:
                 session_path.write_text(StringSession.save(client.session), encoding="utf-8")
             finally:
-                _telegram_login_clear()
+                _telegram_login_clear(config_path=config_path)
             return telegram_status(config_path=config_path, session_path=session_path)
         sent = await client.send_code_request(phone)
+        # The verification code hash is tied to the MTProto auth session that
+        # requested it. Persist this pending, not-yet-authorized session beside
+        # the app-owned Telegram config so a dashboard reload or macOS backend
+        # restart does not turn a fresh code into PhoneCodeExpiredError.
         _telegram_login_set(
             {
                 "state": "code_sent",
                 "phone": phone,
                 "phone_code_hash": str(getattr(sent, "phone_code_hash", "") or ""),
                 "sent_at": _utc_now(),
-            }
+                "pending_session": StringSession.save(client.session),
+            },
+            config_path=config_path,
         )
         return telegram_status(config_path=config_path, session_path=session_path)
     finally:
@@ -302,19 +358,20 @@ async def _telegram_verify_code_async(
     from telethon.errors import SessionPasswordNeededError
     from telethon.sessions import StringSession
 
-    login = _telegram_login_snapshot()
+    config_path = _telegram_config_path(config_path)
+    session_path = _telegram_session_path(session_path)
+    login = _telegram_login_snapshot(config_path=config_path)
     if _telegram_login_expired(login):
-        _telegram_login_clear()
+        _telegram_login_clear(config_path=config_path)
         raise ValueError("Telegram login code expired. Send a new code.")
     phone = login.get("phone", "")
     phone_code_hash = login.get("phone_code_hash", "")
     if not phone or not phone_code_hash:
         raise ValueError("Send a Telegram login code before verifying.")
 
-    config_path = _telegram_config_path(config_path)
-    session_path = _telegram_session_path(session_path)
     api_id, api_hash = _load_telegram_credentials(config_path=config_path)
-    session_string = session_path.read_text(encoding="utf-8").strip() if session_path.exists() else ""
+    pending_session = str(login.get("pending_session") or "").strip()
+    session_string = pending_session or (session_path.read_text(encoding="utf-8").strip() if session_path.exists() else "")
     client = TelegramClient(StringSession(session_string), api_id, api_hash)
     await client.connect()
     try:
@@ -323,14 +380,14 @@ async def _telegram_verify_code_async(
         except SessionPasswordNeededError:
             if not password:
                 login["state"] = "needs_password"
-                _telegram_login_set(login)
+                _telegram_login_set(login, config_path=config_path)
                 return telegram_status(config_path=config_path, session_path=session_path)
             await client.sign_in(password=password)
         session_path.parent.mkdir(parents=True, exist_ok=True)
         try:
             session_path.write_text(StringSession.save(client.session), encoding="utf-8")
         finally:
-            _telegram_login_clear()
+            _telegram_login_clear(config_path=config_path)
         return telegram_status(config_path=config_path, session_path=session_path)
     finally:
         await client.disconnect()
@@ -381,8 +438,9 @@ def telegram_verify_code(
 
 
 def telegram_cancel_login() -> dict:
-    _telegram_login_clear()
-    return telegram_status()
+    config_path = _telegram_config_path()
+    _telegram_login_clear(config_path=config_path)
+    return telegram_status(config_path=config_path)
 
 
 async def _telegram_current_user_chat_id_async(
