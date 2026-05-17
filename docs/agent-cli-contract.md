@@ -148,10 +148,12 @@ merges them into existing matching sources; use `--topic jobs` before running
 the `jobs-fast` profile against a topic-filtered registry.
 `tgcs dashboard` serves the local Signal Desk dashboard and auto-builds the default
 `dashboard/dist` assets when they are missing. When `--port` is omitted, it
-uses `/api/desk/health` to reuse an existing compatible Signal Desk on 8765 or
-auto-select the next free port through 8799. An explicit `--port` is strict and
-fails with a human-readable error when occupied. `--no-build` skips asset
-building for packaged/offline environments or custom static asset handling.
+uses `/api/desk/health` to reuse an existing compatible Signal Desk on 8765
+only when the existing process reports the same backend code fingerprint; a
+stale process is treated as incompatible and the launcher auto-selects the next
+free port through 8799. An explicit `--port` is strict and fails with a
+human-readable error when occupied. `--no-build` skips asset building for
+packaged/offline environments or custom static asset handling.
 `--miniapp-only` serves only `/miniapp`, static assets, and `/api/miniapp/*`;
 it must be used for public HTTPS tunnels instead of exposing the full dashboard.
 In `--miniapp-only` mode, no-initData loopback preview is disabled by default so
@@ -183,9 +185,10 @@ Signal Desk `Start` is the primary human surface. It exposes a small dashboard
 action API for human-friendly wrappers around fixed local commands:
 
 - `GET /api/desk/health` returns `desk_health_v1` with app id, version, URL,
-  and capability names, including `desk_bot_gateway_status_v1` when this Desk
-  can report local Bot Gateway readiness. Launchers use it only to identify
-  compatible local instances; it is not an agent execution contract.
+  a backend `code_fingerprint`, and capability names, including
+  `desk_bot_gateway_status_v1` when this Desk can report local Bot Gateway
+  readiness. Launchers use it only to identify compatible local instances; it
+  is not an agent execution contract.
 - `GET /api/desk/actions` returns `desk_actions_v1`.
 - `POST /api/desk/actions/<action_id>/run` returns `desk_action_result_v1`.
 - Action IDs are server-side allowlist entries; request bodies are not command

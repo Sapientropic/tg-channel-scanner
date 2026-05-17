@@ -189,14 +189,23 @@ class DashboardGitTests(unittest.TestCase):
                         "desk_reload_recommended": True,
                     },
                 ) as build_mock:
-                    result = dashboard_server._git_pull_latest()
+                    with patch.object(
+                        dashboard_server,
+                        "_schedule_dashboard_restart_after_update",
+                        return_value=True,
+                        create=True,
+                    ) as restart_mock:
+                        result = dashboard_server._git_pull_latest()
 
         run_mock.assert_called_once_with(["pull", "--ff-only"], timeout=60)
         build_mock.assert_called_once_with()
+        restart_mock.assert_called_once_with()
         self.assertEqual(result["status"], "up_to_date")
         self.assertEqual(result["pull_output"], "Fast-forward")
         self.assertEqual(result["desk_build_status"], "success")
         self.assertTrue(result["desk_reload_recommended"])
+        self.assertTrue(result["desk_restart_scheduled"])
+        self.assertGreaterEqual(result["desk_reload_delay_ms"], 1500)
 
 
     def test_pull_latest_restores_repairable_dashboard_lockfile_before_pull(self):

@@ -88,6 +88,13 @@ export function sanitizeGitUpdateStatus(value: unknown): GitUpdateStatus | null 
   if (typeof value.desk_reload_recommended === "boolean") {
     result.desk_reload_recommended = value.desk_reload_recommended;
   }
+  if (typeof value.desk_restart_scheduled === "boolean") {
+    result.desk_restart_scheduled = value.desk_restart_scheduled;
+  }
+  const deskReloadDelayMs = nonNegativeIntegerOrDefault(value.desk_reload_delay_ms, 0);
+  if (deskReloadDelayMs > 0) {
+    result.desk_reload_delay_ms = deskReloadDelayMs;
+  }
   return result;
 }
 

@@ -12,13 +12,13 @@ import subprocess
 import socket
 import sys
 import webbrowser
-from collections.abc import Iterator, Mapping
+from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from threading import Lock
+from threading import Lock, Timer
 from typing import Any
 from urllib.parse import unquote, urlparse
 from urllib.request import urlopen
@@ -115,8 +115,11 @@ DESK_HEALTH_SCHEMA_VERSION = desk_server_selection.DESK_HEALTH_SCHEMA_VERSION
 DESK_APP_ID = desk_server_selection.DESK_APP_ID
 DESK_VERSION = desk_server_selection.DESK_VERSION
 DESK_AUTO_PORT_END = desk_server_selection.DESK_AUTO_PORT_END
+DESK_RUNTIME_CODE_FINGERPRINT = desk_server_selection.DESK_RUNTIME_CODE_FINGERPRINT
 GIT_TIMEOUT_SECONDS = 25
 DESK_DASHBOARD_BUILD_TIMEOUT_SECONDS = 180
+DESK_RESTART_AFTER_UPDATE_DELAY_SECONDS = 0.25
+DESK_RELOAD_AFTER_RESTART_DELAY_MS = 2500
 DESK_ACTION_TIMEOUT_SECONDS = 180
 DESK_SOURCE_ACCESS_HEALTH_SCHEMA_VERSION = "desk_source_access_health_v1"
 DESK_SOURCE_ACCESS_PROBE_MAX_SOURCES = _positive_int_env("TGCS_SOURCE_ACCESS_PROBE_MAX_SOURCES", 80)
@@ -178,6 +181,8 @@ DESK_BOT_GATEWAY_POLL_TIMEOUT_SECONDS = 8
 DESK_AI_PROVIDER_CONFIGS = desk_credentials.DESK_AI_PROVIDER_CONFIGS
 _DESK_TELEGRAM_LOGIN: dict[str, str] = {}
 _DESK_TELEGRAM_LOGIN_LOCK = Lock()
+_DESK_RESTART_LOCK = Lock()
+_DESK_RESTART_SCHEDULED = False
 
 _DESK_ACTION_LOCKS = _desk_actions_module._DESK_ACTION_LOCKS
 _DESK_ACTION_LOCKS_GUARD = _desk_actions_module._DESK_ACTION_LOCKS_GUARD
@@ -415,12 +420,58 @@ def _refresh_dashboard_build() -> dict:
     }
 
 
+def _restart_dashboard_process() -> None:
+    argv = [str(arg) for arg in sys.argv]
+    executable = sys.executable or shutil.which("python3") or shutil.which("python")
+    if not executable:
+        raise RuntimeError("Python executable is not available for dashboard restart.")
+    if argv:
+        exec_args = [executable, *argv]
+    else:
+        exec_args = [executable, str(Path(__file__).resolve())]
+    os.execv(executable, exec_args)
+
+
+def _schedule_dashboard_restart_after_update(
+    *,
+    delay_seconds: float = DESK_RESTART_AFTER_UPDATE_DELAY_SECONDS,
+    timer_factory: Callable[[float, Callable[[], None]], Any] = Timer,
+    restart_fn: Callable[[], None] = _restart_dashboard_process,
+) -> bool:
+    global _DESK_RESTART_SCHEDULED
+    with _DESK_RESTART_LOCK:
+        if _DESK_RESTART_SCHEDULED:
+            return False
+        _DESK_RESTART_SCHEDULED = True
+    timer = timer_factory(delay_seconds, restart_fn)
+    timer.daemon = True
+    try:
+        timer.start()
+    except Exception:
+        with _DESK_RESTART_LOCK:
+            _DESK_RESTART_SCHEDULED = False
+        raise
+    return True
+
+
 def _git_pull_latest() -> dict:
-    return desk_git.git_pull_latest(
+    result = desk_git.git_pull_latest(
         git_update_status_fn=_git_update_status,
         run_git_fn=_run_git,
         refresh_desk_build_fn=_refresh_dashboard_build,
     )
+    if result.get("desk_build_status") == "success" and result.get("desk_reload_recommended") is True:
+        try:
+            _schedule_dashboard_restart_after_update()
+            result["desk_restart_scheduled"] = True
+            result["desk_reload_delay_ms"] = DESK_RELOAD_AFTER_RESTART_DELAY_MS
+        except Exception:
+            result["desk_restart_scheduled"] = False
+            result["desk_restart_message"] = (
+                "Signal Desk updated, but the local server could not restart automatically. "
+                "Close and reopen Signal Desk to finish the update."
+            )
+    return result
 
 
 

@@ -86,6 +86,70 @@ class DashboardServerSelectionSecurityTests(unittest.TestCase):
         self.assertIsNone(health)
 
 
+    def test_fetch_compatible_desk_health_rejects_stale_backend_code_fingerprint(self):
+        class FakeSocket:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+        class FakeResponse:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+            def read(self):
+                return json.dumps(
+                    {
+                        "schema_version": "desk_health_v1",
+                        "app": "tgcs-signal-desk",
+                        "url": "http://127.0.0.1:8765",
+                        "code_fingerprint": "stale-backend-code",
+                    }
+                ).encode("utf-8")
+
+        with patch.object(dashboard_server.socket, "create_connection", return_value=FakeSocket()):
+            with patch.object(dashboard_server, "urlopen", return_value=FakeResponse()):
+                health = dashboard_server.fetch_compatible_desk_health("127.0.0.1", 8765)
+
+        self.assertIsNone(health)
+
+
+    def test_fetch_compatible_desk_health_accepts_matching_backend_code_fingerprint(self):
+        class FakeSocket:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+        class FakeResponse:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+            def read(self):
+                return json.dumps(
+                    {
+                        "schema_version": "desk_health_v1",
+                        "app": "tgcs-signal-desk",
+                        "url": "http://127.0.0.1:8765",
+                        "code_fingerprint": dashboard_server.DESK_RUNTIME_CODE_FINGERPRINT,
+                    }
+                ).encode("utf-8")
+
+        with patch.object(dashboard_server.socket, "create_connection", return_value=FakeSocket()):
+            with patch.object(dashboard_server, "urlopen", return_value=FakeResponse()):
+                health = dashboard_server.fetch_compatible_desk_health("127.0.0.1", 8765)
+
+        self.assertIsNotNone(health)
+
+
     def test_select_dashboard_server_auto_port_skips_incompatible_occupied_port(self):
         calls = []
 

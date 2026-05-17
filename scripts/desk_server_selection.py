@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import hashlib
 import ipaddress
 import json
 import socket
 from dataclasses import dataclass
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 from typing import Any, Callable
 from urllib import error as urllib_error
 from urllib.parse import urlparse
@@ -17,6 +19,30 @@ DESK_APP_ID = "tgcs-signal-desk"
 DESK_VERSION = "0.5.0-alpha.1"
 DESK_AUTO_PORT_END = 8799
 LOOPBACK_DASHBOARD_HOSTS = {"127.0.0.1", "localhost", "::1"}
+
+
+def _runtime_code_fingerprint(*, scripts_dir: Path | None = None) -> str:
+    root = scripts_dir or Path(__file__).resolve().parent
+    digest = hashlib.sha256()
+    paths = sorted(path for path in root.glob("*.py") if path.is_file())
+    if not paths:
+        digest.update(b"no-python-sources")
+    for path in paths:
+        try:
+            relative = path.relative_to(root).as_posix()
+        except ValueError:
+            relative = path.name
+        digest.update(relative.encode("utf-8", errors="surrogateescape"))
+        digest.update(b"\0")
+        try:
+            digest.update(path.read_bytes())
+        except OSError:
+            digest.update(b"unreadable")
+        digest.update(b"\0")
+    return digest.hexdigest()
+
+
+DESK_RUNTIME_CODE_FINGERPRINT = _runtime_code_fingerprint()
 
 
 @dataclass(frozen=True)
@@ -58,6 +84,7 @@ def desk_health(*, host: str, port: int) -> dict[str, Any]:
         "schema_version": DESK_HEALTH_SCHEMA_VERSION,
         "app": DESK_APP_ID,
         "version": DESK_VERSION,
+        "code_fingerprint": DESK_RUNTIME_CODE_FINGERPRINT,
         "ok": True,
         "url": dashboard_url(host, port),
         "capabilities": [
@@ -102,6 +129,8 @@ def fetch_compatible_desk_health(
     if payload.get("schema_version") != DESK_HEALTH_SCHEMA_VERSION:
         return None
     if payload.get("app") != DESK_APP_ID:
+        return None
+    if payload.get("code_fingerprint") != DESK_RUNTIME_CODE_FINGERPRINT:
         return None
     health_url = str(payload.get("url") or "").strip()
     if health_url:

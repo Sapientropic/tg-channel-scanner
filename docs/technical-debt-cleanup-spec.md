@@ -468,6 +468,9 @@ without changing loopback safety or auto-port behavior:
 - `scripts/desk_server_selection.py` now owns `desk_health_v1`, dashboard URL
   normalization, host warnings, compatible existing-instance health checks,
   TCP listener detection, auto-port selection, and loopback address parsing.
+- Existing-instance reuse now also requires a matching backend code
+  fingerprint so a launcher opened after an update does not silently reuse a
+  stale local server process.
 - `scripts/dashboard_server.py` keeps the public helpers/constants/class as
   compatibility wrappers and injects `socket`, `urlopen`, `ThreadingHTTPServer`,
   `fetch_compatible_desk_health`, and `is_tcp_port_listening` so existing tests

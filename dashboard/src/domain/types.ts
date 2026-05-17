@@ -795,6 +795,8 @@ export type GitUpdateStatus = {
   desk_build_status?: "success" | "failed" | "skipped";
   desk_build_message?: string;
   desk_reload_recommended?: boolean;
+  desk_restart_scheduled?: boolean;
+  desk_reload_delay_ms?: number;
 };
 
 export type FeedbackExportResult = {

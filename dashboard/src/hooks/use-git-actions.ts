@@ -82,8 +82,12 @@ export function useGitActions({ setNotice }: { setNotice: (notice: Notice) => vo
         return;
       }
       if (git.desk_reload_recommended) {
-        setNotice({ tone: "success", text: "Signal Desk updated. Reloading..." });
-        window.setTimeout(() => window.location.reload(), 900);
+        const reloadDelayMs = git.desk_restart_scheduled ? Math.max(git.desk_reload_delay_ms ?? 2500, 1500) : 900;
+        setNotice({
+          tone: "success",
+          text: git.desk_restart_scheduled ? "Signal Desk updated. Restarting local server..." : "Signal Desk updated. Reloading...",
+        });
+        window.setTimeout(() => window.location.reload(), reloadDelayMs);
         return;
       }
       setNotice({ tone: "success", text: "Signal Desk updated" });

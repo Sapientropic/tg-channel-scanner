@@ -44,6 +44,8 @@ describe("Desk action and feedback sanitizers", () => {
         desk_build_status: "success",
         desk_build_message: "  Desk rebuilt  ",
         desk_reload_recommended: true,
+        desk_restart_scheduled: true,
+        desk_reload_delay_ms: 2500,
         checked_at: " 2026-05-10T09:00:00+08:00 ",
       }),
     ).toEqual({
@@ -69,6 +71,8 @@ describe("Desk action and feedback sanitizers", () => {
       desk_build_status: "success",
       desk_build_message: "Desk rebuilt",
       desk_reload_recommended: true,
+      desk_restart_scheduled: true,
+      desk_reload_delay_ms: 2500,
       checked_at: "2026-05-10T09:00:00+08:00",
     });
     expect(
