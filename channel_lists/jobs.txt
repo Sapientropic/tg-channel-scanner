@@ -1,4 +1,12 @@
 # Developer Opportunity Starter
-# This production starter intentionally ships without non-resolving example_ handles.
-# Add real Telegram channels in Signal Desk Settings or use Source Assistant to discover them.
+# Public, metadata-only starter sources for first-run discovery.
+# Last checked 2026-05-17 via public catalogs/search pages such as TGStat,
+# Telega.io, and TelegramChannels.me. Review and prune in Signal Desk Settings
+# before relying on live scans; public job channels can be noisy.
 # One channel name per line. Lines starting with # are ignored.
+remote_frontend_jobs
+remote_java_jobs
+remote_ai_jobs
+remoters
+unicastjobs
+remotejobss

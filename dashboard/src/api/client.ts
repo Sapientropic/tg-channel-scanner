@@ -17,6 +17,7 @@ import {
   sanitizeFeedbackExportResult,
   sanitizeFeedbackProfileSuggestionsResult,
   sanitizeGitUpdateStatus,
+  sanitizeMiniAppReviewState,
   sanitizeProfileCoachPreview,
   sanitizeProfileCreateResult,
   sanitizeProfileCreatePreview,
@@ -30,6 +31,7 @@ import type {
   DeskAiSettingsStatus,
   DeskBotIdentityResult,
   DeskBotGatewayStatus,
+  DeskMiniAppMenuResult,
   DeskNotificationTokenStatus,
   DeskSchedulerStatus,
   DeskSourcesResult,
@@ -43,6 +45,7 @@ import type {
   FeedbackExportResult,
   FeedbackProfileSuggestionsResult,
   GitUpdateStatus,
+  MiniAppReviewState,
   ProfileCoachPreview,
   ProfileCreatePreview,
   ProfileRuntimeSettings,
@@ -50,6 +53,12 @@ import type {
   ProfileTemplateCatalog,
   SourceImportResult,
 } from "../domain/types";
+
+declare global {
+  // Telegram injects this object only inside a Mini App webview. Normal Signal
+  // Desk pages and tests can run without it.
+  var Telegram: { WebApp?: { initData?: string } } | undefined;
+}
 
 export async function loadDashboardState(signal?: AbortSignal): Promise<DashboardState> {
   const response = await fetch("/api/state", { signal });
@@ -75,6 +84,41 @@ export async function undoReviewCardAction(cardId: string) {
     body: JSON.stringify({}),
   });
   await assertOk(response);
+}
+
+export async function loadMiniAppState(signal?: AbortSignal): Promise<MiniAppReviewState> {
+  const response = await fetch("/api/miniapp/state", { headers: miniappHeaders(), signal });
+  const payload = await readJson(response);
+  assertSchemaVersion(payload.miniapp, "miniapp_review_state_v1", "Invalid Mini App state response");
+  return sanitizeMiniAppReviewState(payload.miniapp);
+}
+
+export async function postMiniAppReviewCardAction(
+  cardId: string,
+  action: string,
+  note = "",
+  signal?: AbortSignal,
+) {
+  await readJson(
+    await fetch(`/api/miniapp/review-cards/${encodeURIComponent(cardId)}/action`, {
+      method: "POST",
+      headers: miniappHeaders({ contentType: true }),
+      body: JSON.stringify({ action, note }),
+      signal,
+    }),
+  );
+}
+
+export async function postMiniAppStarterSources(topic = "jobs", signal?: AbortSignal): Promise<SourceImportResult> {
+  const payload = await readJson(
+    await fetch("/api/miniapp/sources/starter", {
+      method: "POST",
+      headers: miniappHeaders({ contentType: true }),
+      body: JSON.stringify({ topic }),
+      signal,
+    }),
+  );
+  return readSourceImportResult(payload.result, "Invalid Mini App source import response");
 }
 
 export async function applyProfilePatch(patchId: string) {
@@ -303,6 +347,21 @@ export async function applyDeskBotIdentity(): Promise<DeskBotIdentityResult> {
   return result;
 }
 
+export async function installDeskMiniAppMenu(url: string): Promise<DeskMiniAppMenuResult> {
+  const payload = await postJson("/api/desk/miniapp-menu", { url });
+  assertSchemaVersion(payload.miniapp_menu, "bot_miniapp_menu_result_v1", "Invalid Mini App menu response");
+  const result = payload.miniapp_menu;
+  if (
+    typeof result.menu_button_updated !== "boolean"
+    || typeof result.dry_run !== "boolean"
+    || typeof result.text !== "string"
+    || typeof result.url !== "string"
+  ) {
+    throw new Error("Invalid Mini App menu response");
+  }
+  return result as DeskMiniAppMenuResult;
+}
+
 export async function loadDeskAiSettingsStatus(signal?: AbortSignal): Promise<DeskAiSettingsStatus> {
   const response = await fetch("/api/desk/ai-settings/status", { signal });
   const payload = await readJson(response);
@@ -467,6 +526,7 @@ export async function previewSourceAssistant(
   confirmExternalAi = false,
   profileId?: string,
   folderName?: string,
+  folderId?: string,
 ): Promise<SourceImportResult> {
   const payload = await postJson("/api/desk/sources/assistant", {
     instruction,
@@ -475,6 +535,7 @@ export async function previewSourceAssistant(
     confirm_external_ai: confirmExternalAi,
     ...(profileId ? { profile_id: profileId } : {}),
     ...(folderName ? { folder_name: folderName } : {}),
+    ...(folderId ? { folder_id: folderId } : {}),
   });
   return readSourceImportResult(payload.result, "Invalid source assistant response");
 }
@@ -486,6 +547,7 @@ export async function applySourceAssistant(
   resolvedPlan?: SourceImportResult["resolved_plan"],
   profileId?: string,
   folderName?: string,
+  folderId?: string,
 ): Promise<SourceImportResult> {
   const payload = await postJson("/api/desk/sources/assistant", {
     instruction,
@@ -495,6 +557,7 @@ export async function applySourceAssistant(
     ...(resolvedPlan ? { resolved_plan: resolvedPlan } : {}),
     ...(profileId ? { profile_id: profileId } : {}),
     ...(folderName ? { folder_name: folderName } : {}),
+    ...(folderId ? { folder_id: folderId } : {}),
   });
   return readSourceImportResult(payload.result, "Invalid source assistant response");
 }
@@ -580,6 +643,18 @@ async function postJson(path: string, body: Record<string, unknown>, signal?: Ab
       signal,
     }),
   );
+}
+
+function miniappHeaders({ contentType = false }: { contentType?: boolean } = {}) {
+  const headers: Record<string, string> = {};
+  if (contentType) {
+    headers["Content-Type"] = "application/json";
+  }
+  const initData = globalThis.Telegram?.WebApp?.initData;
+  if (initData) {
+    headers["X-Telegram-Init-Data"] = initData;
+  }
+  return headers;
 }
 
 async function assertOk(response: Response) {

@@ -81,7 +81,8 @@
         "enabled": true,
         "topics": ["jobs"],
         "priority": "high",
-        "scan_window_hours": 2
+        "scan_window_hours": 2,
+        "expected_language": "en"
       },
       {
         "schema_version": "desk_source_v1",
@@ -91,7 +92,8 @@
         "enabled": false,
         "topics": ["jobs", "watch"],
         "priority": "low",
-        "scan_window_hours": 24
+        "scan_window_hours": 24,
+        "expected_language": "en"
       }
     ]
   },

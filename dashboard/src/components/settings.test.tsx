@@ -17,12 +17,24 @@ import {
   sourceTopicsEditState,
 } from "./settings";
 import { NotificationsPanel } from "./settings/notifications-panel";
+import { BotGatewayPanel, settingsMiniAppUrlState } from "./settings/bot-gateway-panel";
 import { DeliveryTargetEditor } from "./settings/delivery-target-editor";
+import { LearningPanel } from "./settings/learning-panel";
 import { SourceImportPanel } from "./settings/source-import-panel";
 import { SourceInsightsPanel } from "./settings/source-insights-panel";
+import { SourceLibraryRow } from "./settings/source-library-row";
 import { SettingsTaskSwitch } from "./settings/task-switch";
 import { SupportPanel, supportSummary } from "./settings/support-panel";
-import type { DeliveryTarget, DeskBotIdentityResult, DeskBotGatewayStatus, DeskSource, DeskSupportStatus, Profile, SourceStat } from "../domain/types";
+import type {
+  DeliveryTarget,
+  DeskBotIdentityResult,
+  DeskBotGatewayStatus,
+  DeskSource,
+  DeskSupportStatus,
+  Profile,
+  ProfileCoachPreview,
+  SourceStat,
+} from "../domain/types";
 
 function source(overrides: Partial<DeskSource>): DeskSource {
   return {
@@ -232,6 +244,12 @@ describe("Settings source topic editor", () => {
     const sources = [
       source({ source_id: "telegram:remote_jobs", label: "Remote Jobs", topics: ["jobs", "remote-work"] }),
       source({ source_id: "telegram:market_news", label: "Market News", channel: "market_news", topics: ["jobs", "market-news"] }),
+      source({
+        source_id: "telegram:public_catalog",
+        label: "Public Catalog",
+        channel: "public_catalog",
+        notes: "Recommended via public catalog",
+      } as Partial<DeskSource>),
     ];
 
     expect(filterDeskSourcesByQuery(sources, "", "remote-work").map((item) => item.source_id)).toEqual([
@@ -246,10 +264,64 @@ describe("Settings source topic editor", () => {
     expect(filterDeskSourcesByQuery(sources, "rem", "jobs").map((item) => item.source_id)).toEqual([
       "telegram:remote_jobs",
     ]);
+    expect(filterDeskSourcesByQuery(sources, "public catalog").map((item) => item.source_id)).toEqual([
+      "telegram:public_catalog",
+    ]);
     expect(filterDeskSourcesByQuery(sources, " ", " ").map((item) => item.source_id)).toEqual([
       "telegram:remote_jobs",
       "telegram:market_news",
+      "telegram:public_catalog",
     ]);
+  });
+
+  it("renders imported public-source metadata in saved source rows", () => {
+    const html = renderToStaticMarkup(
+      <SourceLibraryRow
+        busy={false}
+        removeSource={async () => undefined}
+        setSourceEnabled={async () => undefined}
+        setSourceTopics={async () => undefined}
+        source={source({
+          label: "Remote Jobs",
+          expected_language: "en",
+          notes: "Recommended via public catalog",
+        } as Partial<DeskSource>)}
+      />,
+    );
+
+    expect(html).toContain("Remote Jobs");
+    expect(html).toContain("Lang en");
+    expect(html).toContain("Recommended via public catalog");
+  });
+
+  it("turns raw public-source recommendation notes into a readable row summary", () => {
+    const notes = [
+      "Recommended via public Telegram page checked 2026-05-17",
+      "Broad public seed. Review and prune aggressively if it creates low-signal cards.",
+      "direct_page_status: 200",
+      "expected_noise: high",
+      "has_public_messages: True",
+      "scope: worldwide remote jobs",
+    ].join("; ");
+    const html = renderToStaticMarkup(
+      <SourceLibraryRow
+        busy={false}
+        removeSource={async () => undefined}
+        setSourceEnabled={async () => undefined}
+        setSourceTopics={async () => undefined}
+        source={source({
+          label: "Remote Jobs",
+          expected_language: "en",
+          notes,
+        } as Partial<DeskSource>)}
+      />,
+    );
+
+    expect(html).toContain("Recommended via public Telegram page checked 2026-05-17");
+    expect(html).toContain("Noise high");
+    expect(html).toContain("worldwide remote jobs");
+    expect(html).not.toContain(">direct_page_status");
+    expect(html).not.toContain(">has_public_messages");
   });
 
   it("defaults saved source rendering to the first page", () => {
@@ -316,7 +388,7 @@ describe("Settings source topic editor", () => {
     expect(html).not.toContain("Source action details");
   });
 
-  it("frames source setup as Telegram discovery plus AI profile filtering, not pasted channels", () => {
+  it("frames source setup as Telegram discovery plus public link and starter recommendation paths", () => {
     const html = renderToStaticMarkup(
       <SourceImportPanel
         result={null}
@@ -363,13 +435,60 @@ describe("Settings source topic editor", () => {
     expect(html).toContain("AI filters your Telegram channels against the selected profile.");
     expect(html).toContain("Telegram folder");
     expect(html).toContain("All channels");
+    expect(html).toContain("Folder ID");
+    expect(html).toContain("Public links or candidate JSON");
+    expect(html).toContain("public_source_candidates_v1 JSON");
+    expect(html).toContain("Preview links");
+    expect(html).toContain("Add links");
+    expect(html).toContain("Starter recommendations");
     expect(html).toContain("aria-pressed=\"true\"");
     expect(html).not.toContain("readOnly");
     expect(html).not.toContain("readonly");
-    expect(html).not.toContain("<span>Telegram channels</span>");
-    expect(html).not.toContain("Paste channel handles");
-    expect(html).not.toContain("@remote_jobs");
-    expect(html).not.toContain("Use starter set");
+  });
+
+  it("shows profile coach confidence and matching mode after preview", () => {
+    const coach: ProfileCoachPreview = {
+      schema_version: "profile_coach_preview_v1",
+      status: "ready",
+      profile_id: "ai-roles",
+      evidence_counts: { keep: 1, skip: 1, false_positive: 1, follow_up: 1 },
+      diagnosis: [{ label: "Clearer boundaries", detail: "Keep and skip choices can sharpen matching." }],
+      suspected_false_positive_patterns: [],
+      suggested_preference_rules: ["Down-rank recurring wrong-match patterns."],
+      source_suggestions: [],
+      confidence: "medium",
+      warnings: [],
+      llm_used: true,
+    };
+    const html = renderToStaticMarkup(
+      <LearningPanel
+        busy={false}
+        clearFeedback={() => undefined}
+        createProfileMatchingPreferencesDraft={() => undefined}
+        exportFeedback={() => undefined}
+        exportResult={null}
+        generateProfileSuggestions={() => undefined}
+        openProfileDrafts={() => undefined}
+        openReviewCards={() => undefined}
+        previewProfileCoach={() => undefined}
+        profileCoachPreview={coach}
+        profiles={[profile()]}
+        runAgainWithLearning={() => undefined}
+        suggestionResult={null}
+        summary={{
+          schema_version: "dashboard_feedback_summary_v2",
+          current_decision_count: 4,
+          exportable_count: 3,
+          by_action: { keep: 1, skip: 1, false_positive: 1 },
+          non_exportable_follow_up_count: 1,
+        }}
+        undoFeedbackDecision={() => undefined}
+      />,
+    );
+
+    expect(html).toContain("Coach matching mode");
+    expect(html).toContain("Confidence medium");
+    expect(html).toContain("Smart suggestions");
   });
 
   it("keeps source refresh guidance behind a closed disclosure after sources exist", () => {
@@ -519,6 +638,125 @@ describe("Settings source topic editor", () => {
     expect(botIdentityResultLine({ ...result, profile_photo_updated: true })).toBe("T-Sense identity applied · photo updated");
   });
 
+  it("surfaces a low-noise Telegram Mini App launch card from bot settings", () => {
+    const status: DeskBotGatewayStatus = {
+      schema_version: "desk_bot_gateway_status_v1",
+      token_configured: true,
+      authorized_chat_count: 1,
+      gateway_status: "running",
+      commands_installed: true,
+      supported_commands: ["/status", "/latest", "/scan"],
+      local_first_note: "Bot replies only while tgcs bot run is running locally.",
+      start_command: "./tgcs bot run",
+      background: {
+        schema_version: "desk_bot_gateway_background_status_v1",
+        backend: "macos_launchd",
+        available: true,
+        installed: true,
+        status: "installed",
+        can_install: false,
+        can_remove: true,
+        detail: "Background mode is on.",
+        next_action: "Leave Signal Desk closed.",
+      },
+    };
+
+    const html = renderToStaticMarkup(
+      <BotGatewayPanel
+        applyBotIdentity={async () => undefined}
+        busy={false}
+        error={null}
+        identityResult={null}
+        installMiniAppMenu={async (url) => ({
+          schema_version: "bot_miniapp_menu_result_v1",
+          menu_button_updated: true,
+          dry_run: false,
+          text: "Review",
+          url,
+        })}
+        installBotGatewayAutostart={async () => undefined}
+        removeBotGatewayAutostart={async () => undefined}
+        status={status}
+      />,
+    );
+
+    expect(html).toContain("Telegram Mini App");
+    expect(html).toContain("Review in Telegram");
+    expect(html).toContain(">Preview<");
+    expect(html).toContain("Public Mini App URL");
+    expect(html).toContain("Add public link");
+    expect(html).toContain("Paste a public https://.../miniapp link");
+    expect(html).toContain(">Ready<");
+    expect(html).toContain(">Token<");
+    expect(html).toContain(">Paste link<");
+    expect(html).toContain(">Menu<");
+    expect(html).toContain('href="/miniapp"');
+    expect(html).not.toContain("Real Telegram entry needs a public HTTPS /miniapp tunnel");
+    expect(html).not.toContain("Phone-ready review surface");
+    expect(html).not.toContain("Preview the mobile review flow here");
+    expect(html).not.toContain("Sound");
+    expect(html).not.toContain("--miniapp-only");
+    expect(html).not.toContain("install-miniapp-menu");
+    expect(html).not.toContain("&lt;public-https&gt;");
+    expect(html).not.toContain("setChatMenuButton");
+  });
+
+  it("keeps Mini App install states understandable before calling Telegram", () => {
+    const status: DeskBotGatewayStatus = {
+      schema_version: "desk_bot_gateway_status_v1",
+      token_configured: true,
+      authorized_chat_count: 1,
+      gateway_status: "running",
+      commands_installed: true,
+      supported_commands: ["/status", "/latest", "/scan"],
+      local_first_note: "Bot replies only while tgcs bot run is running locally.",
+      start_command: "./tgcs bot run",
+      background: {
+        schema_version: "desk_bot_gateway_background_status_v1",
+        backend: "macos_launchd",
+        available: true,
+        installed: true,
+        status: "installed",
+        can_install: false,
+        can_remove: true,
+        detail: "Background mode is on.",
+        next_action: "Leave Signal Desk closed.",
+      },
+    };
+
+    expect(settingsMiniAppUrlState({ ...status, token_configured: false }, "https://example.com/miniapp")).toMatchObject({
+      state: "needs-token",
+      canSubmit: false,
+    });
+    expect(settingsMiniAppUrlState(status, "")).toMatchObject({ state: "empty", canSubmit: false });
+    expect(settingsMiniAppUrlState(status, "http://example.com/miniapp")).toMatchObject({
+      state: "invalid",
+      label: "Use HTTPS",
+      canSubmit: false,
+    });
+    expect(settingsMiniAppUrlState(status, "https://127.0.0.1:8765/miniapp")).toMatchObject({
+      state: "local",
+      label: "Public link needed",
+      canSubmit: false,
+    });
+    expect(settingsMiniAppUrlState(status, "https://example.com/miniapp")).toMatchObject({
+      state: "ready",
+      label: "Ready",
+      canSubmit: true,
+    });
+    expect(settingsMiniAppUrlState(status, "https://example.com/miniapp", {
+      schema_version: "bot_miniapp_menu_result_v1",
+      menu_button_updated: true,
+      dry_run: false,
+      text: "Review",
+      url: "https://example.com/miniapp",
+    })).toMatchObject({
+      state: "enabled",
+      label: "Enabled",
+      canSubmit: false,
+    });
+  });
+
   it("keeps an editable default notification target when none is saved yet", () => {
     const html = renderToStaticMarkup(
       <NotificationsPanel
@@ -541,6 +779,13 @@ describe("Settings source topic editor", () => {
           chat_type: "private",
         })}
         installBotGatewayAutostart={async () => undefined}
+        installMiniAppMenu={async (url) => ({
+          schema_version: "bot_miniapp_menu_result_v1",
+          menu_button_updated: true,
+          dry_run: false,
+          text: "Review",
+          url,
+        })}
         notificationTokenError={null}
         notificationTokenStatus={null}
         panelRef={createRef<HTMLDivElement>()}

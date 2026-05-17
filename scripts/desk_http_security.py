@@ -65,10 +65,34 @@ def require_post_request_integrity(
 def require_loopback_access(
     *,
     client_address: Any,
+    headers: Any = None,
     feature: str,
     is_loopback_address_fn: Callable[[object], bool],
 ) -> None:
     client_host = client_address[0] if isinstance(client_address, tuple) and client_address else "127.0.0.1"
-    if is_loopback_address_fn(client_host):
+    if is_loopback_address_fn(client_host) and not has_forwarded_remote_client(headers, is_loopback_address_fn):
         return
     raise ValueError(f"{feature} requires opening Signal Desk from localhost.")
+
+
+def has_forwarded_remote_client(headers: Any, is_loopback_address_fn: Callable[[object], bool]) -> bool:
+    if headers is None:
+        return False
+    forwarded_for = str(headers.get("X-Forwarded-For") or "").strip()
+    if forwarded_for:
+        for value in forwarded_for.split(","):
+            if value.strip() and not is_loopback_address_fn(value.strip()):
+                return True
+    for header_name in ("X-Real-IP", "CF-Connecting-IP", "True-Client-IP"):
+        value = str(headers.get(header_name) or "").strip()
+        if value and not is_loopback_address_fn(value):
+            return True
+    forwarded = str(headers.get("Forwarded") or "").strip()
+    for section in forwarded.split(","):
+        for part in section.split(";"):
+            key, _, value = part.strip().partition("=")
+            if key.casefold() == "for":
+                host = value.strip().strip('"').split(":", 1)[0].strip("[]")
+                if host and not is_loopback_address_fn(host):
+                    return True
+    return False

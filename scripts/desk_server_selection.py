@@ -135,6 +135,7 @@ def select_dashboard_server(
     server_cls: type[ThreadingHTTPServer] = ThreadingHTTPServer,
     fetch_health_fn: Callable[[str, int], dict[str, Any] | None] = fetch_compatible_desk_health,
     is_port_listening_fn: Callable[[str, int], bool] = is_tcp_port_listening,
+    reuse_existing: bool = True,
 ) -> DashboardServerSelection:
     ports = [port]
     if auto_port:
@@ -143,7 +144,7 @@ def select_dashboard_server(
     for candidate in ports:
         if auto_port:
             health = fetch_health_fn(host, candidate)
-            if health:
+            if health and reuse_existing:
                 return DashboardServerSelection(
                     url=dashboard_url(host, candidate),
                     port=candidate,

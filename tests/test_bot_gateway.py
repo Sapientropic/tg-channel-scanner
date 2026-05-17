@@ -1,5 +1,6 @@
 import argparse
 import http.client
+import io
 import json
 import os
 import subprocess
@@ -99,6 +100,9 @@ class FakeBotApi:
     def set_chat_menu_button(self):
         self.menu_button = "commands"
 
+    def set_miniapp_menu_button(self, *, text, url):
+        self.menu_button = {"type": "web_app", "text": text, "url": url}
+
     def set_my_profile_photo(self, photo_path):
         self.profile_photo = photo_path
 
@@ -128,6 +132,14 @@ class BotGatewayTests(unittest.TestCase):
         self.assertIn('"callback_data": "profiles"', encoded)
         self.assertIn('"callback_data": "settings"', encoded)
 
+    def test_settings_text_points_to_local_miniapp_preview_without_claiming_hosted_support(self):
+        text = bot_gateway.settings_text()
+
+        self.assertIn("Mini App preview", text)
+        self.assertIn("/miniapp", text)
+        self.assertIn("Cloud webhook support", text)
+        self.assertNotIn("Mini App support are tracked as a later roadmap phase", text)
+
     def test_apply_identity_sets_brand_text_commands_menu_and_profile_photo(self):
         api = FakeBotApi()
 
@@ -142,6 +154,63 @@ class BotGatewayTests(unittest.TestCase):
         self.assertTrue(result["menu_button_updated"])
         self.assertTrue(result["profile_photo_updated"])
         self.assertTrue(result["steps"]["profile_photo"]["ok"])
+
+    def test_apply_identity_can_preserve_existing_menu_button_for_miniapp(self):
+        api = FakeBotApi()
+        api.menu_button = {"type": "web_app", "text": "Review", "url": "https://example.com/miniapp"}
+
+        result = bot_gateway.apply_bot_identity(api, preserve_menu_button=True)
+
+        self.assertEqual(api.menu_button, {"type": "web_app", "text": "Review", "url": "https://example.com/miniapp"})
+        self.assertFalse(result["menu_button_updated"])
+        self.assertEqual(result["menu_button_mode"], "preserved")
+        self.assertTrue(result["steps"]["menu_button"]["ok"])
+
+    def test_install_miniapp_menu_requires_https_and_sets_web_app_button(self):
+        api = FakeBotApi()
+
+        result = bot_gateway.install_miniapp_menu("https://example.com/miniapp", api=api, text="Review")
+
+        self.assertEqual(result["schema_version"], "bot_miniapp_menu_result_v1")
+        self.assertTrue(result["menu_button_updated"])
+        self.assertEqual(api.menu_button, {"type": "web_app", "text": "Review", "url": "https://example.com/miniapp"})
+        with self.assertRaisesRegex(bot_gateway.BotGatewayError, "HTTPS"):
+            bot_gateway.install_miniapp_menu("http://127.0.0.1:8765/miniapp", api=api)
+        with self.assertRaisesRegex(bot_gateway.BotGatewayError, "public HTTPS"):
+            bot_gateway.install_miniapp_menu("https://192.168.1.20/miniapp", api=api)
+        with self.assertRaisesRegex(bot_gateway.BotGatewayError, "public HTTPS"):
+            bot_gateway.install_miniapp_menu("https://[fd00::1]/miniapp", api=api)
+
+    def test_install_miniapp_menu_dry_run_validates_without_api_update(self):
+        api = FakeBotApi()
+
+        result = bot_gateway.install_miniapp_menu(
+            "https://example.com/miniapp",
+            api=api,
+            text=" Review ",
+            dry_run=True,
+        )
+
+        self.assertEqual(result["schema_version"], "bot_miniapp_menu_result_v1")
+        self.assertFalse(result["menu_button_updated"])
+        self.assertTrue(result["dry_run"])
+        self.assertEqual(result["text"], "Review")
+        self.assertEqual(result["url"], "https://example.com/miniapp")
+        self.assertIsNone(api.menu_button)
+        with self.assertRaisesRegex(bot_gateway.BotGatewayError, "HTTPS"):
+            bot_gateway.install_miniapp_menu("http://127.0.0.1:8765/miniapp", api=api, dry_run=True)
+
+    def test_bot_gateway_install_miniapp_menu_dry_run_does_not_require_token(self):
+        with patch.object(bot_gateway._bot_api, "load_bot_token", side_effect=AssertionError("token should not load")):
+            with patch("sys.stdout", new_callable=io.StringIO) as stdout:
+                exit_code = bot_gateway.main(
+                    ["install-miniapp-menu", "--url", "https://example.com/miniapp", "--dry-run"]
+                )
+
+        self.assertEqual(exit_code, 0)
+        payload = json.loads(stdout.getvalue())
+        self.assertFalse(payload["menu_button_updated"])
+        self.assertTrue(payload["dry_run"])
 
     def test_apply_identity_reports_step_failure_without_sensitive_details(self):
         api = FailingProfilePhotoApi()
@@ -997,6 +1066,56 @@ class BotGatewayTests(unittest.TestCase):
         for call in calls:
             self.assertIn("bot_gateway.py", call[1])
             self.assertNotIn("token", " ".join(call).lower())
+
+    def test_tgcs_bot_install_miniapp_menu_delegates_https_url_only(self):
+        from tests.tgcs_cli import load_tgcs_module
+
+        tgcs = load_tgcs_module(self)
+
+        def fake_run(cmd, check=False, cwd=None):
+            return subprocess.CompletedProcess(cmd, 0)
+
+        with patch.object(tgcs.subprocess, "run", side_effect=fake_run) as run_mock:
+            exit_code = tgcs.main(["bot", "install-miniapp-menu", "--url", "https://example.com/miniapp", "--text", "Review"])
+
+        cmd = [str(part) for part in run_mock.call_args.args[0]]
+        self.assertEqual(exit_code, 0)
+        self.assertIn("install-miniapp-menu", cmd)
+        self.assertEqual(cmd[cmd.index("--url") + 1], "https://example.com/miniapp")
+        self.assertEqual(cmd[cmd.index("--text") + 1], "Review")
+
+    def test_tgcs_bot_install_miniapp_menu_delegates_dry_run(self):
+        from tests.tgcs_cli import load_tgcs_module
+
+        tgcs = load_tgcs_module(self)
+
+        def fake_run(cmd, check=False, cwd=None):
+            return subprocess.CompletedProcess(cmd, 0)
+
+        with patch.object(tgcs.subprocess, "run", side_effect=fake_run) as run_mock:
+            exit_code = tgcs.main(
+                ["bot", "install-miniapp-menu", "--url", "https://example.com/miniapp", "--dry-run"]
+            )
+
+        cmd = [str(part) for part in run_mock.call_args.args[0]]
+        self.assertEqual(exit_code, 0)
+        self.assertIn("--dry-run", cmd)
+
+    def test_tgcs_bot_apply_identity_can_preserve_miniapp_menu_button(self):
+        from tests.tgcs_cli import load_tgcs_module
+
+        tgcs = load_tgcs_module(self)
+
+        def fake_run(cmd, check=False, cwd=None):
+            return subprocess.CompletedProcess(cmd, 0)
+
+        with patch.object(tgcs.subprocess, "run", side_effect=fake_run) as run_mock:
+            exit_code = tgcs.main(["bot", "apply-identity", "--preserve-menu-button"])
+
+        cmd = [str(part) for part in run_mock.call_args.args[0]]
+        self.assertEqual(exit_code, 0)
+        self.assertIn("apply-identity", cmd)
+        self.assertIn("--preserve-menu-button", cmd)
 
     def test_tgcs_bot_run_can_opt_out_of_default_llm(self):
         from tests.tgcs_cli import load_tgcs_module

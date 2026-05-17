@@ -265,6 +265,45 @@ class MonitorStateFeedbackTests(unittest.TestCase):
         self.assertEqual(summary["next_action"]["label"], "Review profile drafts")
         self.assertEqual(summary["next_action"]["target_tab"], "profiles")
 
+    def test_applied_feedback_draft_does_not_block_newer_review_learning_batch(self):
+        conn = sqlite3.connect(":memory:")
+        conn.row_factory = sqlite3.Row
+        monitor_state.init_db(conn)
+        with tempfile.TemporaryDirectory() as tmp:
+            profile_path = Path(tmp) / "jobs.md"
+            profile_path.write_text("# Jobs profile\n", encoding="utf-8")
+            monitor_state.upsert_profile(
+                conn,
+                {"id": "jobs-fast", "path": str(profile_path), "enabled": True},
+            )
+            first_cards = monitor_state.upsert_review_cards(
+                conn,
+                profile_id="jobs-fast",
+                run_id="run-1",
+                items=[{"topic": "Kept frontend role", "rating": "high", "source_message_refs": [{"channel": "jobs", "id": 1}]}],
+            )
+            monitor_state.set_card_action(conn, card_id=first_cards[0]["card_id"], action="keep")
+            with patch.object(monitor_state, "PROJECT_ROOT", Path(tmp)):
+                first_result = monitor_state.create_feedback_profile_patch_suggestions(conn)
+            first_patch_id = first_result["patch_ids"][0]
+            monitor_state.apply_profile_patch(conn, patch_id=first_patch_id, profile_path=profile_path)
+            second_cards = monitor_state.upsert_review_cards(
+                conn,
+                profile_id="jobs-fast",
+                run_id="run-2",
+                items=[{"topic": "Wrong crypto promo", "rating": "medium", "source_message_refs": [{"channel": "jobs", "id": 2}]}],
+            )
+            monitor_state.set_card_action(conn, card_id=second_cards[0]["card_id"], action="false_positive")
+
+            with patch.object(monitor_state, "PROJECT_ROOT", Path(tmp)):
+                second_result = monitor_state.create_feedback_profile_patch_suggestions(conn)
+            patch_rows = conn.execute("SELECT patch_id, status FROM profile_patch_suggestions ORDER BY created_at").fetchall()
+
+        self.assertEqual(second_result["created_count"], 1)
+        self.assertEqual(second_result["existing_count"], 0)
+        self.assertNotEqual(second_result["patch_ids"][0], first_patch_id)
+        self.assertEqual([str(row["status"]) for row in patch_rows], ["applied", "pending"])
+
 
     def test_feedback_profile_suggestions_accept_list_card_context(self):
         conn = sqlite3.connect(":memory:")

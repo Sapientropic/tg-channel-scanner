@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Eye, FolderSearch, Save } from "lucide-react";
+import { Eye, FolderSearch, Link2, Save, Sparkles } from "lucide-react";
 
 import type { Profile, SourceImportResult } from "../../domain/types";
 
@@ -24,6 +24,7 @@ export function SourceImportPanel({
     confirmExternalAi?: boolean,
     profileId?: string,
     folderName?: string,
+    folderId?: string,
   ) => Promise<SourceImportResult>;
   applySourceAssistant: (
     instruction: string,
@@ -32,6 +33,7 @@ export function SourceImportPanel({
     resolvedPlan?: SourceImportResult["resolved_plan"],
     profileId?: string,
     folderName?: string,
+    folderId?: string,
   ) => Promise<SourceImportResult>;
   busy: boolean;
   hasSavedSources: boolean;
@@ -43,20 +45,25 @@ export function SourceImportPanel({
   const initialProfileId = selectableProfiles[0]?.profile_id ?? "";
   const [profileId, setProfileId] = useState(initialProfileId);
   const [folderName, setFolderName] = useState("");
+  const [folderId, setFolderId] = useState("");
+  const [publicSources, setPublicSources] = useState("");
   const [scanScope, setScanScope] = useState<"all" | "folder">("all");
   const selectedProfile = selectableProfiles.find((profile) => profile.profile_id === profileId) ?? selectableProfiles[0];
   const selectedProfileId = selectedProfile?.profile_id ?? "";
   const selectedProfileLabel = selectedProfile?.display_name || selectedProfile?.report_display_name || selectedProfile?.profile_id || "Profile";
   const topic = selectedProfile?.source_topics?.[0] || selectedProfileId || "default";
   const folder = scanScope === "folder" ? folderName.trim() : "";
-  const instruction = folder
-    ? `Scan Telegram folder "${folder}" and let AI select sources for ${selectedProfileLabel}.`
+  const folderIdValue = scanScope === "folder" ? folderId.trim() : "";
+  const folderDescriptor = folder ? `"${folder}"${folderIdValue ? ` (#${folderIdValue})` : ""}` : folderIdValue ? `#${folderIdValue}` : "";
+  const instruction = folderDescriptor
+    ? `Scan Telegram folder ${folderDescriptor} and let AI select sources for ${selectedProfileLabel}.`
     : `Scan all Telegram channels and let AI select sources for ${selectedProfileLabel}.`;
-  const assistantKey = `${selectedProfileId}\n${scanScope}\n${folder.toLowerCase()}\n${topic}`;
+  const assistantKey = `${selectedProfileId}\n${scanScope}\n${folder.toLowerCase()}\n${folderIdValue}\n${topic}`;
   const assistantOperationCount = result
     ? result.added_count + result.updated_count + (result.removed_count ?? 0) + (result.enabled_count ?? 0) + (result.disabled_count ?? 0)
     : 0;
-  const canAssistantPreview = Boolean(selectedProfileId) && (scanScope === "all" || Boolean(folder));
+  const canAssistantPreview = Boolean(selectedProfileId) && (scanScope === "all" || Boolean(folder || folderIdValue));
+  const canPublicLinks = publicSources.trim().length > 0;
   const canAssistantApply =
     canAssistantPreview &&
     assistantPreviewKey === assistantKey &&
@@ -65,9 +72,6 @@ export function SourceImportPanel({
     assistantOperationCount > 0 &&
     !!result.resolved_plan;
   const previewSources = result?.preview_sources ?? [];
-  void previewSourceImport;
-  void importSources;
-  void importStarterSources;
 
   useEffect(() => {
     if (!profileId && initialProfileId) {
@@ -90,7 +94,7 @@ export function SourceImportPanel({
           if (!canAssistantPreview) {
             return;
           }
-          void previewSourceAssistant(instruction, topic, true, selectedProfileId, folder || undefined)
+          void previewSourceAssistant(instruction, topic, true, selectedProfileId, folder || undefined, folderIdValue || undefined)
             .then((next) => {
               if (next.dry_run && next.action === "assistant") {
                 setAssistantPreviewKey(assistantKey);
@@ -151,6 +155,20 @@ export function SourceImportPanel({
             value={folderName}
           />
         </label>
+        <label className="source-import-field" data-disabled={scanScope === "all" ? "true" : "false"}>
+          <span>Folder ID</span>
+          <input
+            disabled={scanScope === "all"}
+            inputMode="numeric"
+            onChange={(event) => {
+              setFolderId(event.target.value.replace(/[^\d]/g, ""));
+              setAssistantPreviewKey("");
+            }}
+            placeholder="Optional numeric ID"
+            type="text"
+            value={folderId}
+          />
+        </label>
         <div className="source-import-actions">
           <button className="text-button secondary" disabled={busy || !canAssistantPreview} type="submit">
             <Eye size={15} />
@@ -160,9 +178,15 @@ export function SourceImportPanel({
             className="text-button"
             disabled={busy || !canAssistantApply}
             onClick={() =>
-              void applySourceAssistant(instruction, topic, true, result?.resolved_plan, selectedProfileId, folder || undefined).catch(
-                () => undefined,
-              )
+              void applySourceAssistant(
+                instruction,
+                topic,
+                true,
+                result?.resolved_plan,
+                selectedProfileId,
+                folder || undefined,
+                folderIdValue || undefined,
+              ).catch(() => undefined)
             }
             type="button"
           >
@@ -193,6 +217,49 @@ export function SourceImportPanel({
             {result.next_action && <em>{result.next_action}</em>}
           </div>
         )}
+        <section className="source-public-links" aria-label="Public Telegram source links">
+          <div>
+            <strong>Known public sources</strong>
+            <small>Add links, candidate JSON, or starter recommendations without scanning your Telegram folders.</small>
+          </div>
+          <label className="source-import-field">
+            <span>Public links or candidate JSON</span>
+            <textarea
+              onChange={(event) => setPublicSources(event.target.value)}
+              placeholder="https://t.me/example_channel&#10;@another_public_channel&#10;or public_source_candidates_v1 JSON"
+              value={publicSources}
+            />
+          </label>
+          <div className="source-import-actions source-public-actions">
+            <button
+              className="text-button secondary"
+              disabled={busy || !canPublicLinks}
+              onClick={() => void previewSourceImport(publicSources, topic).catch(() => undefined)}
+              type="button"
+            >
+              <Eye size={15} />
+              <span>Preview links</span>
+            </button>
+            <button
+              className="text-button"
+              disabled={busy || !canPublicLinks}
+              onClick={() => void importSources(publicSources, topic).catch(() => undefined)}
+              type="button"
+            >
+              <Link2 size={15} />
+              <span>Add links</span>
+            </button>
+            <button
+              className="text-button secondary"
+              disabled={busy}
+              onClick={() => void importStarterSources(topic).catch(() => undefined)}
+              type="button"
+            >
+              <Sparkles size={15} />
+              <span>Starter recommendations</span>
+            </button>
+          </div>
+        </section>
       </form>
     </details>
   );

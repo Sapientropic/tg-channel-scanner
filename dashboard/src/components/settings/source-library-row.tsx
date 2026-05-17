@@ -23,6 +23,7 @@ export function SourceLibraryRow({
   const topicInputRef = useRef<HTMLInputElement | null>(null);
   const editorId = `source-topic-editor-${source.source_id.replace(/[^a-z0-9_-]/gi, "-")}`;
   const topicState = sourceTopicsEditState(source.topics, topicText);
+  const sourceNoteSummary = sourceLibraryNoteSummary(source.notes);
 
   // Keep this row as a stable top-level component. The topic editor should not
   // lose typed text or an async save error when the parent panel rerenders for
@@ -44,6 +45,11 @@ export function SourceLibraryRow({
       <div className="source-library-main">
         <strong title={source.label}>{source.label}</strong>
         <small title={`@${source.channel}`}>@{source.channel}</small>
+        {sourceNoteSummary && (
+          <small className="source-library-note" title={source.notes}>
+            {sourceNoteSummary}
+          </small>
+        )}
       </div>
       <div className="source-library-tags" aria-label={`${source.label} topics`}>
         {source.topics.map((topic) => (
@@ -51,6 +57,7 @@ export function SourceLibraryRow({
             {topic}
           </span>
         ))}
+        {source.expected_language && <span title="Expected source language">Lang {source.expected_language}</span>}
         <span title="Recent messages scanned for this source">{source.scan_window_hours}h window</span>
         <span title="Source priority">{source.priority}</span>
       </div>
@@ -155,4 +162,31 @@ export function SourceLibraryRow({
       )}
     </article>
   );
+}
+
+export function sourceLibraryNoteSummary(notes?: string) {
+  const raw = String(notes || "").trim();
+  if (!raw) {
+    return "";
+  }
+  const parts = raw.split(";").map((part) => part.trim()).filter(Boolean);
+  const visible: string[] = [];
+  for (const part of parts) {
+    const [rawKey, ...valueParts] = part.split(":");
+    const key = rawKey.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_");
+    const value = valueParts.join(":").trim();
+    if (key === "direct_page_status" || key === "has_public_messages") {
+      continue;
+    }
+    if (key === "expected_noise" && value) {
+      visible.push(`Noise ${value.toLowerCase()}`);
+      continue;
+    }
+    if (key === "scope" && value) {
+      visible.push(value);
+      continue;
+    }
+    visible.push(part);
+  }
+  return visible.slice(0, 4).join(" · ") || raw;
 }

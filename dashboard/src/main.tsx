@@ -155,6 +155,7 @@ function App() {
     saveNotificationToken,
     clearNotificationToken,
     applyBotIdentity,
+    installMiniAppMenu,
     setBotGatewayAutostart,
   } = useDeliverySettings({
     refresh,
@@ -459,6 +460,7 @@ function App() {
                     saveNotificationToken,
                     clearNotificationToken,
                     applyBotIdentity,
+                    installMiniAppMenu,
                     installBotGatewayAutostart: () => setBotGatewayAutostart(true),
                     removeBotGatewayAutostart: () => setBotGatewayAutostart(false),
                     testDeliveryTarget,

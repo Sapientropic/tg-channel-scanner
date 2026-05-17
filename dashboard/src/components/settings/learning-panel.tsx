@@ -117,6 +117,7 @@ export function LearningPanel({
         setSelectedProfileId={setSelectedProfileId}
         summary={summary}
       />
+      <LearningLoopGuide summary={summary} currentDecisionCount={currentDecisionCount} />
       <FeedbackBreakdown summary={summary} exportableCount={exportableCount} />
       {summary?.next_action && <FeedbackNextAction action={summary.next_action} />}
       <FeedbackFlow summary={summary} />
@@ -173,6 +174,62 @@ export function LearningPanel({
         </div>
       </details>
     </div>
+  );
+}
+
+function LearningLoopGuide({
+  currentDecisionCount,
+  summary,
+}: {
+  currentDecisionCount: number;
+  summary?: DashboardState["feedback_summary"];
+}) {
+  const pendingDraftCount = summary?.pending_profile_diff_count ?? 0;
+  const appliedDraftCount = summary?.applied_profile_diff_count ?? 0;
+  const runsAfterApply = summary?.calibration?.runs_after_latest_apply ?? 0;
+  const feedbackAfterApply = summary?.calibration?.feedback_after_latest_apply ?? 0;
+  const steps = [
+    {
+      label: "Review choices",
+      value: `${currentDecisionCount} ready`,
+      title: "Review tags and notes that can tune profile matching",
+    },
+    {
+      label: "Create draft",
+      value: `${pendingDraftCount} waiting`,
+      title: "Profile drafts waiting for approval",
+    },
+    {
+      label: "Apply draft",
+      value: `${appliedDraftCount} applied`,
+      title: "Profile drafts already applied",
+    },
+    {
+      label: "Run again",
+      value: `${runsAfterApply} ${runsAfterApply === 1 ? "run" : "runs"}`,
+      title: "Runs after the latest applied profile change",
+    },
+    {
+      label: "Calibrate",
+      value: `${feedbackAfterApply} ${feedbackAfterApply === 1 ? "signal" : "signals"}`,
+      title: "Feedback collected after the latest profile change",
+    },
+  ];
+  return (
+    <section className="learning-loop-guide" aria-label="Learning loop progress">
+      <div className="learning-loop-title">
+        <span className="panel-kicker">Learning loop</span>
+        <strong>Feedback becomes profile changes only after review.</strong>
+      </div>
+      <div className="learning-loop-steps">
+        {steps.map((step) => (
+          <span key={step.label} title={step.title}>
+            <strong>{step.label}</strong>
+            <small>{step.value}</small>
+          </span>
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -262,6 +319,12 @@ function ProfileCoachLoop({
           notes
         </span>
       </div>
+      {coachForSelected && (
+        <div className="feedback-breakdown compact" aria-label="Coach matching mode">
+          <span>Confidence {coachForSelected.confidence || "low"}</span>
+          <span>{coachForSelected.llm_used ? "Smart suggestions" : "Local fallback"}</span>
+        </div>
+      )}
       {coachForSelected ? (
         <div className="profile-coach-preview" aria-label="Profile advice">
           {coachForSelected.diagnosis.map((item) => (
@@ -273,6 +336,16 @@ function ProfileCoachLoop({
           {coachForSelected.suspected_false_positive_patterns.length > 0 && (
             <div className="feedback-breakdown compact">
               {coachForSelected.suspected_false_positive_patterns.map((pattern) => <span key={pattern}>{pattern}</span>)}
+            </div>
+          )}
+          {coachForSelected.source_suggestions.length > 0 && (
+            <div className="profile-coach-source-suggestions" aria-label="Source follow-up suggestions">
+              {coachForSelected.source_suggestions.map((item) => (
+                <div className="feedback-next-action" key={`${item.kind}:${item.label}:${item.detail}`}>
+                  <span className="panel-kicker">{item.label}</span>
+                  <small>{item.detail}</small>
+                </div>
+              ))}
             </div>
           )}
           {suggestedRules.length > 0 && (

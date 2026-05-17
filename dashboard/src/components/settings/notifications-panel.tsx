@@ -7,6 +7,7 @@ import { PanelHeader } from "../common";
 import type {
   DeskBotGatewayStatus,
   DeskBotIdentityResult,
+  DeskMiniAppMenuResult,
   DeskNotificationTokenStatus,
   DeliveryChatDetectionResult,
   DeliveryTarget,
@@ -29,6 +30,7 @@ export function NotificationsPanel({
   saveNotificationToken,
   clearNotificationToken,
   applyBotIdentity,
+  installMiniAppMenu,
   installBotGatewayAutostart,
   removeBotGatewayAutostart,
   testDeliveryTarget,
@@ -48,6 +50,7 @@ export function NotificationsPanel({
   saveNotificationToken: (token: string) => Promise<void>;
   clearNotificationToken: () => Promise<void>;
   applyBotIdentity: () => Promise<void>;
+  installMiniAppMenu: (url: string) => Promise<DeskMiniAppMenuResult>;
   installBotGatewayAutostart: () => Promise<void>;
   removeBotGatewayAutostart: () => Promise<void>;
   testDeliveryTarget: (targetId: string, chatId: string) => Promise<void>;
@@ -70,6 +73,7 @@ export function NotificationsPanel({
         busy={busy}
         error={botGatewayError}
         identityResult={botIdentityResult}
+        installMiniAppMenu={installMiniAppMenu}
         installBotGatewayAutostart={installBotGatewayAutostart}
         removeBotGatewayAutostart={removeBotGatewayAutostart}
         status={botGatewayStatus}

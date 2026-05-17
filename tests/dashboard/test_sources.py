@@ -143,6 +143,100 @@ class DashboardSourcesTests(unittest.TestCase):
         self.assertEqual(payload["sources"][0]["topics"], ["jobs"])
 
 
+    def test_packaged_jobs_starter_contains_public_recommendations(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+
+            with patch.object(dashboard_server, "PROJECT_ROOT", root):
+                result = dashboard_server.import_starter_sources({"topic": "jobs"})
+
+            registry = root / ".tgcs" / "sources.json"
+            payload = json.loads(registry.read_text(encoding="utf-8"))
+
+        self.assertGreaterEqual(result["added_count"], 3)
+        self.assertEqual(result["source_count"], result["added_count"])
+        self.assertTrue(
+            all(
+                not str(source["username"]).casefold().startswith("example_")
+                for source in payload["sources"]
+            )
+        )
+        self.assertTrue(all(source["topics"] == ["jobs"] for source in payload["sources"]))
+
+
+    def test_packaged_jobs_starter_preserves_public_recommendation_metadata(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+
+            with patch.object(dashboard_server, "PROJECT_ROOT", root):
+                result = dashboard_server.import_starter_sources({"topic": "jobs"})
+                listed = dashboard_server.desk_sources()
+
+            registry = root / ".tgcs" / "sources.json"
+            payload = json.loads(registry.read_text(encoding="utf-8"))
+
+        self.assertGreaterEqual(result["added_count"], 3)
+        self.assertEqual(result["preview_sources"][0]["label"], "Remote Front-End Jobs")
+        first = payload["sources"][0]
+        self.assertEqual(first["label"], "Remote Front-End Jobs")
+        self.assertEqual(first["expected_language"], "en")
+        self.assertIn("public Telegram page", first["notes"])
+        self.assertEqual(listed["sources"][0]["label"], "Remote Front-End Jobs")
+        self.assertEqual(listed["sources"][0]["expected_language"], "en")
+
+
+    def test_import_starter_sources_removes_existing_example_placeholders(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            registry = root / ".tgcs" / "sources.json"
+            registry.parent.mkdir(parents=True)
+            registry.write_text(
+                json.dumps(
+                    {
+                        "schema_version": "source_registry_v1",
+                        "sources": [
+                            {
+                                "source_id": "telegram:example_remote_jobs",
+                                "username": "example_remote_jobs",
+                                "channel_id": None,
+                                "label": "example_remote_jobs",
+                                "topics": ["jobs"],
+                                "priority": "normal",
+                                "expected_language": "",
+                                "scan_window_hours": 24,
+                                "enabled": False,
+                                "notes": "",
+                            },
+                            {
+                                "source_id": "telegram:kept_real_jobs",
+                                "username": "kept_real_jobs",
+                                "channel_id": None,
+                                "label": "Kept Real Jobs",
+                                "topics": ["jobs"],
+                                "priority": "normal",
+                                "expected_language": "",
+                                "scan_window_hours": 24,
+                                "enabled": True,
+                                "notes": "",
+                            },
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            with patch.object(dashboard_server, "PROJECT_ROOT", root):
+                result = dashboard_server.import_starter_sources({"topic": "jobs"})
+
+            payload = json.loads(registry.read_text(encoding="utf-8"))
+
+        usernames = [source["username"] for source in payload["sources"]]
+        self.assertNotIn("example_remote_jobs", usernames)
+        self.assertIn("kept_real_jobs", usernames)
+        self.assertIn("remote_frontend_jobs", usernames)
+        self.assertEqual(result["removed_count"], 1)
+
+
     def test_desk_source_import_rejects_non_telegram_like_identifiers(self):
         with self.assertRaises(ValueError):
             dashboard_server.preview_desk_source_import(
@@ -155,6 +249,64 @@ class DashboardSourcesTests(unittest.TestCase):
             dashboard_server.preview_desk_source_import({"sources": "  \n# only comments", "topic": "jobs"})
         with self.assertRaises(ValueError):
             dashboard_server.preview_desk_source_import({"sources": "remote_jobs", "topic": "../private"})
+
+
+    def test_desk_source_import_accepts_public_candidate_metadata_json(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            candidates = {
+                "schema_version": "public_source_candidates_v1",
+                "topic": "jobs",
+                "candidates": [
+                    {
+                        "handle": "@remote_jobs",
+                        "url": "https://t.me/remote_jobs",
+                        "title": "Remote Jobs",
+                        "language": "en",
+                        "source_of_recommendation": "public catalog",
+                    },
+                    {
+                        "channel": "frontend_jobs",
+                        "notes": "metadata only",
+                    },
+                ],
+            }
+            with patch.object(dashboard_server, "PROJECT_ROOT", root):
+                preview = dashboard_server.preview_desk_source_import(
+                    {"sources": json.dumps(candidates), "topic": "jobs"}
+                )
+                applied = dashboard_server.import_desk_sources({"sources": json.dumps(candidates), "topic": "jobs"})
+                listed = dashboard_server.desk_sources()
+
+            registry = root / ".tgcs" / "sources.json"
+            payload = json.loads(registry.read_text(encoding="utf-8"))
+
+        self.assertFalse(preview["written"])
+        self.assertEqual(preview["added_count"], 2)
+        self.assertTrue(applied["written"])
+        self.assertEqual([source["username"] for source in payload["sources"]], ["remote_jobs", "frontend_jobs"])
+        self.assertEqual(payload["sources"][0]["label"], "Remote Jobs")
+        self.assertEqual(payload["sources"][0]["expected_language"], "en")
+        self.assertIn("public catalog", payload["sources"][0]["notes"])
+        self.assertEqual(payload["sources"][0]["topics"], ["jobs"])
+        self.assertEqual(listed["sources"][0]["expected_language"], "en")
+        self.assertIn("public catalog", listed["sources"][0]["notes"])
+
+
+    def test_desk_source_import_rejects_public_candidate_message_bodies(self):
+        candidates = {
+            "schema_version": "public_source_candidates_v1",
+            "candidates": [
+                {
+                    "handle": "@remote_jobs",
+                    "quality_hints": {
+                        "raw_text": "raw Telegram post body should not be part of source recommendations"
+                    },
+                }
+            ],
+        }
+        with self.assertRaisesRegex(ValueError, "must not include Telegram message text"):
+            dashboard_server.preview_desk_source_import({"sources": json.dumps(candidates), "topic": "jobs"})
 
 
     def test_desk_source_import_merges_topic_into_existing_registry(self):

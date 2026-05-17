@@ -5,6 +5,7 @@ import {
   clearDeskNotificationToken as clearDeskNotificationTokenRequest,
   detectDeskDeliveryChatId,
   errorMessage,
+  installDeskMiniAppMenu as installDeskMiniAppMenuRequest,
   loadDeskBotGatewayStatus,
   loadDeskNotificationTokenStatus,
   saveDeskDeliveryTarget,
@@ -17,6 +18,7 @@ import type {
   DeskActionResult,
   DeskBotGatewayStatus,
   DeskBotIdentityResult,
+  DeskMiniAppMenuResult,
   DeskNotificationTokenStatus,
 } from "../domain/types";
 
@@ -191,6 +193,25 @@ export function useDeliverySettings({ refresh, runAction, setBusy, setNotice }: 
     }
   }
 
+  async function installMiniAppMenu(url: string): Promise<DeskMiniAppMenuResult> {
+    setBusy(true);
+    setNotice(null);
+    try {
+      const result = await installDeskMiniAppMenuRequest(url);
+      await refreshBotGatewayStatus().catch((error) => setBotGatewayError(errorMessage(error)));
+      setBotGatewayError(null);
+      setNotice({ tone: "success", text: "Mini App enabled in Telegram" });
+      return result;
+    } catch (error) {
+      const message = errorMessage(error);
+      setBotGatewayError(message);
+      setNotice({ tone: "error", text: message });
+      throw error;
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function setBotGatewayAutostart(enabled: boolean) {
     setBusy(true);
     setNotice(null);
@@ -229,6 +250,7 @@ export function useDeliverySettings({ refresh, runAction, setBusy, setNotice }: 
     saveNotificationToken,
     clearNotificationToken,
     applyBotIdentity,
+    installMiniAppMenu,
     setBotGatewayAutostart,
   };
 }

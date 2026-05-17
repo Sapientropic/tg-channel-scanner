@@ -12,13 +12,14 @@ import subprocess
 import socket
 import sys
 import webbrowser
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from threading import Lock
+from typing import Any
 from urllib.parse import unquote, urlparse
 from urllib.request import urlopen
 
@@ -40,6 +41,8 @@ try:
         desk_get_routes,
         desk_git,
         desk_http_security,
+        desk_miniapp,
+        desk_miniapp_routes,
         desk_operation_routes,
         desk_profiles,
         desk_profile_post_routes,
@@ -77,6 +80,8 @@ except ModuleNotFoundError:
         desk_get_routes,
         desk_git,
         desk_http_security,
+        desk_miniapp,
+        desk_miniapp_routes,
         desk_operation_routes,
         desk_profiles,
         desk_profile_post_routes,
@@ -317,6 +322,7 @@ def select_dashboard_server(
     port: int,
     auto_port: bool,
     handler_cls: type[BaseHTTPRequestHandler] | None = None,
+    reuse_existing: bool = True,
 ) -> DashboardServerSelection:
     if handler_cls is None:
         handler_cls = DashboardHandler
@@ -328,6 +334,7 @@ def select_dashboard_server(
         server_cls=ThreadingHTTPServer,
         fetch_health_fn=fetch_compatible_desk_health,
         is_port_listening_fn=is_tcp_port_listening,
+        reuse_existing=reuse_existing,
     )
 
 
@@ -571,12 +578,24 @@ def apply_desk_bot_identity() -> dict:
         from scripts import bot_gateway
 
     try:
-        return bot_gateway.apply_bot_identity()
+        return bot_gateway.apply_bot_identity(preserve_menu_button=True)
     except bot_gateway.BotGatewayError as exc:
         raise ValueError(str(exc)) from exc
 
 
+def install_desk_miniapp_menu(body: Mapping[str, Any]) -> dict:
+    try:
+        from scripts import bot_gateway
+    except ModuleNotFoundError:
+        _PROJECT_ROOT = str(PROJECT_ROOT)
+        if _PROJECT_ROOT not in sys.path:
+            sys.path.insert(0, _PROJECT_ROOT)
+        from scripts import bot_gateway
 
+    try:
+        return bot_gateway.install_miniapp_menu(str(body.get("url") or ""), text="Review")
+    except bot_gateway.BotGatewayError as exc:
+        raise ValueError(str(exc)) from exc
 
 
 _reject_unexpected_source_fields = _desk_sources_module._reject_unexpected_source_fields
@@ -852,8 +871,22 @@ def dashboard_state_payload(conn) -> dict:
     )
 
 
+def authorize_miniapp_request(handler) -> dict:
+    auth = desk_miniapp.authorize_miniapp_request(
+        handler,
+        is_loopback_address_fn=is_loopback_address,
+        allow_loopback_preview=getattr(handler, "miniapp_allow_loopback_preview", True),
+    )
+    if getattr(handler, "miniapp_only", False):
+        auth["miniapp_only"] = True
+    return auth
+
+
 def resolve_static_path(request_path: str, *, static_dir: Path) -> Path:
-    relative = "index.html" if request_path in {"", "/"} else unquote(request_path.lstrip("/"))
+    if request_path in {"/miniapp", "/miniapp/"}:
+        relative = "miniapp.html"
+    else:
+        relative = "index.html" if request_path in {"", "/"} else unquote(request_path.lstrip("/"))
     candidate = (static_dir / relative).resolve()
     static_root = static_dir.resolve()
     try:
@@ -865,9 +898,38 @@ def resolve_static_path(request_path: str, *, static_dir: Path) -> Path:
     return candidate
 
 
+def is_miniapp_only_get_path(path: str) -> bool:
+    return (
+        path in {"/miniapp", "/miniapp/", "/tgcs-signal-icon.png"}
+        or path.startswith("/api/miniapp/")
+        or path.startswith("/assets/")
+    )
+
+
+def miniapp_static_asset_paths(static_dir: Path) -> set[str]:
+    try:
+        html = (static_dir / "miniapp.html").read_text(encoding="utf-8")
+    except OSError:
+        return set()
+    return {
+        match.group(1)
+        for match in re.finditer(r"""(?:src|href)=["'](/assets/[^"']+)["']""", html)
+    }
+
+
+def is_miniapp_only_static_asset_path(path: str, *, miniapp_asset_paths: set[str]) -> bool:
+    if path in {"/miniapp", "/miniapp/", "/tgcs-signal-icon.png"}:
+        return True
+    if not path.startswith("/assets/"):
+        return False
+    return path in miniapp_asset_paths
+
+
 class DashboardHandler(BaseHTTPRequestHandler):
     db_path: Path
     static_dir: Path
+    miniapp_only: bool = False
+    miniapp_allow_loopback_preview: bool = True
 
     def log_message(self, format: str, *args) -> None:  # noqa: A002
         print(f"[dashboard] {self.address_string()} - {format % args}", file=sys.stderr)
@@ -919,6 +981,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
     def _require_loopback_access(self, feature: str) -> None:
         desk_http_security.require_loopback_access(
             client_address=getattr(self, "client_address", ("127.0.0.1", 0)),
+            headers=getattr(self, "headers", None),
             feature=feature,
             is_loopback_address_fn=is_loopback_address,
         )
@@ -926,6 +989,17 @@ class DashboardHandler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:  # noqa: N802
         parsed = urlparse(self.path)
         try:
+            if getattr(self, "miniapp_only", False) and not is_miniapp_only_get_path(parsed.path):
+                self._json(HTTPStatus.NOT_FOUND, {"ok": False, "error": "miniapp_only"})
+                return
+            if desk_miniapp_routes.handle_miniapp_get_route(
+                self,
+                parsed.path,
+                authorize_request=authorize_miniapp_request,
+                close_after_use=close_after_use,
+                miniapp_state=desk_miniapp.miniapp_state,
+            ):
+                return
             if desk_get_routes.handle_get_route(
                 self,
                 parsed.path,
@@ -957,6 +1031,30 @@ class DashboardHandler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:  # noqa: N802
         parsed = urlparse(self.path)
         try:
+            if parsed.path.startswith("/api/miniapp/"):
+                if desk_miniapp.telegram_init_data_from_headers(getattr(self, "headers", None)):
+                    content_type = str(self.headers.get("Content-Type") or "").split(";", 1)[0].strip().lower()
+                    if content_type != "application/json":
+                        raise ValueError("Telegram Mini App POST requests require application/json.")
+                else:
+                    DashboardHandler._require_post_request_integrity(self)
+                if not desk_miniapp_routes.is_miniapp_post_route(parsed.path):
+                    self._json(HTTPStatus.NOT_FOUND, {"ok": False, "error": "miniapp_not_found"})
+                    return
+                body = self._read_json_body()
+                if desk_miniapp_routes.handle_miniapp_post_route(
+                    self,
+                    parsed.path,
+                    body,
+                    authorize_request=authorize_miniapp_request,
+                    close_after_use=close_after_use,
+                    monitor_state_module=monitor_state,
+                    import_starter_sources=import_starter_sources,
+                ):
+                    return
+            if getattr(self, "miniapp_only", False):
+                self._json(HTTPStatus.NOT_FOUND, {"ok": False, "error": "miniapp_only"})
+                return
             DashboardHandler._require_post_request_integrity(self)
             body = self._read_json_body()
             if desk_settings_routes.handle_settings_post_route(
@@ -971,6 +1069,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 telegram_cancel_login=telegram_cancel_login,
                 update_desk_notification_token=update_desk_notification_token,
                 apply_desk_bot_identity=apply_desk_bot_identity,
+                install_desk_miniapp_menu=install_desk_miniapp_menu,
                 update_desk_ai_settings=update_desk_ai_settings,
                 save_desk_delivery_target=save_desk_delivery_target,
                 test_desk_delivery_target=test_desk_delivery_target,
@@ -1044,6 +1143,12 @@ class DashboardHandler(BaseHTTPRequestHandler):
             )
 
     def _serve_static(self, request_path: str) -> None:
+        if getattr(self, "miniapp_only", False) and not is_miniapp_only_static_asset_path(
+            request_path,
+            miniapp_asset_paths=miniapp_static_asset_paths(self.static_dir),
+        ):
+            self._json(HTTPStatus.NOT_FOUND, {"ok": False, "error": "miniapp_only_asset"})
+            return
         if not self.static_dir.exists():
             self._json(
                 HTTPStatus.NOT_FOUND,
@@ -1100,6 +1205,16 @@ def build_parser() -> argparse.ArgumentParser:
         help="Use an existing compatible Signal Desk or try the next free port through 8799.",
     )
     parser.add_argument("--static-dir", default="dashboard/dist")
+    parser.add_argument(
+        "--miniapp-only",
+        action="store_true",
+        help="Serve only Telegram Mini App static assets and /api/miniapp/* routes. Use this for public HTTPS tunnels.",
+    )
+    parser.add_argument(
+        "--miniapp-allow-loopback-preview",
+        action="store_true",
+        help="Allow no-initData loopback Mini App API preview even in --miniapp-only mode. Use only for local QA.",
+    )
     parser.add_argument("--open", dest="open_browser", action="store_true", help="Open Signal Desk in the default browser.")
     agent_cli.add_format_argument(parser)
     return parser
@@ -1116,8 +1231,17 @@ def main(argv: list[str] | None = None) -> int:
         static_dir = CODE_ROOT / static_dir
     DashboardHandler.db_path = db_path
     DashboardHandler.static_dir = static_dir
+    DashboardHandler.miniapp_only = bool(args.miniapp_only)
+    DashboardHandler.miniapp_allow_loopback_preview = bool(
+        args.miniapp_allow_loopback_preview or not args.miniapp_only
+    )
     try:
-        selection = select_dashboard_server(host=args.host, port=args.port, auto_port=args.auto_port)
+        selection = select_dashboard_server(
+            host=args.host,
+            port=args.port,
+            auto_port=args.auto_port,
+            reuse_existing=not args.miniapp_only,
+        )
     except OSError as exc:
         message = f"Signal Desk could not use port {args.port}: {exc}"
         agent_cli.emit_error(
@@ -1139,6 +1263,7 @@ def main(argv: list[str] | None = None) -> int:
             "db_path": str(db_path),
             "port": selection.port,
             "reused_existing": selection.reused_existing,
+            "miniapp_only": bool(args.miniapp_only),
         }
         if warning:
             payload["warning"] = warning
@@ -1151,7 +1276,8 @@ def main(argv: list[str] | None = None) -> int:
         if selection.reused_existing:
             print(f"Signal Desk is already running on {url}")
         else:
-            print(f"T-Sense dashboard listening on {url}")
+            label = "T-Sense Mini App boundary" if args.miniapp_only else "T-Sense dashboard"
+            print(f"{label} listening on {url}")
         if args.open_browser:
             if webbrowser.open(url, new=2):
                 print("Opened Signal Desk in your browser.")

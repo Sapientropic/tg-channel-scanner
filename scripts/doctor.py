@@ -459,11 +459,19 @@ def check_dashboard_assets() -> CheckResult:
     dashboard_dir = PROJECT_ROOT / "dashboard"
     static_dir = dashboard_dir / "dist"
     index_path = static_dir / "index.html"
+    miniapp_path = static_dir / "miniapp.html"
     if index_path.exists():
+        if not miniapp_path.exists():
+            return _warn(
+                "dashboard_assets",
+                "Dashboard static assets are built but the Mini App entry is missing.",
+                "Run npm run build in dashboard, or rerun tgcs dashboard to rebuild dashboard/dist.",
+                details={"static_dir": str(static_dir), "miniapp_entry": False},
+            )
         return _pass(
             "dashboard_assets",
             "Dashboard static assets are built.",
-            details={"static_dir": str(static_dir)},
+            details={"static_dir": str(static_dir), "miniapp_entry": True},
         )
     if not (dashboard_dir / "package.json").exists():
         return _warn(
@@ -488,6 +496,43 @@ def check_dashboard_assets() -> CheckResult:
         "Dashboard static assets are not built and npm was not found.",
         "Install Node.js 20.19+ or 22.12+ with npm before first dashboard launch, or build dashboard/dist on another machine.",
         details={"static_dir": str(static_dir), "auto_build": False},
+    )
+
+
+def _miniapp_acceptance_details(static_entry: bool, source_entry: bool) -> dict:
+    return {
+        "source_entry": source_entry,
+        "static_entry": static_entry,
+        "local_preview_path": "/miniapp",
+        "miniapp_only_command": "tgcs dashboard --miniapp-only --port 8778",
+        "menu_dry_run_command": "tgcs bot install-miniapp-menu --url <public-https>/miniapp --text Review --dry-run",
+        "requires_public_https_url": True,
+    }
+
+
+def check_miniapp_acceptance() -> CheckResult:
+    dashboard_dir = PROJECT_ROOT / "dashboard"
+    source_entry = (dashboard_dir / "miniapp.html").exists()
+    static_entry = (dashboard_dir / "dist" / "miniapp.html").exists()
+    details = _miniapp_acceptance_details(static_entry, source_entry)
+    if not source_entry:
+        return _warn(
+            "miniapp_acceptance",
+            "Mini App source entry is missing.",
+            "Use a full checkout that includes dashboard/miniapp.html before Mini App acceptance.",
+            details=details,
+        )
+    if not static_entry:
+        return _warn(
+            "miniapp_acceptance",
+            "Mini App static entry is not built.",
+            "Run tgcs dashboard or npm run build in dashboard, then open /miniapp for local acceptance.",
+            details=details,
+        )
+    return _pass(
+        "miniapp_acceptance",
+        "Mini App local acceptance entry is ready.",
+        details=details,
     )
 
 
@@ -552,6 +597,7 @@ def run_checks(args) -> list[CheckResult]:
         check_llm_provider(),
         check_media_dependencies(),
         check_dashboard_assets(),
+        check_miniapp_acceptance(),
         check_output_directory(args.output_dir),
     ]
     if args.channel_list:

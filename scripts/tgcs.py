@@ -399,6 +399,16 @@ def build_parser() -> argparse.ArgumentParser:
     dashboard.add_argument("--db")
     dashboard.add_argument("--static-dir")
     dashboard.add_argument("--no-build", action="store_true", help="Do not auto-build dashboard/dist before serving.")
+    dashboard.add_argument(
+        "--miniapp-only",
+        action="store_true",
+        help="Serve only /miniapp and /api/miniapp/*; use for public HTTPS tunnels instead of exposing the full dashboard.",
+    )
+    dashboard.add_argument(
+        "--miniapp-allow-loopback-preview",
+        action="store_true",
+        help="Allow no-initData loopback Mini App API preview in --miniapp-only mode. Use only for local QA.",
+    )
     dashboard.add_argument("--open", action="store_true", help="Open Signal Desk in the default browser after the server starts.")
     dashboard.set_defaults(func=run_dashboard)
 
@@ -444,6 +454,18 @@ def build_parser() -> argparse.ArgumentParser:
     bot_run.set_defaults(func=run_bot)
     bot_menu = bot_subparsers.add_parser("install-menu", help="Install the Telegram Bot command menu.")
     bot_menu.set_defaults(func=run_bot)
+    bot_miniapp_menu = bot_subparsers.add_parser("install-miniapp-menu", help="Install a Telegram Mini App menu button.")
+    bot_miniapp_menu.add_argument("--url", required=True, help="Public HTTPS URL that serves the Mini App.")
+    bot_miniapp_menu.add_argument("--text", default="Review", help="Telegram menu button text.")
+    bot_miniapp_menu.add_argument("--dry-run", action="store_true", help="Validate the URL and text without calling Bot API.")
+    bot_miniapp_menu.set_defaults(func=run_bot)
+    bot_identity = bot_subparsers.add_parser("apply-identity", help="Apply T-Sense bot identity settings.")
+    bot_identity.add_argument(
+        "--preserve-menu-button",
+        action="store_true",
+        help="Keep an existing Mini App menu button while updating bot name, descriptions, commands, and avatar.",
+    )
+    bot_identity.set_defaults(func=run_bot)
     bot_install_autostart = bot_subparsers.add_parser("install-autostart", help="Start the local Bot Gateway automatically at login.")
     bot_install_autostart.set_defaults(func=run_bot)
     bot_remove_autostart = bot_subparsers.add_parser("remove-autostart", help="Remove the local Bot Gateway login task.")

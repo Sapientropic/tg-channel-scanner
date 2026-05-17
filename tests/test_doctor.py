@@ -256,12 +256,30 @@ class DoctorTests(unittest.TestCase):
             root = Path(tmp)
             (root / "dashboard" / "dist").mkdir(parents=True)
             (root / "dashboard" / "dist" / "index.html").write_text("<html></html>", encoding="utf-8")
+            (root / "dashboard" / "dist" / "miniapp.html").write_text("<html></html>", encoding="utf-8")
 
             with patch.object(doctor, "PROJECT_ROOT", root):
                 result = doctor.check_dashboard_assets()
 
         self.assertEqual(result.status, "pass")
         self.assertEqual(Path(result.details["static_dir"]), root / "dashboard" / "dist")
+        self.assertTrue(result.details["miniapp_entry"])
+
+    def test_dashboard_assets_warns_when_miniapp_entry_is_missing(self):
+        from scripts import doctor
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "dashboard" / "dist").mkdir(parents=True)
+            (root / "dashboard" / "dist" / "index.html").write_text("<html></html>", encoding="utf-8")
+
+            with patch.object(doctor, "PROJECT_ROOT", root):
+                result = doctor.check_dashboard_assets()
+
+        self.assertEqual(result.status, "warn")
+        self.assertIn("Mini App entry is missing", result.message)
+        self.assertIn("npm run build", result.next_step)
+        self.assertFalse(result.details["miniapp_entry"])
 
     def test_dashboard_assets_warns_with_auto_build_next_step(self):
         from scripts import doctor
@@ -313,6 +331,39 @@ class DoctorTests(unittest.TestCase):
         self.assertEqual(result.status, "warn")
         self.assertIn("Node.js 20.19+", result.next_step)
         self.assertFalse(result.details["auto_build"])
+
+    def test_miniapp_acceptance_passes_with_source_and_static_entry(self):
+        from scripts import doctor
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "dashboard" / "dist").mkdir(parents=True)
+            (root / "dashboard" / "miniapp.html").write_text("<html></html>", encoding="utf-8")
+            (root / "dashboard" / "dist" / "miniapp.html").write_text("<html></html>", encoding="utf-8")
+
+            with patch.object(doctor, "PROJECT_ROOT", root):
+                result = doctor.check_miniapp_acceptance()
+
+        self.assertEqual(result.status, "pass")
+        self.assertIn("--miniapp-only", result.details["miniapp_only_command"])
+        self.assertIn("--dry-run", result.details["menu_dry_run_command"])
+        self.assertTrue(result.details["requires_public_https_url"])
+
+    def test_miniapp_acceptance_warns_when_static_entry_is_missing(self):
+        from scripts import doctor
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "dashboard").mkdir()
+            (root / "dashboard" / "miniapp.html").write_text("<html></html>", encoding="utf-8")
+
+            with patch.object(doctor, "PROJECT_ROOT", root):
+                result = doctor.check_miniapp_acceptance()
+
+        self.assertEqual(result.status, "warn")
+        self.assertIn("Mini App static entry is not built", result.message)
+        self.assertIn("tgcs dashboard", result.next_step)
+        self.assertFalse(result.details["static_entry"])
 
 
 if __name__ == "__main__":

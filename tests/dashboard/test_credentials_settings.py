@@ -758,12 +758,34 @@ print(json.dumps({
             handler = FakeHandler()
             dashboard_server.DashboardHandler.do_POST(handler)
 
-        apply_mock.assert_called_once_with()
+        apply_mock.assert_called_once_with(preserve_menu_button=True)
         self.assertEqual(handler.status, HTTPStatus.OK)
         self.assertEqual(handler.payload["identity"], result)
         rendered = json.dumps(handler.payload, ensure_ascii=False)
         self.assertNotIn("token", rendered.lower())
         self.assertNotIn("chat", rendered.lower())
+
+
+    def test_bot_identity_endpoint_rejects_unexpected_fields(self):
+        class FakeHandler:
+            path = "/api/desk/bot-identity/apply"
+            client_address = ("127.0.0.1", 12345)
+            status = None
+            payload = None
+
+            def _read_json_body(self):
+                return {"command": "reset-menu"}
+
+            def _json(self, status, payload):
+                self.status = status
+                self.payload = payload
+
+        handler = FakeHandler()
+
+        dashboard_server.DashboardHandler.do_POST(handler)
+
+        self.assertEqual(handler.status, HTTPStatus.BAD_REQUEST)
+        self.assertIn("Unsupported Bot identity field", handler.payload["error"])
 
 
     def test_notification_token_status_prefers_env_without_echoing_token(self):

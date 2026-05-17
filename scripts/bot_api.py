@@ -9,8 +9,10 @@ import secrets
 import sys
 import urllib.error
 import urllib.request
+from ipaddress import ip_address
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 try:
     from scripts import bot_actions, delivery
@@ -49,6 +51,8 @@ BOT_DESCRIPTION = (
 )
 BOT_SHORT_DESCRIPTION = "Local-first Telegram signal desk."
 BOT_AVATAR_PATH = PROJECT_ROOT / "docs" / "brand" / "bot-avatar.jpg"
+BOT_MINIAPP_MENU_SCHEMA_VERSION = "bot_miniapp_menu_result_v1"
+BOT_MINIAPP_MENU_TEXT_MAX_LENGTH = 64
 
 
 
@@ -179,6 +183,18 @@ class TelegramBotApi:
     def set_chat_menu_button(self) -> None:
         self.request("setChatMenuButton", {"menu_button": {"type": "commands"}})
 
+    def set_miniapp_menu_button(self, *, text: str, url: str) -> None:
+        self.request(
+            "setChatMenuButton",
+            {
+                "menu_button": {
+                    "type": "web_app",
+                    "text": clean_miniapp_menu_text(text),
+                    "web_app": {"url": clean_miniapp_menu_url(url)},
+                }
+            },
+        )
+
     def set_my_profile_photo(self, photo_path: Path | str) -> None:
         path = Path(photo_path)
         if path.suffix.casefold() not in {".jpg", ".jpeg"}:
@@ -222,8 +238,64 @@ def load_bot_token() -> str:
     return token
 
 
+def clean_miniapp_menu_text(value: str) -> str:
+    text = " ".join(str(value or "").split()) or "Review"
+    if len(text) > BOT_MINIAPP_MENU_TEXT_MAX_LENGTH:
+        raise BotGatewayError("Telegram Mini App menu text is too long.")
+    return text
 
-def apply_bot_identity(api: TelegramBotApi | None = None) -> dict[str, Any]:
+
+def clean_miniapp_menu_url(value: str) -> str:
+    url = str(value or "").strip()
+    try:
+        parsed = urlparse(url)
+    except ValueError as exc:
+        raise BotGatewayError("Telegram Mini App URL is invalid.") from exc
+    if parsed.scheme != "https" or not parsed.netloc:
+        raise BotGatewayError("Telegram Mini App URL must be an HTTPS URL.")
+    hostname = (parsed.hostname or "").casefold()
+    if hostname in {"localhost", "127.0.0.1", "::1"} or hostname.endswith(".localhost"):
+        raise BotGatewayError("Telegram Mini App URL must be public HTTPS, not localhost.")
+    try:
+        address = ip_address(hostname.strip("[]"))
+    except ValueError:
+        address = None
+    if address is not None and not address.is_global:
+        raise BotGatewayError("Telegram Mini App URL must be public HTTPS, not a private address.")
+    return url
+
+
+def install_miniapp_menu(
+    url: str,
+    *,
+    api: TelegramBotApi | None = None,
+    text: str = "Review",
+    dry_run: bool = False,
+) -> dict[str, Any]:
+    clean_url = clean_miniapp_menu_url(url)
+    clean_text = clean_miniapp_menu_text(text)
+    if dry_run:
+        return {
+            "schema_version": BOT_MINIAPP_MENU_SCHEMA_VERSION,
+            "menu_button_updated": False,
+            "dry_run": True,
+            "text": clean_text,
+            "url": clean_url,
+            "next_step": "Run the same command without --dry-run when this public HTTPS Mini App URL is ready.",
+        }
+    bot_api = api or TelegramBotApi(load_bot_token())
+    bot_api.set_miniapp_menu_button(text=clean_text, url=clean_url)
+    return {
+        "schema_version": BOT_MINIAPP_MENU_SCHEMA_VERSION,
+        "menu_button_updated": True,
+        "dry_run": False,
+        "text": clean_text,
+        "url": clean_url,
+    }
+
+
+
+def apply_bot_identity(api: TelegramBotApi | None = None, *, preserve_menu_button: bool = False) -> dict[str, Any]:
     bot_api = api or TelegramBotApi(load_bot_token())
     steps: dict[str, dict[str, Any]] = {}
 
@@ -245,7 +317,10 @@ def apply_bot_identity(api: TelegramBotApi | None = None) -> dict[str, Any]:
     run_step("description", lambda: bot_api.set_my_description(BOT_DESCRIPTION))
     run_step("short_description", lambda: bot_api.set_my_short_description(BOT_SHORT_DESCRIPTION))
     run_step("commands", bot_api.set_my_commands)
-    run_step("menu_button", bot_api.set_chat_menu_button)
+    if preserve_menu_button:
+        steps["menu_button"] = {"ok": True, "error": "", "mode": "preserved"}
+    else:
+        run_step("menu_button", bot_api.set_chat_menu_button)
     run_step("profile_photo", lambda: bot_api.set_my_profile_photo(BOT_AVATAR_PATH))
     return {
         "schema_version": "bot_identity_apply_result_v1",
@@ -253,7 +328,8 @@ def apply_bot_identity(api: TelegramBotApi | None = None) -> dict[str, Any]:
         "description_updated": bool(steps["description"]["ok"]),
         "short_description_updated": bool(steps["short_description"]["ok"]),
         "commands_installed": bool(steps["commands"]["ok"]),
-        "menu_button_updated": bool(steps["menu_button"]["ok"]),
+        "menu_button_updated": bool(steps["menu_button"]["ok"] and not preserve_menu_button),
+        "menu_button_mode": "preserved" if preserve_menu_button else "commands",
         "profile_photo_updated": bool(steps["profile_photo"]["ok"]),
         "steps": steps,
     }

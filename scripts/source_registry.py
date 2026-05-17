@@ -13,6 +13,7 @@ import os
 import re
 import sys
 from pathlib import Path
+from typing import Any
 
 try:
     from scripts import agent_cli
@@ -103,6 +104,25 @@ def source_from_channel(value: str) -> dict:
         "enabled": True,
         "notes": "",
     }
+
+
+def _source_metadata_for(channel: str, source_metadata: dict[str, dict[str, Any]] | None) -> dict[str, Any]:
+    if not source_metadata:
+        return {}
+    return source_metadata.get(normalize_channel_name(channel).casefold(), {})
+
+
+def apply_source_metadata(source: dict, metadata: dict[str, Any]) -> bool:
+    if not isinstance(metadata, dict):
+        return False
+    changed = False
+    for field in ("label", "expected_language", "notes"):
+        value = str(metadata.get(field) or "").strip()
+        if not value or source.get(field) == value:
+            continue
+        source[field] = value
+        changed = True
+    return changed
 
 
 def normalize_topics(values: list[str] | None) -> list[str]:
@@ -293,6 +313,7 @@ def import_channels(
     dry_run: bool = False,
     topics: list[str] | None = None,
     input_path: str = "pasted sources",
+    source_metadata: dict[str, dict[str, Any]] | None = None,
 ) -> dict:
     normalized_topics = normalize_topics(topics)
     payload = load_registry(registry_path, missing_ok=True)
@@ -306,11 +327,14 @@ def import_channels(
     unchanged: list[dict] = []
     for channel in channels:
         source = source_from_channel(channel)
+        metadata = _source_metadata_for(channel, source_metadata)
+        apply_source_metadata(source, metadata)
         if normalized_topics:
             source["topics"] = list(normalized_topics)
         existing_source = existing.get(source["source_id"])
         if existing_source:
-            if merge_source_topics(existing_source, normalized_topics):
+            metadata_changed = apply_source_metadata(existing_source, metadata)
+            if merge_source_topics(existing_source, normalized_topics) or metadata_changed:
                 updated.append(existing_source)
             else:
                 unchanged.append(existing_source)

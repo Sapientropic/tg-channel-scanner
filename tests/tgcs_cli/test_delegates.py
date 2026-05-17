@@ -86,6 +86,56 @@ class TgcsDelegateTests(unittest.TestCase):
         self.assertIn("--auto-port", cmd)
         self.assertIn("8765", cmd)
 
+    def test_dashboard_miniapp_only_flag_delegates_to_dashboard_server(self):
+        tgcs = load_tgcs_module(self)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "dashboard" / "dist").mkdir(parents=True)
+            (root / "dashboard" / "dist" / "miniapp.html").write_text("<html></html>", encoding="utf-8")
+
+            def fake_run(cmd, check=False):
+                return subprocess.CompletedProcess(cmd, 0)
+
+            with patch.object(tgcs, "PACKAGE_ROOT", root):
+                with patch.object(tgcs, "PROJECT_ROOT", root):
+                    with patch.object(tgcs.subprocess, "run", side_effect=fake_run) as run_mock:
+                        exit_code = tgcs.main(["dashboard", "--miniapp-only", "--port", "8778"])
+
+        self.assertEqual(exit_code, 0)
+        cmd = [str(part) for part in run_mock.call_args.args[0]]
+        self.assertIn("--miniapp-only", cmd)
+        self.assertIn("8778", cmd)
+
+    def test_dashboard_miniapp_loopback_preview_flag_delegates_to_dashboard_server(self):
+        tgcs = load_tgcs_module(self)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "dashboard" / "dist").mkdir(parents=True)
+            (root / "dashboard" / "dist" / "miniapp.html").write_text("<html></html>", encoding="utf-8")
+
+            def fake_run(cmd, check=False):
+                return subprocess.CompletedProcess(cmd, 0)
+
+            with patch.object(tgcs, "PACKAGE_ROOT", root):
+                with patch.object(tgcs, "PROJECT_ROOT", root):
+                    with patch.object(tgcs.subprocess, "run", side_effect=fake_run) as run_mock:
+                        exit_code = tgcs.main(
+                            [
+                                "dashboard",
+                                "--miniapp-only",
+                                "--miniapp-allow-loopback-preview",
+                                "--port",
+                                "8778",
+                            ]
+                        )
+
+        self.assertEqual(exit_code, 0)
+        cmd = [str(part) for part in run_mock.call_args.args[0]]
+        self.assertIn("--miniapp-only", cmd)
+        self.assertIn("--miniapp-allow-loopback-preview", cmd)
+
     def test_dashboard_auto_builds_missing_static_assets_before_serving(self):
         tgcs = load_tgcs_module(self)
 
@@ -110,6 +160,32 @@ class TgcsDelegateTests(unittest.TestCase):
         self.assertEqual(calls[2][0][1:], ["run", "build"])
         self.assertEqual(calls[1][1], root / "dashboard")
         self.assertEqual(calls[2][1], root / "dashboard")
+
+    def test_dashboard_miniapp_only_auto_builds_when_miniapp_entry_is_missing(self):
+        tgcs = load_tgcs_module(self)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "dashboard" / "dist").mkdir(parents=True)
+            (root / "dashboard" / "dist" / "index.html").write_text("<html></html>", encoding="utf-8")
+            calls = []
+
+            def fake_run(cmd, check=False, cwd=None, **kwargs):
+                calls.append((cmd, cwd))
+                stdout = "v22.12.0\n" if cmd[:2] == ["node", "--version"] else ""
+                return subprocess.CompletedProcess(cmd, 0, stdout=stdout)
+
+            with patch.object(tgcs, "PACKAGE_ROOT", root):
+                with patch.object(tgcs, "PROJECT_ROOT", root):
+                    with patch.object(tgcs.subprocess, "run", side_effect=fake_run):
+                        exit_code = tgcs.main(["dashboard", "--miniapp-only", "--port", "8778"])
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual([call[0][0] for call in calls], ["node", "npm", "npm", str(tgcs._python())])
+        self.assertEqual(calls[1][0][1:], ["ci"])
+        self.assertEqual(calls[2][0][1:], ["run", "build"])
+        server_cmd = [str(part) for part in calls[-1][0]]
+        self.assertIn("--miniapp-only", server_cmd)
 
     def test_dashboard_no_build_skips_missing_static_asset_build(self):
         tgcs = load_tgcs_module(self)

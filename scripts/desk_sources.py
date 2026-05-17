@@ -343,7 +343,7 @@ def apply_source_access_repair(action_id: str, *, body: dict | None = None) -> d
     )
 
 
-def _desk_sources_from_body(body: dict) -> tuple[list[str], str]:
+def _desk_sources_from_body(body: dict) -> tuple[list[str], str, str, dict[str, dict]]:
     _sync_source_registry_context()
     return desk_source_registry._desk_sources_from_body(body)
 

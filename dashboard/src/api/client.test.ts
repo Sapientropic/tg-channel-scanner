@@ -18,7 +18,10 @@ import {
   loadDeskSchedulerStatus,
   loadDeskTelegramStatus,
   loadProfileTemplates,
+  loadMiniAppState,
   normalizeDashboardError,
+  postMiniAppReviewCardAction,
+  postMiniAppStarterSources,
   previewProfileCoach,
   previewProfileFromBrief,
   previewSourceAssistant,
@@ -86,6 +89,98 @@ describe("dashboard API contract validation", () => {
     await expect(loadDashboardState()).rejects.toThrow("Invalid dashboard state response");
   });
 
+  it("loads Mini App state with Telegram init data and sanitizes cards", async () => {
+    vi.stubGlobal("Telegram", { WebApp: { initData: "query_id=abc&hash=signature" } });
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            miniapp: {
+              schema_version: "miniapp_review_state_v1",
+              auth: { schema_version: "telegram_miniapp_auth_v1", source: "telegram", user_id: "123456" },
+              cards: [
+                {
+                  schema_version: "review_card_v1",
+                  card_id: "card-1",
+                  profile_id: "jobs-fast",
+                  title: "Frontend Mini App contract",
+                  rating: "high",
+                  decision_status: "new",
+                  source_refs: [],
+                  item: { why: "Paid React work." },
+                  status: "pending",
+                  opportunity_status: "open",
+                  opportunity_updated_at: "2026-05-17T00:00:00Z",
+                  updated_at: "2026-05-17T00:00:00Z",
+                },
+              ],
+            },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const state = await loadMiniAppState();
+
+    expect(state.cards[0].card_id).toBe("card-1");
+    expect(fetchMock).toHaveBeenCalledWith("/api/miniapp/state", {
+      headers: { "X-Telegram-Init-Data": "query_id=abc&hash=signature" },
+      signal: undefined,
+    });
+  });
+
+  it("posts Mini App review actions to encoded card paths", async () => {
+    vi.stubGlobal("Telegram", { WebApp: { initData: "init-data" } });
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ ok: true, card: {} }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await postMiniAppReviewCardAction("card:123", "follow_up", "Prefer budget.");
+
+    expect(fetchMock).toHaveBeenCalledWith("/api/miniapp/review-cards/card%3A123/action", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Telegram-Init-Data": "init-data" },
+      body: JSON.stringify({ action: "follow_up", note: "Prefer budget." }),
+      signal: undefined,
+    });
+  });
+
+  it("posts Mini App starter source imports with Telegram init data", async () => {
+    vi.stubGlobal("Telegram", { WebApp: { initData: "init-data" } });
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            result: {
+              schema_version: "desk_source_import_result_v1",
+              dry_run: false,
+              written: true,
+              topic: "jobs",
+              added_count: 1,
+              updated_count: 0,
+              unchanged_count: 0,
+              source_count: 1,
+              registry_path: ".tgcs/sources.json",
+              preview_sources: [{ label: "Remote Front-End Jobs", source_id: "telegram:remote_frontend_jobs" }],
+              preview_truncated_count: 0,
+            },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await postMiniAppStarterSources("jobs");
+
+    expect(result.added_count).toBe(1);
+    expect(fetchMock).toHaveBeenCalledWith("/api/miniapp/sources/starter", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Telegram-Init-Data": "init-data" },
+      body: JSON.stringify({ topic: "jobs" }),
+      signal: undefined,
+    });
+  });
+
   it("throws on malformed Desk actions payloads instead of returning no controls", async () => {
     mockJsonResponse({ schema_version: "desk_actions_v1", actions: "bad" });
 
@@ -119,6 +214,50 @@ describe("dashboard API contract validation", () => {
     });
 
     await expect(previewSourceAssistant("add @remote_jobs", "jobs")).rejects.toThrow("Invalid source assistant response");
+  });
+
+  it("passes Telegram folder id through source assistant discovery requests", async () => {
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            result: {
+              schema_version: "desk_source_import_result_v1",
+              dry_run: true,
+              written: false,
+              action: "assistant",
+              topic: "jobs",
+              added_count: 0,
+              updated_count: 0,
+              unchanged_count: 0,
+              source_count: 0,
+              registry_path: ".tgcs/sources.json",
+              preview_sources: [],
+              preview_truncated_count: 0,
+              resolved_plan: { add: [], remove: [], disable: [], enable: [] },
+            },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await previewSourceAssistant("scan folder", "jobs", true, "jobs-fast", "Jobs", "12");
+
+    expect(fetchMock).toHaveBeenCalledWith("/api/desk/sources/assistant", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        instruction: "scan folder",
+        topic: "jobs",
+        dry_run: true,
+        confirm_external_ai: true,
+        profile_id: "jobs-fast",
+        folder_name: "Jobs",
+        folder_id: "12",
+      }),
+      signal: undefined,
+    });
   });
 
   it("throws on schema-less delivery target payloads instead of accepting sanitizer fallback", async () => {

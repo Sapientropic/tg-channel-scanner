@@ -104,18 +104,33 @@ def _feedback_profile_patch_context(rows: list[sqlite3.Row]) -> list[dict[str, A
     return context
 
 
-def _existing_profile_patch_for_note(conn: sqlite3.Connection, *, profile_id: str, note: str) -> sqlite3.Row | None:
+def _latest_feedback_created_at(rows: list[sqlite3.Row]) -> str:
+    return max((str(row["created_at"] or "") for row in rows), default="")
+
+
+def _existing_profile_patch_for_note(
+    conn: sqlite3.Connection,
+    *,
+    profile_id: str,
+    note: str,
+    latest_feedback_at: str,
+) -> sqlite3.Row | None:
+    params: list[Any] = [profile_id, note]
+    applied_clause = ""
+    if latest_feedback_at:
+        applied_clause = "OR (status = 'applied' AND COALESCE(applied_at, '') > ?)"
+        params.append(latest_feedback_at)
     return conn.execute(
-        """
+        f"""
         SELECT patch_id, status
         FROM profile_patch_suggestions
         WHERE profile_id = ?
           AND note = ?
-          AND status IN ('pending', 'applied')
+          AND (status = 'pending' {applied_clause})
         ORDER BY created_at DESC, patch_id DESC
         LIMIT 1
         """,
-        (profile_id, note),
+        params,
     ).fetchone()
 
 
@@ -126,7 +141,7 @@ def create_feedback_profile_patch_suggestions(
 ) -> dict[str, Any]:
     rows = conn.execute(
         """
-        SELECT f.event_id, f.card_id, f.profile_id, f.action, f.note, c.title, c.item_json
+        SELECT f.event_id, f.card_id, f.profile_id, f.action, f.note, f.created_at, c.title, c.item_json
         FROM feedback_events f
         LEFT JOIN review_cards c ON c.card_id = f.card_id
         WHERE f.action IN ('keep', 'skip', 'false_positive', 'follow_up')
@@ -150,7 +165,12 @@ def create_feedback_profile_patch_suggestions(
         if not note:
             skipped.append({"profile_id": profile_id, "reason": "no_feedback_titles"})
             continue
-        existing_row = _existing_profile_patch_for_note(conn, profile_id=profile_id, note=note)
+        existing_row = _existing_profile_patch_for_note(
+            conn,
+            profile_id=profile_id,
+            note=note,
+            latest_feedback_at=_latest_feedback_created_at(profile_rows),
+        )
         if existing_row:
             existing.append(
                 {

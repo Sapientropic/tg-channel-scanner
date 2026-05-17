@@ -102,6 +102,7 @@
 
 .source-import-actions .text-button {
   justify-content: center;
+  justify-self: stretch;
   min-width: 0;
 }
 
@@ -138,6 +139,40 @@
 .source-import-actions .secondary {
   background: color-mix(in oklch, var(--paper) 8%, transparent);
   color: var(--paper);
+}
+
+.source-public-links {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--wash-paper-12);
+}
+
+.source-public-links > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.source-public-links strong {
+  color: var(--paper);
+  font-size: 13px;
+}
+
+.source-public-links small {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: var(--badge-weight);
+  line-height: 1.35;
+}
+
+.source-public-actions {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.source-public-actions .text-button:last-child {
+  grid-column: 1 / -1;
 }
 
 .source-import-result {
@@ -478,6 +513,10 @@
   font-size: 11px;
   font-weight: var(--badge-weight);
   line-height: 1.25;
+}
+
+.source-library-main .source-library-note {
+  color: color-mix(in srgb, var(--accent-weak) 70%, var(--muted));
 }
 
 .source-library-tags {

@@ -1,6 +1,143 @@
-import { CirclePause, CirclePlay, RadioTower, ShieldCheck, Wrench } from "lucide-react";
+import { useState } from "react";
+import { CheckCircle2, CirclePause, CirclePlay, ExternalLink, Globe2, RadioTower, ShieldCheck, Smartphone, Wrench } from "lucide-react";
 
-import type { DeskBotGatewayStatus, DeskBotIdentityResult } from "../../domain/types";
+import type { DeskBotGatewayStatus, DeskBotIdentityResult, DeskMiniAppMenuResult } from "../../domain/types";
+
+const SETTINGS_MINIAPP_URL_STORAGE_KEY = "tgcs.settings.miniapp.publicUrl";
+
+type SettingsMiniAppUrlState = {
+  state: "needs-token" | "empty" | "invalid" | "local" | "ready" | "enabled";
+  label: string;
+  detail: string;
+  canSubmit: boolean;
+};
+
+function initialSettingsMiniAppUrl() {
+  if (typeof window === "undefined") {
+    return "";
+  }
+  try {
+    return window.localStorage.getItem(SETTINGS_MINIAPP_URL_STORAGE_KEY) || "";
+  } catch {
+    return "";
+  }
+}
+
+function persistSettingsMiniAppUrl(url: string) {
+  if (typeof window === "undefined") {
+    return;
+  }
+  try {
+    window.localStorage.setItem(SETTINGS_MINIAPP_URL_STORAGE_KEY, url);
+  } catch {
+    // The URL is convenience state only; losing it should not block setup.
+  }
+}
+
+export function settingsMiniAppUrlState(
+  status: DeskBotGatewayStatus | null,
+  rawUrl: string,
+  result: DeskMiniAppMenuResult | null = null,
+): SettingsMiniAppUrlState {
+  const tokenReady = status?.token_configured === true;
+  if (!tokenReady) {
+    return {
+      state: "needs-token",
+      label: "Needs token",
+      detail: "Save the Telegram bot token first.",
+      canSubmit: false,
+    };
+  }
+  const url = rawUrl.trim();
+  if (!url) {
+    return {
+      state: "empty",
+      label: "Paste link",
+      detail: "Paste a public https://.../miniapp link to add the Review button in Telegram.",
+      canSubmit: false,
+    };
+  }
+  if (result?.menu_button_updated && result.url === url) {
+    return {
+      state: "enabled",
+      label: "Enabled",
+      detail: "Telegram menu now opens Review.",
+      canSubmit: false,
+    };
+  }
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return {
+      state: "invalid",
+      label: "Check link",
+      detail: "Use the full public Mini App link, starting with https://.",
+      canSubmit: false,
+    };
+  }
+  if (parsed.protocol !== "https:") {
+    return {
+      state: "invalid",
+      label: "Use HTTPS",
+      detail: "Telegram requires a public HTTPS link for Mini Apps.",
+      canSubmit: false,
+    };
+  }
+  if (isLocalMiniAppHost(parsed.hostname)) {
+    return {
+      state: "local",
+      label: "Public link needed",
+      detail: "Preview works locally, but Telegram needs a public https://.../miniapp link.",
+      canSubmit: false,
+    };
+  }
+  return {
+    state: "ready",
+    label: "Ready",
+    detail: "This will add a Review button to the saved Telegram bot menu.",
+    canSubmit: true,
+  };
+}
+
+function isLocalMiniAppHost(hostname: string) {
+  const host = hostname.toLowerCase().replace(/^\[|\]$/g, "");
+  if (host === "localhost" || host.endsWith(".localhost") || host === "::1") {
+    return true;
+  }
+  if (host.startsWith("127.") || host.startsWith("10.") || host.startsWith("192.168.")) {
+    return true;
+  }
+  const parts = host.split(".").map((part) => Number(part));
+  if (parts.length === 4 && parts.every((part) => Number.isInteger(part))) {
+    if (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) {
+      return true;
+    }
+    if (parts[0] === 169 && parts[1] === 254) {
+      return true;
+    }
+  }
+  return host.startsWith("fc") || host.startsWith("fd") || host.startsWith("fe80:");
+}
+
+function miniAppInstallButtonLabel(state: SettingsMiniAppUrlState, busy: boolean) {
+  if (busy) {
+    return "Enabling";
+  }
+  if (state.state === "enabled") {
+    return "Enabled";
+  }
+  if (state.state === "needs-token") {
+    return "Save token first";
+  }
+  if (state.state === "invalid" || state.state === "local") {
+    return "Fix public link";
+  }
+  if (state.canSubmit) {
+    return "Enable Mini App";
+  }
+  return "Add public link";
+}
 
 export function botGatewayStatusLine(status: DeskBotGatewayStatus | null) {
   if (!status) {
@@ -229,6 +366,7 @@ export function BotGatewayPanel({
   identityResult,
   busy,
   applyBotIdentity,
+  installMiniAppMenu,
   installBotGatewayAutostart,
   removeBotGatewayAutostart,
 }: {
@@ -237,9 +375,12 @@ export function BotGatewayPanel({
   identityResult: DeskBotIdentityResult | null;
   busy: boolean;
   applyBotIdentity: () => Promise<void>;
+  installMiniAppMenu: (url: string) => Promise<DeskMiniAppMenuResult>;
   installBotGatewayAutostart: () => Promise<void>;
   removeBotGatewayAutostart: () => Promise<void>;
 }) {
+  const [miniAppUrl, setMiniAppUrl] = useState(initialSettingsMiniAppUrl);
+  const [miniAppMenuResult, setMiniAppMenuResult] = useState<DeskMiniAppMenuResult | null>(null);
   const gatewayTone = status?.gateway_status === "running" ? "enabled" : status?.gateway_status === "stale" ? "pending" : "disabled";
   const canApplyIdentity = status?.token_configured === true;
   const canInstallBackground = botGatewayCanInstallBackground(status);
@@ -250,6 +391,11 @@ export function BotGatewayPanel({
   const primaryAction = botGatewayPrimaryAction(status);
   const primaryCopy = botGatewayPrimaryCopy(status);
   const PrimaryActionIcon = primaryAction?.kind === "repair" ? Wrench : CirclePlay;
+  const tokenReady = status?.token_configured === true;
+  const cleanMiniAppUrl = miniAppUrl.trim();
+  const miniAppUrlState = settingsMiniAppUrlState(status, miniAppUrl, miniAppMenuResult);
+  const miniAppEnabled = miniAppUrlState.state === "enabled";
+  const canEnableMiniApp = miniAppUrlState.canSubmit;
   return (
     <section className="bot-gateway-panel" aria-label="Bot Gateway status">
       <div className="notification-token-head">
@@ -299,6 +445,69 @@ export function BotGatewayPanel({
           </button>
         )}
       </div>
+      <form
+        className="bot-gateway-miniapp"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (!canEnableMiniApp) {
+            return;
+          }
+          void installMiniAppMenu(cleanMiniAppUrl).then((result) => {
+            persistSettingsMiniAppUrl(result.url);
+            setMiniAppUrl(result.url);
+            setMiniAppMenuResult(result);
+          }).catch(() => undefined);
+        }}
+      >
+        <div className="bot-gateway-miniapp-device" aria-hidden="true">
+          <Smartphone size={18} />
+        </div>
+        <div className="bot-gateway-miniapp-copy">
+          <span>Telegram Mini App</span>
+          <strong>Review in Telegram</strong>
+          <div className="bot-gateway-miniapp-badges" aria-label="Mini App readiness">
+            <span data-state="ready">
+              <CheckCircle2 size={13} />
+              Ready
+            </span>
+            <span data-state={tokenReady ? "ready" : "needed"}>
+              <ShieldCheck size={13} />
+              Token
+            </span>
+            <span data-state="setup">
+              <Globe2 size={13} />
+              {miniAppUrlState.state === "ready" || miniAppUrlState.state === "enabled" ? "HTTPS" : miniAppUrlState.label}
+            </span>
+            <span data-state={miniAppEnabled ? "ready" : "setup"}>
+              <RadioTower size={13} />
+              Menu
+            </span>
+          </div>
+        </div>
+        <div className="bot-gateway-miniapp-actions" aria-label="Mini App actions">
+          <a className="text-button secondary" href="/miniapp" rel="noreferrer" target="_blank">
+            <ExternalLink size={15} />
+            <span>Preview</span>
+          </a>
+        </div>
+        <div className="bot-gateway-miniapp-install">
+          <label className="delivery-field">
+            <span>Public Mini App URL</span>
+            <input
+              disabled={busy || !tokenReady}
+              onChange={(event) => setMiniAppUrl(event.target.value)}
+              placeholder="https://your-domain.example/miniapp"
+              type="url"
+              value={miniAppUrl}
+            />
+          </label>
+          <button className="text-button" disabled={busy || !canEnableMiniApp} type="submit">
+            <RadioTower size={15} />
+            <span>{miniAppInstallButtonLabel(miniAppUrlState, busy)}</span>
+          </button>
+          <small aria-live="polite">{miniAppUrlState.detail}</small>
+        </div>
+      </form>
       <details className="bot-gateway-technical">
         <summary>Technical details</summary>
         <div className="bot-gateway-technical-grid">

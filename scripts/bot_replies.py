@@ -380,6 +380,7 @@ def settings_text() -> str:
             "- Save the Telegram bot token in Signal Desk Settings > Alerts.",
             "- Detect and save this chat ID before using bot actions.",
             "- Keep Signal Desk or ./tgcs bot run active for local-first bot control.",
-            "- Cloud webhook and Mini App support are tracked as a later roadmap phase.",
+            "- Local Mini App preview is available at /miniapp from the dashboard.",
+            "- Cloud webhook support still needs a separate hosted boundary.",
         ]
     )

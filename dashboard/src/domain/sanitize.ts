@@ -1,4 +1,5 @@
 export { emptyDashboardState, sanitizeDashboardState, sanitizeInboxCards } from "./sanitize/dashboard";
+export { sanitizeMiniAppReviewState } from "./sanitize/miniapp";
 export {
   sanitizeDeliveryTestResult,
   sanitizeDeliveryChatDetectionResult,

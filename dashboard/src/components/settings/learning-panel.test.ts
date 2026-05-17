@@ -98,6 +98,17 @@ describe("Learning panel copy", () => {
     );
 
     expect(html).toContain('aria-label="Feedback calibration evidence"');
+    expect(html).toContain('aria-label="Learning loop progress"');
+    expect(html).toContain("Learning loop");
+    expect(html).toContain("Review choices");
+    expect(html).toContain("Create draft");
+    expect(html).toContain("Apply draft");
+    expect(html).toContain("Run again");
+    expect(html).toContain("Calibrate");
+    expect(html).toContain("5 ready");
+    expect(html).toContain("1 waiting");
+    expect(html).toContain("2 applied");
+    expect(html).toContain("1 run");
     expect(html).toContain("Preferred 1");
     expect(html).toContain("Wrong match 1");
     expect(html).toContain("High priority 2");
@@ -149,7 +160,13 @@ describe("Learning panel copy", () => {
           diagnosis: [{ label: "Wrong matches", detail: "Recurring full-stack roles need a clearer exclusion." }],
           suspected_false_positive_patterns: ["full-stack generalist roles"],
           suggested_preference_rules: ["Exclude full-stack roles unless frontend ownership is explicit."],
-          source_suggestions: [],
+          source_suggestions: [
+            {
+              kind: "review_sources",
+              label: "Review noisy sources",
+              detail: "If wrong matches come from the same channel, review that source before changing the profile.",
+            },
+          ],
           confidence: "medium",
           warnings: [],
           llm_used: true,
@@ -169,6 +186,8 @@ describe("Learning panel copy", () => {
     expect(html).not.toContain("LLM");
     expect(html).toContain("Wrong matches");
     expect(html).toContain("Exclude full-stack roles");
+    expect(html).toContain("Review noisy sources");
+    expect(html).toContain("review that source before changing the profile");
     expect(html).toContain("Create draft to review");
     expect(html).toContain("Run this profile again");
   });

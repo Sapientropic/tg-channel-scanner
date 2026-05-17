@@ -1001,16 +1001,23 @@ function sanitizeDeskSources(value: unknown): DeskSource[] {
       console.warn(`[tgcs dashboard schema] desk_sources.sources[${index}] missing required field`, record);
       return [];
     }
+    const source: DeskSource = {
+      schema_version: record.schema_version === "desk_source_v1" ? record.schema_version : undefined,
+      source_id: sourceId,
+      label,
+      channel,
+      enabled: record.enabled !== false,
+      topics: stringArray(record.topics),
+      priority: optionalString(record.priority) ?? "normal",
+      scan_window_hours: nonNegativeIntegerOrDefault(record.scan_window_hours, 24),
+    };
+    const expectedLanguage = optionalString(record.expected_language);
+    const notes = optionalString(record.notes);
     return [
       {
-        schema_version: record.schema_version === "desk_source_v1" ? record.schema_version : undefined,
-        source_id: sourceId,
-        label,
-        channel,
-        enabled: record.enabled !== false,
-        topics: stringArray(record.topics),
-        priority: optionalString(record.priority) ?? "normal",
-        scan_window_hours: nonNegativeIntegerOrDefault(record.scan_window_hours, 24),
+        ...source,
+        ...(expectedLanguage ? { expected_language: expectedLanguage } : {}),
+        ...(notes ? { notes } : {}),
       },
     ];
   });

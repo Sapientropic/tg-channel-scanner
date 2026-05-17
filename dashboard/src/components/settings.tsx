@@ -14,6 +14,7 @@ import type {
   DeskAiSettingsStatus,
   DeskBotGatewayStatus,
   DeskBotIdentityResult,
+  DeskMiniAppMenuResult,
   DeskNotificationTokenStatus,
   DeskSourcesResult,
   DeskSupportDiagnosticExportResult,
@@ -65,6 +66,7 @@ export type SettingsSourcesController = {
     confirmExternalAi?: boolean,
     profileId?: string,
     folderName?: string,
+    folderId?: string,
   ) => Promise<SourceImportResult>;
   applySourceAssistant: (
     instruction: string,
@@ -73,6 +75,7 @@ export type SettingsSourcesController = {
     resolvedPlan?: SourceImportResult["resolved_plan"],
     profileId?: string,
     folderName?: string,
+    folderId?: string,
   ) => Promise<SourceImportResult>;
   openReviewCards: () => void;
   setSourceEnabled: (sourceId: string, enabled: boolean) => Promise<void>;
@@ -94,6 +97,7 @@ export type SettingsNotificationsController = {
   saveNotificationToken: (token: string) => Promise<void>;
   clearNotificationToken: () => Promise<void>;
   applyBotIdentity: () => Promise<void>;
+  installMiniAppMenu: (url: string) => Promise<DeskMiniAppMenuResult>;
   installBotGatewayAutostart: () => Promise<void>;
   removeBotGatewayAutostart: () => Promise<void>;
   testDeliveryTarget: (targetId: string, chatId: string) => Promise<void>;
@@ -191,6 +195,7 @@ export function SettingsView({
     saveNotificationToken,
     clearNotificationToken,
     applyBotIdentity,
+    installMiniAppMenu,
     installBotGatewayAutostart,
     removeBotGatewayAutostart,
     testDeliveryTarget,
@@ -325,6 +330,7 @@ export function SettingsView({
           deliveryChatDetection={deliveryChatDetection}
           deliveryTest={deliveryTest}
           detectDeliveryChatId={detectDeliveryChatId}
+          installMiniAppMenu={installMiniAppMenu}
           installBotGatewayAutostart={installBotGatewayAutostart}
           notificationTokenError={notificationTokenError}
           notificationTokenStatus={notificationTokenStatus}

@@ -77,6 +77,64 @@
   background: color-mix(in oklch, var(--teal) 7%, transparent);
 }
 
+.learning-loop-guide {
+  display: grid;
+  gap: 9px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid color-mix(in oklch, var(--signal-high) 28%, transparent);
+  background: color-mix(in oklch, var(--signal-high) 8%, transparent);
+}
+
+.learning-loop-title {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.learning-loop-title strong {
+  min-width: 0;
+  color: var(--paper);
+  font-size: 14px;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.learning-loop-steps {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+  gap: 6px;
+}
+
+.learning-loop-steps span {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid var(--wash-paper-14);
+  background: var(--wash-paper-6);
+}
+
+.learning-loop-steps strong,
+.learning-loop-steps small {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.learning-loop-steps strong {
+  color: var(--paper);
+  font-size: 12px;
+  line-height: 1.2;
+}
+
+.learning-loop-steps small {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: var(--badge-weight);
+  line-height: 1.25;
+  text-transform: uppercase;
+}
+
 .feedback-scope-note {
   display: grid;
   gap: 5px;

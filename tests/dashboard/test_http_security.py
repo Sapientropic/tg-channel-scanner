@@ -22,6 +22,15 @@ class DashboardHttpSecurityTests(unittest.TestCase):
         dashboard_server.DashboardHandler._require_post_request_integrity(handler)
         dashboard_server.DashboardHandler._require_loopback_access(handler, "Dashboard state")
 
+    def test_loopback_gate_rejects_forwarded_remote_clients(self):
+        with self.assertRaisesRegex(ValueError, "localhost"):
+            desk_http_security.require_loopback_access(
+                client_address=("127.0.0.1", 51000),
+                headers={"X-Forwarded-For": "203.0.113.10"},
+                feature="Dashboard state",
+                is_loopback_address_fn=dashboard_server.is_loopback_address,
+            )
+
 
     def test_telegram_post_endpoints_require_loopback_client(self):
         class FakeHandler:

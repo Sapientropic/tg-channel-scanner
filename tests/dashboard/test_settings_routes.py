@@ -52,6 +52,7 @@ class DashboardSettingsRouteTests(unittest.TestCase):
             telegram_cancel_login=lambda: {},
             update_desk_notification_token=lambda payload: {},
             apply_desk_bot_identity=lambda: {},
+            install_desk_miniapp_menu=lambda payload: {},
             update_desk_ai_settings=lambda payload: {},
             save_desk_delivery_target=save_target,
             test_desk_delivery_target=lambda conn, target_id, payload: {},
@@ -81,6 +82,7 @@ class DashboardSettingsRouteTests(unittest.TestCase):
             telegram_cancel_login=lambda: {},
             update_desk_notification_token=lambda payload: {},
             apply_desk_bot_identity=lambda: {},
+            install_desk_miniapp_menu=lambda payload: {},
             update_desk_ai_settings=lambda payload: {},
             save_desk_delivery_target=lambda conn, target_id, payload: {},
             test_desk_delivery_target=lambda conn, target_id, payload: {},
@@ -108,6 +110,7 @@ class DashboardSettingsRouteTests(unittest.TestCase):
                 telegram_cancel_login=lambda: {},
                 update_desk_notification_token=lambda payload: {},
                 apply_desk_bot_identity=lambda: {},
+                install_desk_miniapp_menu=lambda payload: {},
                 update_desk_ai_settings=lambda payload: {},
                 save_desk_delivery_target=lambda conn, target_id, payload: {},
                 test_desk_delivery_target=lambda conn, target_id, payload: {},
@@ -150,6 +153,13 @@ class DashboardSettingsRouteTests(unittest.TestCase):
             ("/api/desk/telegram-login/cancel", {}, "telegram_cancel_login", (), "telegram"),
             ("/api/desk/notification-token", {"token": "12345:abc"}, "update_desk_notification_token", ({"token": "12345:abc"},), "token"),
             ("/api/desk/bot-identity/apply", {}, "apply_desk_bot_identity", (), "identity"),
+            (
+                "/api/desk/miniapp-menu",
+                {"url": "https://example.com/miniapp"},
+                "install_desk_miniapp_menu",
+                ({"url": "https://example.com/miniapp"},),
+                "miniapp_menu",
+            ),
             ("/api/desk/ai-settings", {"provider": "deepseek"}, "update_desk_ai_settings", ({"provider": "deepseek"},), "ai"),
         ]
         for path, body, helper_name, expected_args, payload_key in cases:

@@ -150,6 +150,24 @@ class DashboardArtifactTests(unittest.TestCase):
 
         self.assertEqual(resolved, index.resolve())
 
+    def test_resolve_static_path_serves_miniapp_entry(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            static_dir = root / "dist"
+            static_dir.mkdir()
+            index = static_dir / "index.html"
+            miniapp = static_dir / "miniapp.html"
+            index.write_text("index", encoding="utf-8")
+            miniapp.write_text("miniapp", encoding="utf-8")
+
+            self.assertEqual(
+                dashboard_server.resolve_static_path("/miniapp", static_dir=static_dir),
+                miniapp.resolve(),
+            )
+            self.assertEqual(
+                dashboard_server.resolve_static_path("/miniapp/", static_dir=static_dir),
+                miniapp.resolve(),
+            )
 
 
 if __name__ == "__main__":

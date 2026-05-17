@@ -24,6 +24,7 @@ export type ReviewCard = {
   source_refs: SourceRef[];
   item: {
     why?: string;
+    source_excerpt?: string;
     decision_state?: DecisionState;
   };
   status: string;
@@ -182,6 +183,8 @@ export type DeskSource = {
   topics: string[];
   priority: string;
   scan_window_hours: number;
+  expected_language?: string;
+  notes?: string;
 };
 
 export type DeskSourcesResult = {
@@ -247,6 +250,15 @@ export type DeskBotIdentityResult = {
   short_description_updated: boolean;
   commands_installed: boolean;
   profile_photo_updated: boolean;
+};
+
+export type DeskMiniAppMenuResult = {
+  schema_version: "bot_miniapp_menu_result_v1";
+  menu_button_updated: boolean;
+  dry_run: boolean;
+  text: string;
+  url: string;
+  next_step?: string;
 };
 
 export type DeskAiProviderStatus = {
@@ -543,6 +555,55 @@ export type DashboardState = {
     has_delivery_targets?: boolean;
     has_enabled_delivery_targets?: boolean;
     checks?: SetupCheck[];
+  };
+};
+
+export type MiniAppAuth = {
+  schema_version?: "telegram_miniapp_auth_v1";
+  source?: string;
+  user_id?: string;
+};
+
+export type MiniAppSourceRecommendation = {
+  schema_version?: "miniapp_source_recommendation_v1";
+  source_id: string;
+  channel: string;
+  label: string;
+  topic: string;
+  reason: string;
+  installed: boolean;
+};
+
+export type MiniAppLearningSummary = {
+  schema_version?: "miniapp_learning_summary_v1";
+  current_decision_count?: number;
+  exportable_count?: number;
+  non_exportable_follow_up_count?: number;
+  pending_profile_diff_count?: number;
+  applied_profile_diff_count?: number;
+  changed_since_last_export?: boolean;
+  next_action?: {
+    label?: string;
+    detail?: string;
+  };
+  calibration_next_action?: {
+    label?: string;
+    detail?: string;
+  };
+};
+
+export type MiniAppReviewState = {
+  schema_version?: "miniapp_review_state_v1";
+  auth?: MiniAppAuth;
+  generated_at?: string;
+  cards: ReviewCard[];
+  source_recommendations?: MiniAppSourceRecommendation[];
+  learning_summary?: MiniAppLearningSummary;
+  setup_status?: {
+    stage?: string;
+    next_step?: string;
+    has_runs?: boolean;
+    has_profiles?: boolean;
   };
 };
 

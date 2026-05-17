@@ -26,9 +26,13 @@ scripts/scan.sh channel_lists/my-jobs.txt --since 2026-05-06T07:30:00Z
 scripts\scan.bat channel_lists\my-jobs.txt 24
 ```
 
-`jobs.txt` is the packaged Developer Opportunity starter used by Signal Desk.
-It is deliberately illustrative; replace those handles from Signal Desk Settings
-before relying on live scans.
+`jobs.public-candidates.json` is the packaged Developer Opportunity starter used
+by Signal Desk. It contains metadata-only public source recommendations checked
+against public Telegram pages on 2026-05-17. `jobs.txt` mirrors the same handles
+for CLI and legacy scripts. Both files are still only first-run seeds. Review,
+pause, or remove noisy channels from Signal Desk Settings before relying on live
+scans. Starter import removes legacy `example_*` placeholder sources but keeps
+real user-added sources.
 
 ## Tips
 

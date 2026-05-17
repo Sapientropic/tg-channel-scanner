@@ -330,6 +330,7 @@ def profile_patch_feedback_context(
 ) -> list[dict[str, Any]]:
     note_filter = "" if note == REVIEW_LEARNING_PATCH_NOTE else str(note or "")
     where_note = "AND f.note = ?" if note_filter else ""
+    action_filter = "AND f.action = 'follow_up'" if note_filter else "AND f.action IN ('keep', 'skip', 'false_positive', 'follow_up')"
     params: list[Any] = [profile_id]
     if note_filter:
         params.append(note_filter)
@@ -340,7 +341,7 @@ def profile_patch_feedback_context(
         FROM feedback_events f
         LEFT JOIN review_cards c ON c.card_id = f.card_id
         WHERE f.profile_id = ?
-          AND f.action = 'follow_up'
+          {action_filter}
           {where_note}
         ORDER BY f.created_at DESC, f.event_id DESC
         LIMIT ?

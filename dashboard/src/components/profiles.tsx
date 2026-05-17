@@ -166,6 +166,7 @@ function ProfileDraftCard({
   const sourceLine = reviewDecisionCount > 0
     ? `${reviewDecisionCount} Review decision${reviewDecisionCount === 1 ? "" : "s"}`
     : "Manual profile draft";
+  const whyLine = profileDraftWhyLine(patch, sourceLine, reviewDecisionCount);
 
   return (
     <article className="review-card patch-card profile-draft-ai-card">
@@ -177,6 +178,10 @@ function ProfileDraftCard({
         <div className="patch-context-row">
           <span>{sourceLine}</span>
           <span>{patch.profile_display_path || patch.profile_id}</span>
+        </div>
+        <div className="patch-user-explainer" aria-label="Why this draft was generated">
+          <strong>Why this draft</strong>
+          <p>{whyLine}</p>
         </div>
         <p className="note-line">Review this drafted profile change, then apply or dismiss it.</p>
         {(patch.source_card_titles?.length || (patch.apply_readiness?.status !== "blocked" && patch.apply_readiness?.detail)) && (
@@ -218,6 +223,18 @@ function ProfileDraftCard({
       </div>
     </article>
   );
+}
+
+function profileDraftWhyLine(patch: ProfilePatch, sourceLine: string, reviewDecisionCount: number): string {
+  if (reviewDecisionCount <= 0) {
+    return "Generated from manual tuning notes so you can review the exact profile text before applying it.";
+  }
+  const titles = (patch.source_card_titles?.length ? patch.source_card_titles : patch.card_title ? [patch.card_title] : [])
+    .slice(0, 2)
+    .map((title) => title.trim())
+    .filter(Boolean);
+  const titleSuffix = titles.length ? `: ${titles.join(", ")}` : "";
+  return `Generated from ${sourceLine}${titleSuffix}.`;
 }
 
 function profileSuggestionText(patches: ProfilePatch[]) {

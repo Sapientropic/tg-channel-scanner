@@ -245,6 +245,11 @@ def _dashboard_build_prerequisite_error() -> str:
     return ""
 
 
+def _dashboard_static_assets_ready(static_dir: Path, *, miniapp_only: bool = False) -> bool:
+    required_entry = "miniapp.html" if miniapp_only else "index.html"
+    return (static_dir / required_entry).exists()
+
+
 
 def run_demo(args: argparse.Namespace) -> int:
     output = _root_path(args.output or "output/demo-report.html")
@@ -412,7 +417,11 @@ def run_monitor(args: argparse.Namespace) -> int:
 
 def run_dashboard(args: argparse.Namespace) -> int:
     static_dir = _asset_path(args.static_dir or "dashboard/dist")
-    if not args.no_build and not static_dir.exists() and not args.static_dir:
+    if (
+        not args.no_build
+        and not args.static_dir
+        and not _dashboard_static_assets_ready(static_dir, miniapp_only=args.miniapp_only)
+    ):
         prereq_error = _dashboard_build_prerequisite_error()
         if prereq_error:
             print(f"Error: {prereq_error}", file=sys.stderr)
@@ -438,6 +447,10 @@ def run_dashboard(args: argparse.Namespace) -> int:
     if args.port is None:
         cmd.append("--auto-port")
     cmd.extend(["--static-dir", static_dir])
+    if args.miniapp_only:
+        cmd.append("--miniapp-only")
+    if getattr(args, "miniapp_allow_loopback_preview", False):
+        cmd.append("--miniapp-allow-loopback-preview")
     if args.open:
         cmd.append("--open")
     return _run(cmd)
@@ -499,4 +512,12 @@ def run_bot(args: argparse.Namespace) -> int:
             cmd.append("--llm")
         if args.no_llm:
             cmd.append("--no-llm")
+    if args.bot_command == "install-miniapp-menu":
+        cmd.extend(["--url", args.url])
+        if args.text:
+            cmd.extend(["--text", args.text])
+        if args.dry_run:
+            cmd.append("--dry-run")
+    if args.bot_command == "apply-identity" and args.preserve_menu_button:
+        cmd.append("--preserve-menu-button")
     return _run(cmd)

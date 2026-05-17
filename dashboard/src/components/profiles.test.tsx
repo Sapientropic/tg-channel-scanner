@@ -139,6 +139,7 @@ describe("ProfilesView", () => {
       status: "pending",
       diff_text: "-old\n+new",
       source_card_count: 2,
+      source_card_titles: ["React contract role", "Frontend retainer"],
       created_at: "2026-05-10T00:00:00Z",
     };
     const html = renderToStaticMarkup(
@@ -163,6 +164,10 @@ describe("ProfilesView", () => {
     expect(html).toContain("aria-expanded=\"true\"");
     expect(html).toContain("Profile draft");
     expect(html).toContain("2 Review decisions");
+    expect(html).toContain("Why this draft");
+    expect(html).toContain("Generated from 2 Review decisions");
+    expect(html).toContain("React contract role");
+    expect(html).toContain("Frontend retainer");
     expect(html).toContain("Review this drafted profile change, then apply or dismiss it.");
     expect(html).toContain("Drafted matching changes");
     expect(html).toContain("Apply to profile");

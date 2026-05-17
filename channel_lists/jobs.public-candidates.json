@@ -1,0 +1,92 @@
+{
+  "schema_version": "public_source_candidates_v1",
+  "generated_at": "2026-05-17T00:00:00Z",
+  "topic": "jobs",
+  "privacy_note": "Metadata-only public starter list. Do not include Telegram message bodies, private invite links, session data, or scraped post text.",
+  "candidates": [
+    {
+      "handle": "@remote_frontend_jobs",
+      "url": "https://t.me/s/remote_frontend_jobs",
+      "title": "Remote Front-End Jobs",
+      "language": "en",
+      "source_of_recommendation": "public Telegram page checked 2026-05-17",
+      "quality_hints": {
+        "scope": "remote front-end jobs",
+        "direct_page_status": 200,
+        "has_public_messages": true,
+        "expected_noise": "medium"
+      },
+      "notes": "Public first-run seed. Review and prune before production scans."
+    },
+    {
+      "handle": "@remote_java_jobs",
+      "url": "https://t.me/s/remote_java_jobs",
+      "title": "Remote Java Jobs",
+      "language": "en",
+      "source_of_recommendation": "public Telegram page checked 2026-05-17",
+      "quality_hints": {
+        "scope": "remote Java jobs",
+        "direct_page_status": 200,
+        "has_public_messages": true,
+        "expected_noise": "medium"
+      },
+      "notes": "Public first-run seed. Review and prune before production scans."
+    },
+    {
+      "handle": "@remote_ai_jobs",
+      "url": "https://t.me/s/remote_ai_jobs",
+      "title": "Remote AI/ML/Data Science Jobs",
+      "language": "en",
+      "source_of_recommendation": "public Telegram page checked 2026-05-17",
+      "quality_hints": {
+        "scope": "remote AI, ML, and data science jobs",
+        "direct_page_status": 200,
+        "has_public_messages": true,
+        "expected_noise": "medium"
+      },
+      "notes": "Public first-run seed. Review and prune before production scans."
+    },
+    {
+      "handle": "@remoters",
+      "url": "https://t.me/s/remoters",
+      "title": "Remote IT Jobs",
+      "language": "en",
+      "source_of_recommendation": "public Telegram page checked 2026-05-17",
+      "quality_hints": {
+        "scope": "remote IT jobs",
+        "direct_page_status": 200,
+        "has_public_messages": true,
+        "expected_noise": "high"
+      },
+      "notes": "Broad public seed. Use source access and Review feedback to prune if noisy."
+    },
+    {
+      "handle": "@unicastjobs",
+      "url": "https://t.me/s/unicastjobs",
+      "title": "Web3 Jobs by Unicast AI",
+      "language": "en",
+      "source_of_recommendation": "public Telegram page checked 2026-05-17",
+      "quality_hints": {
+        "scope": "Web3 jobs",
+        "direct_page_status": 200,
+        "has_public_messages": true,
+        "expected_noise": "medium"
+      },
+      "notes": "Useful only for Web3-oriented profiles; pause for general frontend profiles if noisy."
+    },
+    {
+      "handle": "@remotejobss",
+      "url": "https://t.me/s/remotejobss",
+      "title": "Remote Jobs",
+      "language": "en",
+      "source_of_recommendation": "public Telegram page checked 2026-05-17",
+      "quality_hints": {
+        "scope": "worldwide remote jobs",
+        "direct_page_status": 200,
+        "has_public_messages": true,
+        "expected_noise": "high"
+      },
+      "notes": "Broad public seed. Review and prune aggressively if it creates low-signal cards."
+    }
+  ]
+}

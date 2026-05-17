@@ -8,6 +8,12 @@ from typing import Any
 from urllib.parse import unquote
 
 
+def _reject_unexpected_fields(body: Mapping[str, Any], allowed_fields: set[str], *, label: str) -> None:
+    unexpected = sorted(str(key) for key in body.keys() if key not in allowed_fields)
+    if unexpected:
+        raise ValueError(f"Unsupported {label} field: {', '.join(unexpected)}")
+
+
 def handle_settings_post_route(
     handler: Any,
     path: str,
@@ -21,6 +27,7 @@ def handle_settings_post_route(
     telegram_cancel_login: Callable[[], dict],
     update_desk_notification_token: Callable[[Mapping[str, Any]], dict],
     apply_desk_bot_identity: Callable[[], dict],
+    install_desk_miniapp_menu: Callable[[Mapping[str, Any]], dict],
     update_desk_ai_settings: Callable[[Mapping[str, Any]], dict],
     save_desk_delivery_target: Callable[[Any, str, Mapping[str, Any]], dict],
     test_desk_delivery_target: Callable[[Any, str, Mapping[str, Any]], dict],
@@ -51,7 +58,13 @@ def handle_settings_post_route(
         return True
     if path == "/api/desk/bot-identity/apply":
         require_loopback_access(handler, "Bot identity settings")
+        _reject_unexpected_fields(body, set(), label="Bot identity")
         handler._json(HTTPStatus.OK, {"ok": True, "identity": apply_desk_bot_identity()})
+        return True
+    if path == "/api/desk/miniapp-menu":
+        require_loopback_access(handler, "Mini App menu settings")
+        _reject_unexpected_fields(body, {"url"}, label="Mini App menu")
+        handler._json(HTTPStatus.OK, {"ok": True, "miniapp_menu": install_desk_miniapp_menu(body)})
         return True
     if path == "/api/desk/ai-settings":
         require_loopback_access(handler, "AI API settings")

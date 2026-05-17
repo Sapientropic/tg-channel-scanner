@@ -149,6 +149,53 @@ class MonitorStateProfilePatchTests(unittest.TestCase):
         self.assertIn("Exclude full-stack roles", applied)
         self.assertEqual(reverted, original)
 
+    def test_profile_coach_preview_uses_keep_skip_and_false_positive_context(self):
+        conn = sqlite3.connect(":memory:")
+        conn.row_factory = sqlite3.Row
+        monitor_state.init_db(conn)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            profile_path = Path(tmp) / "profile.md"
+            profile_path.write_text("# Profile\n\n## Search Rules\n1. Find frontend developer opportunities.\n", encoding="utf-8")
+            monitor_state.upsert_profile(conn, {"id": "jobs-fast", "path": str(profile_path), "enabled": True})
+            cards = monitor_state.upsert_review_cards(
+                conn,
+                profile_id="jobs-fast",
+                run_id="run-1",
+                items=[
+                    {
+                        "role": "Frontend Platform Engineer",
+                        "summary": "React infrastructure for a remote tooling team.",
+                        "rating": "high",
+                        "source_message_refs": [{"channel": "source", "id": 1}],
+                    },
+                    {
+                        "role": "Crypto Community Manager",
+                        "summary": "Token promotion and Telegram moderation.",
+                        "rating": "medium",
+                        "source_message_refs": [{"channel": "source", "id": 2}],
+                    },
+                ],
+            )
+            monitor_state.set_card_action(conn, card_id=cards[0]["card_id"], action="keep", profile_path=profile_path)
+            monitor_state.set_card_action(conn, card_id=cards[1]["card_id"], action="false_positive", profile_path=profile_path)
+            calls: list[dict] = []
+
+            def fake_llm_profile_patch(**kwargs):
+                calls.append(kwargs)
+                return ["Prefer React infrastructure roles and reject token promotion work."]
+
+            with patch.object(monitor_state, "PROJECT_ROOT", Path(tmp)):
+                with patch.object(profile_patches, "_llm_profile_patch_preference_lines", side_effect=fake_llm_profile_patch):
+                    preview = monitor_state.profile_coach_preview(conn, profile_id="jobs-fast", confirm_external_ai=True)
+
+        self.assertTrue(preview["llm_used"])
+        actions = [item["action"] for item in calls[0]["feedback_context"]]
+        self.assertIn("keep", actions)
+        self.assertIn("false_positive", actions)
+        self.assertTrue(any(item["card"].get("role") == "Frontend Platform Engineer" for item in calls[0]["feedback_context"]))
+        self.assertNotIn("Crypto Community Manager", json.dumps(preview))
+
     def test_profile_coach_preview_handles_invalid_llm_json_with_local_fallback(self):
         conn = sqlite3.connect(":memory:")
         conn.row_factory = sqlite3.Row

@@ -18,7 +18,7 @@ export function filterDeskSourcesByQuery(sources: DeskSource[], query: string, s
     if (!normalizedQuery) {
       return true;
     }
-    return [source.label, source.channel, source.priority, ...source.topics]
+    return [source.label, source.channel, source.priority, source.expected_language ?? "", source.notes ?? "", ...source.topics]
       .join(" ")
       .toLowerCase()
       .includes(normalizedQuery);

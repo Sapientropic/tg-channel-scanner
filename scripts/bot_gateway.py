@@ -45,6 +45,7 @@ BOT_DISPLAY_NAME = _bot_api.BOT_DISPLAY_NAME
 BOT_DESCRIPTION = _bot_api.BOT_DESCRIPTION
 BOT_SHORT_DESCRIPTION = _bot_api.BOT_SHORT_DESCRIPTION
 BOT_AVATAR_PATH = _bot_api.BOT_AVATAR_PATH
+BOT_MINIAPP_MENU_SCHEMA_VERSION = _bot_api.BOT_MINIAPP_MENU_SCHEMA_VERSION
 ALLOWED_INTENT_ACTIONS = _bot_replies.ALLOWED_INTENT_ACTIONS
 BotIntent = _bot_replies.BotIntent
 
@@ -55,6 +56,9 @@ TelegramBotApi = _bot_api.TelegramBotApi
 
 split_telegram_text = _bot_api.split_telegram_text
 load_bot_token = _bot_api.load_bot_token
+clean_miniapp_menu_text = _bot_api.clean_miniapp_menu_text
+clean_miniapp_menu_url = _bot_api.clean_miniapp_menu_url
+install_miniapp_menu = _bot_api.install_miniapp_menu
 
 _lock_pid_alive = _bot_state._lock_pid_alive
 _read_lock_pid = _bot_state._read_lock_pid
@@ -98,9 +102,9 @@ def dashboard_snapshot(db_path: Path = DEFAULT_DB_PATH) -> dict[str, Any]:
     return _dashboard_snapshot_impl(db_path)
 
 
-def apply_bot_identity(api: TelegramBotApi | None = None) -> dict[str, Any]:
+def apply_bot_identity(api: TelegramBotApi | None = None, *, preserve_menu_button: bool = False) -> dict[str, Any]:
     _sync_modules()
-    return _apply_bot_identity_impl(api)
+    return _apply_bot_identity_impl(api, preserve_menu_button=preserve_menu_button)
 
 
 _DASHBOARD_SNAPSHOT_WRAPPER = dashboard_snapshot
@@ -229,8 +233,28 @@ def build_parser() -> argparse.ArgumentParser:
 
     menu = subparsers.add_parser("install-menu", help="Install Telegram Bot command menu.")
     menu.set_defaults(func=lambda _args: install_menu() or 0)
+    miniapp_menu = subparsers.add_parser("install-miniapp-menu", help="Install a Telegram Mini App menu button.")
+    miniapp_menu.add_argument("--url", required=True, help="Public HTTPS URL that serves /miniapp.")
+    miniapp_menu.add_argument("--text", default="Review", help="Menu button text shown in Telegram.")
+    miniapp_menu.add_argument("--dry-run", action="store_true", help="Validate the URL and text without calling Bot API.")
+    miniapp_menu.set_defaults(
+        func=lambda args: print(
+            json.dumps(install_miniapp_menu(args.url, text=args.text, dry_run=args.dry_run), ensure_ascii=False)
+        )
+        or 0
+    )
     identity = subparsers.add_parser("apply-identity", help="Apply T-Sense bot name, descriptions, and command menu.")
-    identity.set_defaults(func=lambda _args: print(json.dumps(apply_bot_identity(), ensure_ascii=False)) or 0)
+    identity.add_argument(
+        "--preserve-menu-button",
+        action="store_true",
+        help="Update identity fields without replacing an existing Mini App menu button.",
+    )
+    identity.set_defaults(
+        func=lambda args: print(
+            json.dumps(apply_bot_identity(preserve_menu_button=args.preserve_menu_button), ensure_ascii=False)
+        )
+        or 0
+    )
     status = subparsers.add_parser("status", help="Show local Bot Gateway and background status.")
     status.set_defaults(func=lambda _args: print(json.dumps(autostart_status(), ensure_ascii=False)) or 0)
     install_bg = subparsers.add_parser("install-autostart", help="Start Bot Gateway automatically at user login.")
