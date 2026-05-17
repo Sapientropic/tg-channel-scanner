@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import http.client
 import json
 import os
 import secrets
@@ -24,6 +25,13 @@ BOT_API_BASE_URL_ENV = "TGCS_BOT_API_BASE_URL"
 BOT_API_TIMEOUT_SECONDS = 20
 BOT_POLL_TIMEOUT_SECONDS = 30
 MAX_TELEGRAM_MESSAGE_LENGTH = 3900
+BOT_API_REQUEST_ERRORS = (
+    urllib.error.URLError,
+    TimeoutError,
+    OSError,
+    http.client.HTTPException,
+    json.JSONDecodeError,
+)
 BOT_COMMANDS = [
     {"command": "start", "description": "Show the T-Sense bot menu"},
     {"command": "help", "description": "Show commands and safe actions"},
@@ -70,7 +78,7 @@ class TelegramBotApi:
         try:
             with urllib.request.urlopen(request, timeout=self.timeout_seconds) as response:
                 result = json.loads(response.read().decode("utf-8"))
-        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exc:
+        except BOT_API_REQUEST_ERRORS as exc:
             raise BotGatewayError(f"Telegram Bot API request failed: {method}") from exc
         if not isinstance(result, dict) or result.get("ok") is not True:
             description = result.get("description") if isinstance(result, dict) else ""
@@ -110,7 +118,7 @@ class TelegramBotApi:
         try:
             with urllib.request.urlopen(request, timeout=self.timeout_seconds) as response:
                 result = json.loads(response.read().decode("utf-8"))
-        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exc:
+        except BOT_API_REQUEST_ERRORS as exc:
             raise BotGatewayError(f"Telegram Bot API request failed: {method}") from exc
         if not isinstance(result, dict) or result.get("ok") is not True:
             description = result.get("description") if isinstance(result, dict) else ""

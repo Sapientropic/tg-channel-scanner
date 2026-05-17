@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import plistlib
+import re
 import shutil
 import subprocess
 import sys
@@ -214,6 +215,41 @@ def systemd_env_assignment(key: str, value: str) -> str:
     return f'"{escaped}"'
 
 
+def launchd_log_path(filename: str) -> str:
+    getuid = getattr(os, "getuid", None)
+    uid = str(getuid()) if callable(getuid) else "user"
+    log_dir_text = f"/tmp/tsense-launchd-{uid}"
+    Path(log_dir_text).mkdir(parents=True, exist_ok=True)
+    return f"{log_dir_text}/{filename}"
+
+
+def launchd_service_target(label: str = DESK_BOT_GATEWAY_LAUNCHD_LABEL) -> str:
+    getuid = getattr(os, "getuid", None)
+    if callable(getuid):
+        return f"gui/{getuid()}/{label}"
+    return label
+
+
+def launchd_last_exit_code(output: str) -> int | None:
+    match = re.search(r"last exit code\s*=\s*(-?\d+)", output, flags=re.IGNORECASE)
+    if not match:
+        return None
+    try:
+        return int(match.group(1))
+    except ValueError:
+        return None
+
+
+def launchd_failure_detail(subject: str, last_exit_code: int) -> str:
+    if last_exit_code == 78:
+        return (
+            f"{subject} is installed, but launchd exited with code 78 (EX_CONFIG). "
+            "This usually means launchd could not open the LaunchAgent plist or stdio log path. "
+            "Repair from Signal Desk rewrites launchd-safe logs under /tmp."
+        )
+    return f"{subject} is installed, but launchd last exited with code {last_exit_code}."
+
+
 def bot_gateway_launchd_plist_path() -> Path:
     return Path.home() / "Library" / "LaunchAgents" / f"{DESK_BOT_GATEWAY_LAUNCHD_LABEL}.plist"
 
@@ -255,6 +291,57 @@ def desk_bot_gateway_background_status(*, token_configured: bool | None = None) 
         }
     if backend == "macos_launchd":
         installed = bot_gateway_launchd_plist_path().exists()
+        if not installed:
+            return {
+                **base,
+                "installed": False,
+                "status": "not_installed",
+                "can_remove": False,
+                "detail": base["detail"],
+                "next_action": base["next_action"],
+            }
+        try:
+            completed = _run_scheduler_command(["launchctl", "print", launchd_service_target()])
+        except subprocess.TimeoutExpired:
+            return {
+                **base,
+                "installed": True,
+                "status": "unknown",
+                "can_remove": True,
+                "detail": "Bot Gateway background mode is installed, but Signal Desk could not confirm launchd status before the check timed out.",
+                "next_action": "Use Repair alerts in Settings to rewrite and reload the LaunchAgent.",
+            }
+        except OSError:
+            return {
+                **base,
+                "installed": True,
+                "status": "unknown",
+                "can_remove": True,
+                "detail": "Bot Gateway background mode is installed, but Signal Desk could not query launchd on this machine.",
+                "next_action": "Use Repair alerts in Settings to rewrite and reload the LaunchAgent.",
+            }
+        output = "\n".join([completed.stdout or "", completed.stderr or ""])
+        last_exit_code = launchd_last_exit_code(output)
+        if completed.returncode != 0:
+            return {
+                **base,
+                "installed": True,
+                "status": "failed",
+                "can_remove": True,
+                "detail": "Bot Gateway background mode is installed, but launchd does not report the job as loaded.",
+                "next_action": "Use Repair alerts in Settings to rewrite and reload the LaunchAgent.",
+                **({"last_exit_code": last_exit_code} if last_exit_code is not None else {}),
+            }
+        if last_exit_code not in (None, 0):
+            return {
+                **base,
+                "installed": True,
+                "status": "failed",
+                "can_remove": True,
+                "detail": launchd_failure_detail("Bot Gateway background mode", last_exit_code),
+                "next_action": "Use Repair alerts in Settings to rewrite and reload the LaunchAgent.",
+                "last_exit_code": last_exit_code,
+            }
         return {
             **base,
             "installed": installed,
@@ -372,6 +459,20 @@ def repair_installed_bot_gateway_background() -> dict:
         }
 
     if completed.returncode == 0:
+        if backend == "macos_launchd":
+            health = desk_bot_gateway_background_status(token_configured=True)
+            if health.get("status") == "failed":
+                return {
+                    **base,
+                    "attempted": True,
+                    "status": "failed",
+                    "detail": str(health.get("detail") or "launchd reported the LaunchAgent as failed."),
+                    **(
+                        {"last_exit_code": health["last_exit_code"]}
+                        if isinstance(health.get("last_exit_code"), int)
+                        else {}
+                    ),
+                }
         return {
             **base,
             "attempted": True,
@@ -413,8 +514,6 @@ def bot_gateway_action_result(
 
 def write_bot_gateway_launchd_plist(path: Path, python_entry: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    output_dir = PROJECT_ROOT / "output"
-    output_dir.mkdir(parents=True, exist_ok=True)
     payload = {
         "Label": DESK_BOT_GATEWAY_LAUNCHD_LABEL,
         "ProgramArguments": fixed_bot_gateway_argv(python_entry),
@@ -422,8 +521,11 @@ def write_bot_gateway_launchd_plist(path: Path, python_entry: Path) -> None:
         "KeepAlive": {"Crashed": True},
         "WorkingDirectory": str(PROJECT_ROOT),
         "EnvironmentVariables": app_runtime_environment(),
-        "StandardOutPath": str(output_dir / "tsense-bot-gateway.log"),
-        "StandardErrorPath": str(output_dir / "tsense-bot-gateway.err.log"),
+        # launchd opens stdio paths before exec. Project-local output paths can
+        # make repair appear successful while the job exits with EX_CONFIG
+        # before Python starts, so keep these logs in a pre-created /tmp dir.
+        "StandardOutPath": launchd_log_path("tsense-bot-gateway.log"),
+        "StandardErrorPath": launchd_log_path("tsense-bot-gateway.err.log"),
     }
     with path.open("wb") as handle:
         plistlib.dump(payload, handle)
@@ -662,6 +764,20 @@ def run_bot_gateway_autostart_action(action_id: str, *, body: dict | None = None
             pass
 
     if completed.returncode == 0:
+        if backend == "macos_launchd" and action_id == "bot_gateway_install_autostart":
+            health = desk_bot_gateway_background_status(token_configured=True)
+            if health.get("status") == "failed":
+                return bot_gateway_action_result(
+                    action_id,
+                    status="failed",
+                    title="Bot background mode installed but launchd did not start",
+                    detail=str(health.get("detail") or "launchd reported the LaunchAgent as failed."),
+                    next_action=str(
+                        health.get("next_action")
+                        or "Use Repair alerts in Settings to rewrite and reload the LaunchAgent."
+                    ),
+                    exit_code=health.get("last_exit_code") if isinstance(health.get("last_exit_code"), int) else None,
+                )
         if backend == "linux_systemd_user" and action_id == "bot_gateway_install_autostart":
             try:
                 restart_result = _run_scheduler_command(["systemctl", "--user", "restart", f"{DESK_BOT_GATEWAY_SYSTEMD_NAME}.service"])

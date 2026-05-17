@@ -389,6 +389,14 @@ def systemd_env_assignment(key: str, value: str) -> str:
     return f'"{escaped}"'
 
 
+def launchd_log_path(filename: str) -> str:
+    getuid = getattr(os, "getuid", None)
+    uid = str(getuid()) if callable(getuid) else "user"
+    log_dir_text = f"/tmp/tsense-launchd-{uid}"
+    Path(log_dir_text).mkdir(parents=True, exist_ok=True)
+    return f"{log_dir_text}/{filename}"
+
+
 def windows_scheduler_task_names() -> list[str]:
     names = [DESK_SCHEDULER_TASK_NAME]
     for name in DESK_SCHEDULER_LEGACY_TASK_NAMES:
@@ -670,6 +678,16 @@ def launchd_last_exit_code(output: str) -> int | None:
         return None
 
 
+def launchd_failure_detail(subject: str, last_exit_code: int) -> str:
+    if last_exit_code == 78:
+        return (
+            f"{subject} is installed, but launchd exited with code 78 (EX_CONFIG). "
+            "This usually means launchd could not open the LaunchAgent plist or stdio log path. "
+            "Repair from Signal Desk rewrites launchd-safe logs under /tmp."
+        )
+    return f"{subject} is installed, but launchd last exited with code {last_exit_code}."
+
+
 def launchd_scheduler_status(base: dict, *, label: str | None = None) -> dict:
     selected_label = label or DESK_SCHEDULER_LAUNCHD_LABEL
     legacy = selected_label != DESK_SCHEDULER_LAUNCHD_LABEL
@@ -718,7 +736,7 @@ def launchd_scheduler_status(base: dict, *, label: str | None = None) -> dict:
             "available": True,
             "installed": True,
             "status": "failed",
-            "detail": f"Automatic reviews are installed, but launchd last exited with code {last_exit_code}.",
+            "detail": launchd_failure_detail("Automatic reviews", last_exit_code),
             "next_action": "Repair auto review from Signal Desk to rewrite and reload the LaunchAgent.",
             "last_exit_code": last_exit_code,
             "task_name": selected_label,
@@ -740,8 +758,6 @@ def launchd_scheduler_status(base: dict, *, label: str | None = None) -> dict:
 def write_launchd_plist(path: Path, python_entry: Path, *, profile_id: str | None = None) -> None:
     selected_profile_id = profile_id or preferred_scheduler_profile_id()
     path.parent.mkdir(parents=True, exist_ok=True)
-    output_dir = PROJECT_ROOT / "output"
-    output_dir.mkdir(parents=True, exist_ok=True)
     payload = {
         "Label": DESK_SCHEDULER_LAUNCHD_LABEL,
         "ProgramArguments": fixed_monitor_python_argv(python_entry, profile_id=selected_profile_id),
@@ -749,8 +765,11 @@ def write_launchd_plist(path: Path, python_entry: Path, *, profile_id: str | Non
         "StartInterval": DESK_SCHEDULER_INTERVAL_MINUTES * 60,
         "WorkingDirectory": str(PROJECT_ROOT),
         "EnvironmentVariables": app_runtime_environment(),
-        "StandardOutPath": str(output_dir / f"tgcs-{selected_profile_id}.log"),
-        "StandardErrorPath": str(output_dir / f"tgcs-{selected_profile_id}.err.log"),
+        # launchd opens stdio paths before exec. Project-local output paths can
+        # make repair appear successful while the job exits with EX_CONFIG
+        # before Python starts, so keep these logs in a pre-created /tmp dir.
+        "StandardOutPath": launchd_log_path(f"tgcs-{selected_profile_id}.log"),
+        "StandardErrorPath": launchd_log_path(f"tgcs-{selected_profile_id}.err.log"),
     }
     with path.open("wb") as handle:
         plistlib.dump(payload, handle)
@@ -1019,6 +1038,22 @@ def run_desk_scheduler_action(action_id: str, *, body: dict | None = None) -> di
 
     if completed.returncode == 0:
         if action_id == "schedule_install_dry_run" and backend == "macos_launchd":
+            health = launchd_scheduler_status(
+                scheduler_base(backend, profile_id=profile_id, has_enabled_profile=has_enabled_profile),
+            )
+            if health.get("status") == "failed":
+                return scheduler_result(
+                    action_id,
+                    status="failed",
+                    title="Auto scan installed but launchd did not start",
+                    detail=str(health.get("detail") or "launchd reported the LaunchAgent as failed."),
+                    next_action=str(
+                        health.get("next_action")
+                        or "Repair auto review from Signal Desk to rewrite and reload the LaunchAgent."
+                    ),
+                    exit_code=health.get("last_exit_code") if isinstance(health.get("last_exit_code"), int) else None,
+                    display_command=display_command,
+                )
             _cleanup_legacy_launchd_scheduler_tasks()
         if action_id == "schedule_install_dry_run" and backend == "linux_systemd_user":
             _cleanup_legacy_systemd_scheduler_units()

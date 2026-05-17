@@ -11,6 +11,25 @@ from unittest.mock import patch
 from scripts import dashboard_server, monitor_state
 
 
+def write_enabled_jobs_profile(root: Path) -> None:
+    config_dir = root / ".tgcs"
+    config_dir.mkdir(parents=True, exist_ok=True)
+    (config_dir / "profiles.toml").write_text(
+        "\n".join(
+            [
+                'schema_version = "profile_run_config_v1"',
+                "",
+                "[[profiles]]",
+                'id = "jobs-fast"',
+                'path = "profiles/templates/jobs.md"',
+                "enabled = true",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+
 class DashboardSchedulerTests(unittest.TestCase):
     def test_schedule_install_dry_run_requires_confirmation(self):
         with patch.object(dashboard_server, "_run_scheduler_command") as run_mock:
@@ -484,9 +503,81 @@ class DashboardSchedulerTests(unittest.TestCase):
         self.assertEqual(plist["EnvironmentVariables"]["TGCS_PROJECT_ROOT"], str(project_root))
         self.assertEqual(plist["EnvironmentVariables"]["TG_SCANNER_CONFIG_DIR"], str(project_root / ".tgcs" / "telegram"))
         self.assertEqual(plist["EnvironmentVariables"]["TGCLI_CONFIG_DIR"], str(project_root / ".tgcs" / "telegram"))
-        self.assertEqual(plist["StandardOutPath"], str(project_root / "output" / "tsense-bot-gateway.log"))
+        self.assertTrue(plist["StandardOutPath"].endswith("/tsense-bot-gateway.log"))
+        self.assertIn("/tmp/tsense-launchd-", plist["StandardOutPath"])
+        self.assertTrue(plist["StandardErrorPath"].endswith("/tsense-bot-gateway.err.log"))
+        self.assertIn("/tmp/tsense-launchd-", plist["StandardErrorPath"])
         self.assertIn(["launchctl", "unload", "-w", str(plist_path)], calls)
         self.assertIn(["launchctl", "load", "-w", str(plist_path)], calls)
+
+    def test_bot_gateway_autostart_reports_macos_launchd_ex_config_after_load(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp) / "home"
+            code_root = Path(tmp) / "bundle-code"
+            project_root = Path(tmp) / "Application Support" / "T-Sense"
+            home.mkdir()
+            (code_root / "scripts").mkdir(parents=True)
+            (code_root / "scripts" / "bot_gateway.py").write_text("# bot gateway\n", encoding="utf-8")
+            python = code_root / "python"
+            python.write_text("", encoding="utf-8")
+            calls: list[list[str]] = []
+
+            def fake_run(args):
+                calls.append(args)
+                if args[:2] == ["launchctl", "print"]:
+                    return subprocess.CompletedProcess(
+                        args,
+                        0,
+                        stdout="state = exited\nlast exit code = 78: EX_CONFIG\n",
+                        stderr="",
+                    )
+                return subprocess.CompletedProcess(args, 0, stdout="", stderr="")
+
+            with patch.object(dashboard_server.sys, "platform", "darwin"):
+                with patch.object(dashboard_server.Path, "home", return_value=home):
+                    with patch.object(dashboard_server, "PROJECT_ROOT", project_root), patch.object(dashboard_server, "CODE_ROOT", code_root):
+                        with patch.object(dashboard_server, "_pythonw_entry", return_value=python):
+                            with patch.object(
+                                dashboard_server,
+                                "desk_notification_token_status",
+                                return_value={"configured": True, "source": "keyring"},
+                            ):
+                                with patch.object(dashboard_server, "_run_scheduler_command", side_effect=fake_run):
+                                    result = dashboard_server.run_desk_action(
+                                        "bot_gateway_install_autostart",
+                                        body={"confirm": True},
+                                    )
+
+        self.assertEqual(result["status"], "failed")
+        self.assertIn("EX_CONFIG", result["detail"])
+        self.assertIn("stdio log path", result["detail"])
+        self.assertTrue(any(call[:2] == ["launchctl", "print"] for call in calls))
+
+    def test_bot_gateway_background_status_surfaces_macos_launchd_ex_config(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp) / "home"
+            project_root = Path(tmp) / "repo"
+            plist_path = home / "Library" / "LaunchAgents" / "com.sapientropic.tsense.bot-gateway.plist"
+            plist_path.parent.mkdir(parents=True)
+            plist_path.write_text("placeholder", encoding="utf-8")
+            completed = subprocess.CompletedProcess(
+                ["launchctl"],
+                0,
+                stdout="state = exited\nlast exit code = 78: EX_CONFIG\n",
+                stderr="",
+            )
+
+            with patch.object(dashboard_server.sys, "platform", "darwin"):
+                with patch.object(dashboard_server.Path, "home", return_value=home):
+                    with patch.object(dashboard_server, "PROJECT_ROOT", project_root), patch.object(dashboard_server, "CODE_ROOT", project_root):
+                        with patch.object(dashboard_server, "_run_scheduler_command", return_value=completed):
+                            status = dashboard_server.desk_bot_gateway_background_status(token_configured=True)
+
+        self.assertTrue(status["installed"])
+        self.assertEqual(status["status"], "failed")
+        self.assertEqual(status["last_exit_code"], 78)
+        self.assertIn("EX_CONFIG", status["detail"])
+        self.assertIn("stdio log path", status["detail"])
 
 
     def test_bot_gateway_autostart_writes_linux_systemd_service_with_fixed_argv(self):
@@ -640,9 +731,51 @@ class DashboardSchedulerTests(unittest.TestCase):
         self.assertEqual(plist["EnvironmentVariables"]["TGCS_PROJECT_ROOT"], str(project_root))
         self.assertEqual(plist["EnvironmentVariables"]["TG_SCANNER_CONFIG_DIR"], str(project_root / ".tgcs" / "telegram"))
         self.assertEqual(plist["EnvironmentVariables"]["TGCLI_CONFIG_DIR"], str(project_root / ".tgcs" / "telegram"))
-        self.assertEqual(plist["StandardOutPath"], str(project_root / "output" / "tgcs-jobs-fast.log"))
+        self.assertTrue(plist["StandardOutPath"].endswith("/tgcs-jobs-fast.log"))
+        self.assertIn("/tmp/tsense-launchd-", plist["StandardOutPath"])
+        self.assertTrue(plist["StandardErrorPath"].endswith("/tgcs-jobs-fast.err.log"))
+        self.assertIn("/tmp/tsense-launchd-", plist["StandardErrorPath"])
         self.assertIn(["launchctl", "unload", "-w", str(plist_path)], calls)
         self.assertIn(["launchctl", "load", "-w", str(plist_path)], calls)
+
+    def test_schedule_install_reports_macos_launchd_ex_config_after_load(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp) / "home"
+            code_root = Path(tmp) / "bundle-code"
+            project_root = Path(tmp) / "Application Support" / "T-Sense"
+            home.mkdir()
+            (code_root / "scripts").mkdir(parents=True)
+            (code_root / "scripts" / "tgcs.py").write_text("# tgcs entry\n", encoding="utf-8")
+            python = code_root / ".venv" / "bin" / "python"
+            python.parent.mkdir(parents=True)
+            python.write_text("", encoding="utf-8")
+            calls: list[list[str]] = []
+
+            def fake_run(args):
+                calls.append(args)
+                if args[:2] == ["launchctl", "print"]:
+                    return subprocess.CompletedProcess(
+                        args,
+                        0,
+                        stdout="state = exited\nlast exit code = 78: EX_CONFIG\n",
+                        stderr="",
+                    )
+                return subprocess.CompletedProcess(args, 0, stdout="", stderr="")
+
+            with patch.object(dashboard_server.sys, "platform", "darwin"):
+                with patch.object(dashboard_server.Path, "home", return_value=home):
+                    with patch.object(dashboard_server, "PROJECT_ROOT", project_root), patch.object(dashboard_server, "CODE_ROOT", code_root):
+                        with patch.object(dashboard_server, "_pythonw_entry", return_value=python):
+                            with patch.object(dashboard_server, "_run_scheduler_command", side_effect=fake_run):
+                                result = dashboard_server.run_desk_action(
+                                    "schedule_install_dry_run",
+                                    body={"confirm": True},
+                                )
+
+        self.assertEqual(result["status"], "failed")
+        self.assertIn("EX_CONFIG", result["detail"])
+        self.assertIn("stdio log path", result["detail"])
+        self.assertTrue(any(call[:2] == ["launchctl", "print"] for call in calls))
 
 
     def test_desk_scheduler_status_surfaces_failing_macos_launch_agent_exit_code(self):
@@ -673,6 +806,32 @@ class DashboardSchedulerTests(unittest.TestCase):
         args = run_mock.call_args.args[0]
         self.assertEqual(args[0:2], ["launchctl", "print"])
         self.assertIn("com.sapientropic.tsense.auto-review", args[-1])
+
+    def test_desk_scheduler_status_explains_macos_launch_agent_ex_config(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp) / "home"
+            project_root = Path(tmp) / "repo"
+            plist_path = home / "Library" / "LaunchAgents" / "com.sapientropic.tsense.auto-review.plist"
+            plist_path.parent.mkdir(parents=True)
+            plist_path.write_text("placeholder", encoding="utf-8")
+            completed = subprocess.CompletedProcess(
+                ["launchctl"],
+                0,
+                stdout="state = exited\nlast exit code = 78: EX_CONFIG\n",
+                stderr="",
+            )
+
+            with patch.object(dashboard_server.sys, "platform", "darwin"):
+                with patch.object(dashboard_server.Path, "home", return_value=home):
+                    with patch.object(dashboard_server, "PROJECT_ROOT", project_root), patch.object(dashboard_server, "CODE_ROOT", project_root):
+                        with patch.object(dashboard_server, "_run_scheduler_command", return_value=completed):
+                            status = dashboard_server.desk_scheduler_status()
+
+        self.assertTrue(status["installed"])
+        self.assertEqual(status["status"], "failed")
+        self.assertEqual(status["last_exit_code"], 78)
+        self.assertIn("EX_CONFIG", status["detail"])
+        self.assertIn("stdio log path", status["detail"])
 
 
     def test_desk_scheduler_status_detects_legacy_macos_launch_agent(self):
@@ -883,11 +1042,15 @@ class DashboardSchedulerTests(unittest.TestCase):
 
 
     def test_desk_scheduler_status_queries_fixed_task_name(self):
-        completed = subprocess.CompletedProcess(["schtasks.exe"], 0, stdout="TaskName: T-Sense auto review\n", stderr="")
+        with tempfile.TemporaryDirectory() as tmp:
+            project_root = Path(tmp)
+            write_enabled_jobs_profile(project_root)
+            completed = subprocess.CompletedProcess(["schtasks.exe"], 0, stdout="TaskName: T-Sense auto review\n", stderr="")
 
-        with patch.object(dashboard_server.sys, "platform", "win32"):
-            with patch.object(dashboard_server, "_run_scheduler_command", return_value=completed) as run_mock:
-                status = dashboard_server.desk_scheduler_status()
+            with patch.object(dashboard_server.sys, "platform", "win32"):
+                with patch.object(dashboard_server, "PROJECT_ROOT", project_root), patch.object(dashboard_server, "CODE_ROOT", project_root):
+                    with patch.object(dashboard_server, "_run_scheduler_command", return_value=completed) as run_mock:
+                        status = dashboard_server.desk_scheduler_status()
 
         args = run_mock.call_args.args[0]
         self.assertEqual(args, ["schtasks.exe", "/Query", "/TN", dashboard_server.DESK_SCHEDULER_TASK_NAME])
@@ -898,17 +1061,21 @@ class DashboardSchedulerTests(unittest.TestCase):
 
 
     def test_desk_scheduler_status_detects_legacy_windows_task_name(self):
-        calls: list[list[str]] = []
+        with tempfile.TemporaryDirectory() as tmp:
+            project_root = Path(tmp)
+            write_enabled_jobs_profile(project_root)
+            calls: list[list[str]] = []
 
-        def fake_run(args):
-            calls.append(args)
-            if args[args.index("/TN") + 1] == "TGCS jobs-fast dry-run":
-                return subprocess.CompletedProcess(args, 0, stdout="TaskName: TGCS jobs-fast dry-run\n", stderr="")
-            return subprocess.CompletedProcess(args, 1, stdout="", stderr="ERROR: missing\n")
+            def fake_run(args):
+                calls.append(args)
+                if args[args.index("/TN") + 1] == "TGCS jobs-fast dry-run":
+                    return subprocess.CompletedProcess(args, 0, stdout="TaskName: TGCS jobs-fast dry-run\n", stderr="")
+                return subprocess.CompletedProcess(args, 1, stdout="", stderr="ERROR: missing\n")
 
-        with patch.object(dashboard_server.sys, "platform", "win32"):
-            with patch.object(dashboard_server, "_run_scheduler_command", side_effect=fake_run):
-                status = dashboard_server.desk_scheduler_status()
+            with patch.object(dashboard_server.sys, "platform", "win32"):
+                with patch.object(dashboard_server, "PROJECT_ROOT", project_root), patch.object(dashboard_server, "CODE_ROOT", project_root):
+                    with patch.object(dashboard_server, "_run_scheduler_command", side_effect=fake_run):
+                        status = dashboard_server.desk_scheduler_status()
 
         self.assertTrue(status["installed"])
         self.assertTrue(status["legacy_task_name"])

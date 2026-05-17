@@ -166,11 +166,16 @@ falls back to `jobs-fast`.
 
 On macOS, the auto-scan LaunchAgent runs the current virtualenv Python directly
 with `scripts/tgcs.py monitor run ...`. It intentionally does not invoke the
-repo-local `tgcs` shell launcher and does not set `WorkingDirectory`, because
-LaunchServices sandbox/path inheritance can make shell launchers fail with
-`bad interpreter` or `getcwd` errors. Turning auto review on again rewrites and
-reloads the LaunchAgent, so a stale shell-based plist is repaired from Signal
-Desk.
+repo-local `tgcs` shell launcher, because LaunchServices sandbox/path
+inheritance can make shell launchers fail with `bad interpreter` or `getcwd`
+errors. Turning auto review on again rewrites and reloads the LaunchAgent, so a
+stale shell-based plist is repaired from Signal Desk.
+
+LaunchAgent stdio logs must stay in the pre-created `/tmp/tsense-launchd-*`
+directory. `launchd` opens `StandardOutPath` and `StandardErrorPath` before it
+execs Python; moving these paths back under the project can make repair appear
+successful while the job immediately exits with `EX_CONFIG` before application
+stderr exists.
 
 Signal Desk treats an installed macOS LaunchAgent as unhealthy when `launchctl
 print` reports a failing job or a non-zero last exit code. The user-facing

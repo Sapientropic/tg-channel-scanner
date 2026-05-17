@@ -1,4 +1,5 @@
 import argparse
+import http.client
 import json
 import os
 import subprocess
@@ -11,7 +12,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from unittest.mock import patch
 
-from scripts import bot_gateway, bot_state, monitor_state, source_registry
+from scripts import bot_api, bot_gateway, bot_state, monitor_state, source_registry
 
 
 class FakeTelegramBotHandler(BaseHTTPRequestHandler):
@@ -823,6 +824,38 @@ class BotGatewayTests(unittest.TestCase):
         message = str(raised.exception)
         self.assertIn("already running", message)
         self.assertNotIn(str(lock_path), message)
+
+    def test_gateway_lock_clears_alive_pid_when_process_identity_is_unrelated(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            lock_path = Path(tmp) / "bot-gateway.lock"
+            lock_path.write_text(
+                json.dumps({"schema_version": "bot_gateway_lock_v1", "pid": 4242}) + "\n",
+                encoding="utf-8",
+            )
+
+            def fake_run(args, **_kwargs):
+                return subprocess.CompletedProcess(args, 0, stdout="/usr/bin/unrelated-process\n", stderr="")
+
+            with patch.object(bot_state.sys, "platform", "darwin"):
+                with patch.object(bot_state.os, "kill", return_value=None):
+                    with patch.object(bot_state.subprocess, "run", side_effect=fake_run):
+                        with bot_gateway.BotGatewayLock(lock_path):
+                            self.assertTrue(lock_path.exists())
+
+            self.assertFalse(lock_path.exists())
+
+    def test_bot_api_wraps_remote_disconnected_as_gateway_error(self):
+        api = bot_api.TelegramBotApi("123456:TEST_TOKEN", api_base_url="https://api.telegram.org")
+
+        with patch.object(
+            bot_api.urllib.request,
+            "urlopen",
+            side_effect=http.client.RemoteDisconnected("Remote end closed connection without response"),
+        ):
+            with self.assertRaises(bot_api.BotGatewayError) as raised:
+                api.get_updates(offset=None, timeout_seconds=0)
+
+        self.assertIn("Telegram Bot API request failed: getUpdates", str(raised.exception))
 
     def test_gateway_process_handles_update_against_fake_telegram_api(self):
         FakeTelegramBotHandler.updates_sent = False
